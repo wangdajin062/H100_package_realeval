@@ -1,0 +1,40 @@
+{
+  "input": "audio",
+  "scanned": 13744,
+  "successful": 13744,
+  "errors": 0,
+  "top_n": 100,
+  "global_distribution": {
+    "P10": 66.25,
+    "P25": 70.27,
+    "P50": 74.92,
+    "P75": 79.79,
+    "P90": 83.63
+  },
+  "top_n_range": {
+    "max": 92.69,
+    "min": 88.75,
+    "mean": 89.76,
+    "std": 0.8
+  },
+  "dim_avg": {
+    "dual": 96.87,
+    "phone": 98.52,
+    "clarity": 81.76,
+    "sensitivity": 60.25
+  },
+  "duration_top": {
+    "min": 22.8,
+    "max": 65.2,
+    "mean": 43.3
+  },
+  "weights": {
+    "dual_speaker": 0.3,
+    "phone_channel": 0.25,
+    "clarity": 0.2,
+    "duration": 0.15,
+    "sensitivity": 0.1
+  },
+  "output": "filtered_calls",
+  "copied": 100
+}

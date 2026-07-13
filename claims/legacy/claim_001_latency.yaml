@@ -1,0 +1,35 @@
+# CLAIM-001: Q4_K_M quantization provides >2x throughput improvement over BF16
+id: CLAIM-001
+status: legacy  # pre-v2 claim format; maintained for historical traceability
+format_note: "Evaluated by runner/claim_runner.py via audit.evidence_graph, NOT by experiments/claim_engine.py"
+
+hypothesis: >
+  Q4_K_M 4-bit quantization increases inference throughput by more than 2x
+  compared to BF16, while maintaining F1 within 1% of the BF16 baseline.
+
+independent_variables:
+  - quantization_scheme  # BF16, Q4_K_M
+
+dependent_variables:
+  - throughput_sps
+  - f1
+
+controls:
+  - dataset: TAF-28k
+  - model: Qwen2.5-0.5B-Instruct
+  - prompt_template
+  - seed: 42
+  - gpu: H100
+
+acceptance:
+  throughput_ratio: ">2"     # Q4_K_M throughput / BF16 throughput > 2
+  f1_drop: "<0.01"           # BF16 F1 - Q4_K_M F1 < 0.01
+threshold_origin:
+  throughput_ratio:
+    value: 2
+    source: "paper_hypothesis"
+    note: "2x throughput improvement is the paper's claim; not calibrated from baseline measurements."
+  f1_drop:
+    value: 0.01
+    source: "convention"
+    note: "1% F1 tolerance is a common convention in model compression literature."
