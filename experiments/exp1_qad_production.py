@@ -28,22 +28,19 @@ def run(config: dict) -> dict:
     train_texts, test_texts = texts[:split], texts[split:]
     train_labels, test_labels = labels[:split], labels[split:]
 
-    # Paper path: real Qwen distillation
+    # Paper path: real QWEN distillation training + student evaluation
     def run_paper(config):
         from realeval import real_backend
-        # Multi-step distillation trajectory
-        trajectory = []
-        for step in range(5):
-            metrics = real_backend.real_distillation_step_metrics(
-                config, train_texts, apply_ov_rescaling=True, quantize="int4", max_batch=16)
-            trajectory.append({"step": step, **metrics})
-        # Final student evaluation (placeholder: use teacher for classification)
-        result = real_backend.real_llm_classify(config, test_texts, test_labels, quantize="int4")
+        # Real distillation: train student via KL against frozen BF16 teacher
+        result = real_backend.real_distill_train(config, train_texts, test_texts, test_labels)
         return {
             "experiment": "exp1",
             "computation": "h100_real_qwen",
-            "trajectory": trajectory,
+            "trajectory": result["trajectory"],
             "f1": result["f1"],
+            "kl_final": result["kl_final"],
+            "n_train": result["n_train"],
+            "n_test": result["n_test"],
             "is_synthetic": False,
         }
 

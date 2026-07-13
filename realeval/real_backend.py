@@ -82,8 +82,6 @@ def real_distillation_step_metrics(config: dict, texts: list[str], *, apply_ov_r
                 s_real = s_out[mask]
                 # Temperature-scaled KL per Hinton et al. (2015):
                 #   KL(softmax(t_logits/T), softmax(s_logits/T)) * T^2
-                # Temperature applied INSIDE softmax to soften the target distribution
-                # and reveal inter-class "dark knowledge."
                 T = float(config.get("distillation", {}).get("temperature", 1.0))
                 kl_val = F.kl_div(
                     F.log_softmax(s_real / T, -1),
@@ -91,7 +89,6 @@ def real_distillation_step_metrics(config: dict, texts: list[str], *, apply_ov_r
                     reduction="batchmean"
                 ) * (T ** 2)
                 mse_val = F.mse_loss(s_real, t_real)
-                # loss_fn selects which distillation objective is measured (exp2 loss ablation).
                 if loss_fn == "mse":
                     kl = mse_val
                 elif loss_fn == "kl_mse":
@@ -112,6 +109,127 @@ def real_distillation_step_metrics(config: dict, texts: list[str], *, apply_ov_r
     n_batches = max(1, n_batches)
     return {"kl": kl_sum / n_batches, "variance_drift_pct": drift_sum / n_batches,
             "teacher_dtype": tdtype, "n_texts": len(texts)}
+
+
+def real_distill_train(config: dict, train_texts: list[str], test_texts: list[str],
+                       test_labels: list[int]) -> dict:
+    """Real QAD distillation training: train student via KL against frozen BF16 teacher.
+
+    Pipeline:
+      1. Load teacher (BF16, frozen) and student (BF16, trainable — no quantization)
+      2. Train student with KL-divergence loss against teacher soft targets
+      3. Evaluate trained student on test set via next-token logit scoring
+      4. Return training trajectory + final F1
+
+    Returns dict with keys: trajectory (list of per-epoch KL), f1, kl_final, n_texts.
+    """
+    from realeval import models, hwenv
+    import torch
+    import torch.nn.functional as F
+
+    _require(models.models_available(config), "Real Qwen weights unavailable")
+    teacher, tok = models.load_causal_lm(config["models"]["teacher"], quantize=None, bf16=True)
+    _require(teacher is not None, "Teacher loading failed")
+    dev = next(teacher.parameters()).device
+    teacher.eval()
+    for p in teacher.parameters():
+        p.requires_grad_(False)
+
+    # Student loaded in BF16 (trainable) — no quantization during training
+    student, _ = models.load_causal_lm(config["models"].get("student", config["models"]["teacher"]),
+                                       quantize=None, bf16=True)
+    _require(student is not None, "Student loading failed")
+    student = student.to(dev)
+    student.train()
+    for p in student.parameters():
+        p.requires_grad_(True)
+
+    # Training hyperparameters
+    lr = float(config.get("training", {}).get("learning_rate", 5e-5))
+    epochs = int(config.get("training", {}).get("epochs", 3))
+    max_batch = int(config.get("distillation", {}).get("max_batch", 64))
+    T = float(config.get("distillation", {}).get("temperature", 2.0))
+    max_seq = int(config.get("distillation", {}).get("max_seq_length", 256))
+    clip_norm = 1.0
+
+    optimizer = torch.optim.AdamW(student.parameters(), lr=lr, weight_decay=0.01)
+
+    trajectory = []
+    for epoch in range(epochs):
+        epoch_kl = 0.0
+        n_batches = 0
+        for start in range(0, len(train_texts), max_batch):
+            batch = train_texts[start:start + max_batch]
+            enc = tok(batch, return_tensors="pt", padding=True, truncation=True,
+                      max_length=max_seq).to(dev)
+            mask = enc["attention_mask"].bool()
+
+            with torch.inference_mode():
+                with hwenv.autocast_context():
+                    t_out = teacher(**enc).logits  # (batch, seq_len, vocab)
+
+            with hwenv.autocast_context():
+                s_out = student(**enc).logits
+
+            # KL on real (non-pad) token positions
+            t_real = t_out[mask]
+            s_real = s_out[mask]
+            kl_loss = F.kl_div(
+                F.log_softmax(s_real / T, -1),
+                F.softmax(t_real / T, -1),
+                reduction="batchmean"
+            ) * (T ** 2)
+
+            optimizer.zero_grad()
+            kl_loss.backward()
+            torch.nn.utils.clip_grad_norm_(student.parameters(), clip_norm)
+            optimizer.step()
+
+            epoch_kl += float(kl_loss)
+            n_batches += 1
+
+        avg_kl = epoch_kl / max(1, n_batches)
+        trajectory.append({"epoch": epoch, "kl": round(avg_kl, 6)})
+        logger.info("Distill epoch %d/%d — KL=%.6f", epoch + 1, epochs, avg_kl)
+
+    # Evaluate trained student on test set
+    student.eval()
+    batch_size = int(config.get("training", {}).get("batch_size", 64))
+    preds = []
+    for start in range(0, len(test_texts), batch_size):
+        batch = test_texts[start:start + batch_size]
+        prompts = [f"Determine if the following text is fraud or normal: {t}\nAnswer:"
+                   for t in batch]
+        enc = tok(prompts, return_tensors="pt", padding=True, truncation=True,
+                  max_length=max_seq).to(dev)
+        with torch.inference_mode():
+            with hwenv.autocast_context():
+                logits = student(**enc).logits
+        seq_lens = enc.attention_mask.sum(dim=1) - 1
+        last_logits = logits[torch.arange(len(batch)), seq_lens]
+
+        # Score "fraud" vs "normal" tokens
+        f_ids = tok(" fraud", add_special_tokens=False).input_ids
+        n_ids = tok(" normal", add_special_tokens=False).input_ids
+        if f_ids and n_ids:
+            probs = F.softmax(last_logits, dim=-1)
+            f_prob = probs[:, f_ids].mean(dim=1) if len(f_ids) > 1 else probs[:, f_ids[0]]
+            n_prob = probs[:, n_ids].mean(dim=1) if len(n_ids) > 1 else probs[:, n_ids[0]]
+            preds.extend((f_prob > n_prob).int().tolist())
+        else:
+            preds.extend([0] * len(batch))
+
+    from realeval.metrics import classification_metrics
+    m = classification_metrics(test_labels, preds)
+
+    return {
+        "trajectory": trajectory,
+        "f1": m["f1"],
+        "accuracy": m["accuracy"],
+        "kl_final": trajectory[-1]["kl"] if trajectory else None,
+        "n_train": len(train_texts),
+        "n_test": len(test_texts),
+    }
 
 
 # ─────────────────── Real Speculative Decoding (exp6) ───────────────────
