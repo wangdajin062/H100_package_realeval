@@ -171,10 +171,10 @@ def real_llm_classify(config: dict, texts: list[str], labels: list[int], *, quan
                        return_preds=False, classify_batch_size: int = None):
     """Real (quantized) Qwen binary classification on text, sklearn computes real F1.
 
-    Classification method: compare log-probabilities of 'fraud'/'normal' candidates at last position
-    (zero-shot scoring). Texts are processed in mini-batches to saturate H100 GPU utilization —
-    classify_batch_size defaults to 64 (was 1: one-at-a-time, getting ~36% GPU util).
-    If use_cot=True, a chain-of-thought instruction is prepended.
+    Classification method: apply chat template then compare token probabilities
+    at the first output position. Uses softmax-normalised scores for 'fraud'
+    and 'normal' token(s), with attention-mask-aware last-token selection.
+    Texts are processed in mini-batches to saturate H100 GPU utilization.
     """
     from realeval import models, hwenv
     from realeval.metrics import classification_metrics
@@ -186,26 +186,64 @@ def real_llm_classify(config: dict, texts: list[str], labels: list[int], *, quan
     _require(model is not None, "Model loading failed")
     dev = next(model.parameters()).device
 
-    pos_ids = tok("fraud", add_special_tokens=False).input_ids
-    neg_ids = tok("normal", add_special_tokens=False).input_ids
-    cot_prefix = ("Think step by step about the sender, intent, and urgency cues, then decide. "
-                  if use_cot else "")
+    cot_sys = ("Think step by step about the sender, intent, and urgency cues, then decide. "
+               if use_cot else "")
 
-    # Auto-scale batch size: use config override or default to 64 for H100
     batch_size = classify_batch_size or config.get("training", {}).get("batch_size", 64)
 
     preds = []
     for start in range(0, len(texts), batch_size):
         batch_texts = texts[start:start + batch_size]
-        prompts = [f"{cot_prefix}Determine if the following text is fraud or normal: {t}\nAnswer:"
-                   for t in batch_texts]
+
+        # Build chat-format messages and apply template
+        messages_list = []
+        for t in batch_texts:
+            msgs = []
+            if cot_sys:
+                msgs.append({"role": "system", "content": cot_sys})
+            msgs.append({"role": "user",
+                         "content": f"Determine if the following text is fraud or normal: {t}\n"
+                                     "Answer with exactly one word: fraud or normal."})
+            messages_list.append(msgs)
+        prompts = [tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
+                   for msgs in messages_list]
+
         enc = tok(prompts, return_tensors="pt", padding=True, truncation=True, max_length=256).to(dev)
+        input_ids, attn_mask = enc.input_ids, enc.attention_mask
+
         with torch.inference_mode():
             with hwenv.autocast_context():
-                logits = model(**enc).logits[:, -1]  # (batch, vocab)
-        pos_scores = logits[:, pos_ids].mean(dim=1)   # (batch,)
-        neg_scores = logits[:, neg_ids].mean(dim=1)
-        preds.extend((pos_scores > neg_scores).int().tolist())
+                outputs = model(**enc)
+                logits = outputs.logits  # (batch, seq_len, vocab)
+
+        # Get logits at each sequence's LAST REAL token (before padding)
+        seq_lens = attn_mask.sum(dim=1) - 1       # (batch,) last non-padding index
+        last_logits = logits[torch.arange(len(batch_texts)), seq_lens]  # (batch, vocab)
+
+        # Score single-token answers: "fraud" and "normal" token IDs
+        fraud_ids = tok(" fraud", add_special_tokens=False).input_ids  # leading space
+        normal_ids = tok(" normal", add_special_tokens=False).input_ids
+
+        # Use only single-token variants for clean comparison
+        f_id = fraud_ids[0] if len(fraud_ids) == 1 else None
+        n_id = normal_ids[0] if len(normal_ids) == 1 else None
+
+        if f_id is not None and n_id is not None:
+            # Softmax-normalised probability comparison
+            probs = F.softmax(last_logits, dim=-1)
+            batch_preds = (probs[:, f_id] > probs[:, n_id]).int().tolist()
+        else:
+            # Fallback: mean logit comparison over multi-token sequences
+            pos_scores = last_logits[:, fraud_ids].mean(dim=1) if fraud_ids else last_logits.new_zeros(len(batch_texts))
+            neg_scores = last_logits[:, normal_ids].mean(dim=1) if normal_ids else last_logits.new_zeros(len(batch_texts))
+            batch_preds = (pos_scores > neg_scores).int().tolist()
+
+        preds.extend(batch_preds)
+
+    m = classification_metrics(labels, preds)
+    if return_preds:
+        m = dict(m); m["preds"] = preds
+    return m
 
     m = classification_metrics(labels, preds)
     if return_preds:
