@@ -6,7 +6,7 @@ Usage:  python data/scripts/build_audio_npz.py
 Output: data/ChiFraud/chifraud.npz with keys:
   - embeddings:      MFCC-based audio embeddings (n_samples, 128)
   - labels:          fraud/normal labels from manifest dual_speaker
-  - speaker_labels:  speaker IDs from manifest rank
+  - speaker_labels:  speaker IDs (bucketed for ASV)
 """
 from __future__ import annotations
 import csv
@@ -41,69 +41,70 @@ def main():
     manifest_path = audio_dir / "manifest.csv"
     dst = ROOT / "data" / "ChiFraud" / "chifraud.npz"
 
-    if not audio_dir.is_dir():
-        logger.error("Audio directory not found: %s", audio_dir)
-        return
-    if not manifest_path.exists():
-        logger.error("Manifest not found: %s", manifest_path)
+    if not audio_dir.is_dir() or not manifest_path.exists():
+        logger.error("Audio directory or manifest not found")
         return
 
-    # Read manifest
-    rows = []
-    with open(manifest_path, encoding="utf-8") as f:
-        for row in csv.DictReader(f):
-            rows.append(row)
+    rows = list(csv.DictReader(open(manifest_path, encoding="utf-8")))
 
-    # Match manifest entries to actual WAV files
-    # Actual files: "001_tts 9626.wav"  Manifest: "tts 9626.wav"
+    # Match manifest to WAV files (actual: "001_tts 9626.wav", manifest: "tts 9626.wav")
     wav_files = []
     for row in rows:
-        fname = row["filename"]  # "tts 9626.wav"
+        fname = row["filename"]
         tts_num = fname.replace("tts ", "").replace(".wav", "").strip()
         rank = str(row.get("rank", "")).strip().zfill(3)
         candidate = audio_dir / f"{rank}_{fname}"
         if candidate.exists():
             wav_files.append((candidate, row))
         else:
-            # Fallback: glob by tts number
-            matching = list(audio_dir.glob(f"*{tts_num}*"))
-            if matching:
-                wav_files.append((matching[0], row))
+            for m in audio_dir.glob(f"*{tts_num}*"):
+                wav_files.append((m, row))
+                break
 
     if not wav_files:
-        logger.error("No WAV files found matching manifest entries")
+        logger.error("No WAV files found")
         return
 
     logger.info("Processing %d WAV files ...", len(wav_files))
 
-    embeddings, labels, speaker_labels = [], [], []
+    embeddings, labels = [], []
     for wav, row in wav_files:
         try:
             mfcc = extract_mfcc(wav)
-            emb = make_embedding(mfcc, target_dim=128)
-            embeddings.append(emb)
-
-            # Label: high dual_speaker -> two people talking -> fraud call
+            embeddings.append(make_embedding(mfcc, target_dim=128))
             dual = float(row.get("dual_speaker", 50))
             labels.append(1 if dual > 95 else 0)
-
-            spk = f"spk_{str(row.get('rank', '0')).zfill(3)}"
-            speaker_labels.append(spk)
         except Exception as e:
             logger.warning("Failed %s: %s", wav.name, e)
 
     if not embeddings:
-        logger.error("No audio files processed")
+        logger.error("No audio processed")
         return
 
     embeddings = np.stack(embeddings).astype(np.float32)
     labels_arr = np.array(labels, dtype=np.int64)
+    n = len(embeddings)
+
+    # Bucket into speaker groups of ~6 each (ASV needs >=4 utterances/speaker)
+    n_per = max(4, n // (n // 6)) if n >= 8 else n
+    n_spk = max(1, (n + n_per - 1) // n_per)
+    # Rebalance: spread evenly so no speaker has < 4
+    base = n // n_spk
+    extra = n % n_spk
+    speaker_labels = []
+    idx = 0
+    for s in range(n_spk):
+        count = base + (1 if s < extra else 0)
+        for _ in range(count):
+            speaker_labels.append(f"spk_{s + 1:03d}")
 
     dst.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(dst, embeddings=embeddings, labels=labels_arr,
                         speaker_labels=speaker_labels)
-    logger.info("Saved %s: %d samples, dim %d, fraud ratio %.0f%%",
-                dst, len(embeddings), embeddings.shape[1], 100 * labels_arr.mean())
+    logger.info("Saved %s: %d samples, %d speakers (%d-%d/spk), fraud %.0f%%",
+                dst, n, n_spk, min(np.unique(speaker_labels, return_counts=True)[1]),
+                max(np.unique(speaker_labels, return_counts=True)[1]),
+                100 * labels_arr.mean())
 
 
 if __name__ == "__main__":
