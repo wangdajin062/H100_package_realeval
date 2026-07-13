@@ -17,6 +17,10 @@ for a in "$@"; do
   [ "$a" = "--distributed" ] && DISTRIBUTED=1
 done
 
+# Auto-clean previous results before each fresh run
+rm -rf outputs/results/* outputs/metrics/* outputs/predictions/* 2>/dev/null
+echo "=== Cleaned previous outputs ==="
+
 # H100 multi-GPU: expose all 8 cards for NCCL/DDP (harmless if fewer/none present).
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7}"
 export TOKENIZERS_PARALLELISM=false
