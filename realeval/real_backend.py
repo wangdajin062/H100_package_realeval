@@ -121,7 +121,7 @@ def real_distill_train(config: dict, train_texts: list[str], test_texts: list[st
       3. Evaluate trained student on test set via next-token logit scoring
       4. Return training trajectory + final F1
 
-    Returns dict with keys: trajectory (list of per-epoch KL), f1, kl_final, n_texts.
+    Returns dict with keys: trajectory (list of per-epoch KL), f1, accuracy, kl_final, n_train, n_test.
     """
     from realeval import models, hwenv
     import torch
@@ -150,7 +150,7 @@ def real_distill_train(config: dict, train_texts: list[str], test_texts: list[st
     max_batch = int(config.get("distillation", {}).get("max_batch", 64))
     T = float(config.get("distillation", {}).get("temperature", 2.0))
     max_seq = int(config.get("distillation", {}).get("max_seq_length", 256))
-    clip_norm = 1.0
+    clip_norm = float(config.get("training", {}).get("clip_grad_norm", 1.0))
 
     optimizer = torch.optim.AdamW(student.parameters(), lr=lr, weight_decay=0.01)
 
@@ -207,19 +207,16 @@ def real_distill_train(config: dict, train_texts: list[str], test_texts: list[st
         with torch.inference_mode():
             with hwenv.autocast_context():
                 logits = student(**enc).logits
-        seq_lens = enc.attention_mask.sum(dim=1) - 1
+        seq_lens = enc.attention_mask.sum(dim=1).clamp(min=1) - 1
         last_logits = logits[torch.arange(len(batch)), seq_lens]
 
-        # Score "fraud" vs "normal" tokens
-        f_ids = tok(" fraud", add_special_tokens=False).input_ids
-        n_ids = tok(" normal", add_special_tokens=False).input_ids
-        if f_ids and n_ids:
-            probs = F.softmax(last_logits, dim=-1)
-            f_prob = probs[:, f_ids].mean(dim=1) if len(f_ids) > 1 else probs[:, f_ids[0]]
-            n_prob = probs[:, n_ids].mean(dim=1) if len(n_ids) > 1 else probs[:, n_ids[0]]
-            preds.extend((f_prob > n_prob).int().tolist())
-        else:
-            preds.extend([0] * len(batch))
+        # Score "fraud" vs "normal" tokens (no leading space — eval prompt ends in Chinese colon)
+        f_ids = tok("fraud", add_special_tokens=False).input_ids
+        n_ids = tok("normal", add_special_tokens=False).input_ids
+        probs = F.softmax(last_logits, dim=-1)
+        f_prob = probs[:, f_ids].mean(dim=1) if f_ids else last_logits.new_zeros(len(batch))
+        n_prob = probs[:, n_ids].mean(dim=1) if n_ids else last_logits.new_zeros(len(batch))
+        preds.extend((f_prob > n_prob).int().tolist())
 
     from realeval.metrics import classification_metrics
     m = classification_metrics(test_labels, preds)
@@ -329,7 +326,7 @@ def real_llm_classify(config: dict, texts: list[str], labels: list[int], *, quan
                    for msgs in messages_list]
 
         enc = tok(prompts, return_tensors="pt", padding=True, truncation=True, max_length=256).to(dev)
-        input_ids, attn_mask = enc.input_ids, enc.attention_mask
+        attn_mask = enc.attention_mask
 
         with torch.inference_mode():
             with hwenv.autocast_context():
@@ -337,33 +334,20 @@ def real_llm_classify(config: dict, texts: list[str], labels: list[int], *, quan
                 logits = outputs.logits  # (batch, seq_len, vocab)
 
         # Get logits at each sequence's LAST REAL token (before padding)
-        seq_lens = attn_mask.sum(dim=1) - 1       # (batch,) last non-padding index
+        seq_lens = attn_mask.sum(dim=1).clamp(min=1) - 1       # (batch,) last non-padding index
         last_logits = logits[torch.arange(len(batch_texts)), seq_lens]  # (batch, vocab)
 
-        # Score single-token answers: "fraud" and "normal" token IDs
-        fraud_ids = tok(" fraud", add_special_tokens=False).input_ids  # leading space
-        normal_ids = tok(" normal", add_special_tokens=False).input_ids
+        # Score "fraud" vs "normal" token IDs (no leading space — chat template ends with \n)
+        fraud_ids = tok("fraud", add_special_tokens=False).input_ids
+        normal_ids = tok("normal", add_special_tokens=False).input_ids
 
-        # Use only single-token variants for clean comparison
-        f_id = fraud_ids[0] if len(fraud_ids) == 1 else None
-        n_id = normal_ids[0] if len(normal_ids) == 1 else None
-
-        if f_id is not None and n_id is not None:
-            # Softmax-normalised probability comparison
-            probs = F.softmax(last_logits, dim=-1)
-            batch_preds = (probs[:, f_id] > probs[:, n_id]).int().tolist()
-        else:
-            # Fallback: mean logit comparison over multi-token sequences
-            pos_scores = last_logits[:, fraud_ids].mean(dim=1) if fraud_ids else last_logits.new_zeros(len(batch_texts))
-            neg_scores = last_logits[:, normal_ids].mean(dim=1) if normal_ids else last_logits.new_zeros(len(batch_texts))
-            batch_preds = (pos_scores > neg_scores).int().tolist()
+        # Compare via softmax probability mean (handles both single- and multi-token cases)
+        probs = F.softmax(last_logits, dim=-1)
+        f_prob = probs[:, fraud_ids].mean(dim=1) if fraud_ids else last_logits.new_zeros(len(batch_texts))
+        n_prob = probs[:, normal_ids].mean(dim=1) if normal_ids else last_logits.new_zeros(len(batch_texts))
+        batch_preds = (f_prob > n_prob).int().tolist()
 
         preds.extend(batch_preds)
-
-    m = classification_metrics(labels, preds)
-    if return_preds:
-        m = dict(m); m["preds"] = preds
-    return m
 
     m = classification_metrics(labels, preds)
     if return_preds:
