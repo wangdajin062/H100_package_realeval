@@ -39,6 +39,14 @@ def run_paper_safe(smoke, config, paper_fn):
         return None
 
 
+# Shared classification prompt template (used by both training and inference)
+_CLS_PFX = "请判断以下消息是否为欺诈信息（fraud）或正常信息（normal）。"
+_CLS_SFX = chr(10) + "仅输出一个词：fraud 或 normal。" + chr(10) + chr(10) + "消息：{text}" + chr(10) + "分类："
+
+def _cls_prompt(t):
+    return _CLS_PFX + _CLS_SFX.format(text=t)
+
+
 # ─────────────────── Real Distillation (exp1/exp2/exp3) ───────────────────
 def real_distillation_step_metrics(config: dict, texts: list[str], *, apply_ov_rescaling: bool,
                                    quantize="int4", max_batch=64, freeze_frac=1.0, window=1.0, loss_fn="kl"):
@@ -139,12 +147,6 @@ def real_distill_train(config: dict, train_texts: list[str], train_labels: list[
     epochs = int(config.get("training", {}).get("epochs", 3))
     max_batch = int(config.get("distillation", {}).get("max_batch", 16))
     max_seq = int(config.get("distillation", {}).get("max_seq_length", 256))
-
-    _CLS_PFX = "请判断以下消息是否为欺诈信息（fraud）或正常信息（normal）。"
-    _CLS_SFX = chr(10) + "仅输出一个词：fraud 或 normal。" + chr(10) + chr(10) + "消息：{text}" + chr(10) + "分类："
-
-    def _cls_prompt(t):
-        return _CLS_PFX + _CLS_SFX.format(text=t)
 
     head = torch.nn.Linear(hidden_size, 2, dtype=torch.float32).to(dev)
     optimizer = torch.optim.AdamW([
@@ -284,7 +286,6 @@ def real_llm_classify(config: dict, texts: list[str], labels: list[int], *, quan
 
     # ── Fine-tuned path: load saved model + head ──
     if finetuned_path:
-        import json
         from pathlib import Path
         fp = Path(finetuned_path)
         model, tok = models.load_causal_lm(str(fp), quantize=None, bf16=True)
@@ -296,11 +297,6 @@ def real_llm_classify(config: dict, texts: list[str], labels: list[int], *, quan
         head = torch.nn.Linear(ckpt["hidden_size"], 2, dtype=torch.float32).to(dev)
         head.load_state_dict(ckpt["head"])
         head.eval()
-
-        _CLS_PFX = "请判断以下消息是否为欺诈信息（fraud）或正常信息（normal）。"
-        _CLS_SFX = chr(10) + "仅输出一个词：fraud 或 normal。" + chr(10) + chr(10) + "消息：{text}" + chr(10) + "分类："
-        def _cls_prompt(t):
-            return _CLS_PFX + _CLS_SFX.format(text=t)
 
         batch_size = classify_batch_size or config.get("training", {}).get("batch_size", 16)
         max_seq = int(config.get("distillation", {}).get("max_seq_length", 256))

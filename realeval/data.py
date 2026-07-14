@@ -143,6 +143,26 @@ def load_advfraud3k(max_samples: int | None = None) -> dict:
     return {"texts": [], "labels": [], "embeddings": None, "speaker_labels": None, "source": None}
 
 
+def load_chifraud_balanced() -> dict:
+    """Balanced Chinese fraud detection dataset: ChiFraud + subset of AdvFraud3k.
+
+    ChiFraud has ~150 fraud / ~150 normal (balanced).  AdvFraud3k is all-fraud.
+    We take all ChiFraud + an equal number of AdvFraud3k fraud samples to
+    maintain balance.  Returns (texts, labels) suitable for train/test split.
+    """
+    cf = load_chifraud()
+    af = load_advfraud3k()
+    cf_texts, cf_labels = cf["texts"], cf["labels"]
+    af_texts, af_labels = af["texts"], af["labels"]
+    n_normal = sum(1 for l in cf_labels if int(l) == 0)
+    af_fraud_texts = [t for t, l in zip(af_texts, af_labels) if int(l) == 1]
+    # Match normal count for balance
+    af_fraud_texts = af_fraud_texts[:n_normal]
+    texts = cf_texts + af_fraud_texts
+    labels = cf_labels + [1] * len(af_fraud_texts)
+    return {"texts": texts, "labels": labels, "embeddings": None, "speaker_labels": None, "source": "chifraud+advfraud3k"}
+
+
 def load_synthetic(n: int = 100, seed: int = 42) -> dict:
     """Generate synthetic fraud detection data for sandbox testing.
 
