@@ -16,9 +16,20 @@ def run(config: dict) -> dict:
     from realeval import data, real_backend, hwenv
     from realeval.real_backend import run_paper_safe
 
-    # Load data
-    ds = data.load_taf28k(max_samples=config.get("data", {}).get("max_samples", 4000))
-    texts, labels = ds["texts"], ds["labels"]
+    # Load data: ChiFraud (balanced 151/149) + AdvFraud3k fraud samples (balanced subset)
+    cf = data.load_chifraud()
+    af = data.load_advfraud3k()
+    cf_texts, cf_labels = cf["texts"], cf["labels"]
+    af_texts, af_labels = af["texts"], af["labels"]
+
+    # Balance: take all ChiFraud + equal number of AdvFraud3k fraud samples
+    n_normal = sum(1 for l in cf_labels if int(l) == 0)
+    af_fraud_texts = [t for t, l in zip(af_texts, af_labels) if int(l) == 1]
+    af_fraud_texts = af_fraud_texts[:n_normal]  # match normal count
+    af_fraud_labels = [1] * len(af_fraud_texts)
+
+    texts = cf_texts + af_fraud_texts
+    labels = cf_labels + af_fraud_labels
     if not texts:
         ds = data.load_synthetic(n=200)
         texts, labels = ds["texts"], ds["labels"]
