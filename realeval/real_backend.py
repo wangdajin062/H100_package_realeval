@@ -134,6 +134,10 @@ def real_distill_train(config: dict, train_texts: list[str], train_labels: list[
 
     _require(models.models_available(config), "Real Qwen weights unavailable")
     model, tok = models.load_causal_lm(config["models"]["teacher"], quantize=None, bf16=True)
+    # Attach the tuned LoRA adapter when a student_variant is set.
+    from realeval.student_loader import attach_adapter
+    model = attach_adapter(model, config.get('student_variant', 'base'),
+                           config, quantize=quantize)
     _require(model is not None, "Model loading failed")
     dev = next(model.parameters()).device
     model.train()

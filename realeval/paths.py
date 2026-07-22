@@ -2,7 +2,8 @@
 
 RunPod persistent volume is mounted at /workspace. This module resolves root directories with the following priority:
   1. Environment variables REALEVAL_DATA_ROOT / REALEVAL_MODELS_ROOT / HF_HOME (explicit)
-  2. /workspace if it exists (RunPod persistent volume) -> /workspace/{data,models,hf_cache}
+  2. /workspace if it exists AND we are on a RunPod/Linux host (not Windows where C:\\workspace
+     may exist for unrelated reasons — Docker Desktop, WSL, etc.)
   3. Package-relative directories (sandbox/local fallback)
 
 This way, placing data at /workspace/data and models at /workspace/models on RunPod is automatically discovered,
@@ -10,17 +11,37 @@ no config changes needed; REALEVAL_DATA_ROOT can also override to any mount poin
 """
 from __future__ import annotations
 import os
+import sys
 from pathlib import Path
 
 PKG_ROOT = Path(__file__).resolve().parent.parent
 WORKSPACE = Path("/workspace")
+
+# RunPod always runs Linux.  On Windows, C:\\workspace can exist for unrelated
+# reasons (Docker Desktop, WSL distro mounts, etc.) and must NOT be treated as
+# a RunPod persistent volume, or every data-root lookup will point to an empty
+# directory and fall through to synthetic data.
+_RUNPOD_MARKERS = ("RUNPOD_POD_ID", "RUNPOD_POD_HOSTNAME", "RUNPOD_API_KEY")
+
+
+def _is_runpod_host() -> bool:
+    """Return True when we are reasonably confident this is a RunPod container."""
+    if os.environ.get("REALEVAL_FORCE_RUNPOD_PATHS"):
+        return True
+    if any(os.environ.get(m) for m in _RUNPOD_MARKERS):
+        return True
+    # On Linux, /workspace is a strong RunPod signal.  On other platforms it is
+    # ambiguous — skip it.
+    if sys.platform != "linux":
+        return False
+    return WORKSPACE.is_dir()
 
 
 def _root(env_key: str, sub: str) -> Path:
     v = os.environ.get(env_key)
     if v:
         return Path(v)
-    if WORKSPACE.is_dir():                      # RunPod persistent volume
+    if _is_runpod_host():                       # RunPod persistent volume
         return WORKSPACE / sub
     return PKG_ROOT / sub
 
@@ -37,7 +58,7 @@ def hf_cache() -> Path:
     v = os.environ.get("HF_HOME") or os.environ.get("HF_HUB_CACHE")
     if v:
         return Path(v)
-    if WORKSPACE.is_dir():
+    if _is_runpod_host():
         return WORKSPACE / "hf_cache"
     return PKG_ROOT / ".hf_cache"
 

@@ -356,3 +356,145 @@ def prepare_sft_dataset(name_or_path: str = None, max_samples: int | None = None
                 len(train_texts), len(test_texts),
                 sum(train_labels), sum(test_labels))
     return (train_texts, train_labels), (test_texts, test_labels)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Leakage-safe splitting (added by fix1_group_split.py)
+# ─────────────────────────────────────────────────────────────────────────────
+def _normalise_for_grouping(text: str) -> str:
+    """Canonical form used to detect near-duplicate messages.
+
+    TAF-28k contains templated fraud SMS where only digits, URLs, names, and
+    whitespace vary. Collapsing those makes template siblings hash identically, so
+    group_split can keep an entire template family on one side of the split.
+
+    To avoid over-collapsing synthetic or content-poor texts (e.g. "synthetic_fraud_0"
+    → "synthetic fraud <num>" for every sample), we always retain a prefix of the
+    first few non-noise characters.  This guarantees at least one distinguishing
+    token per distinct template while still merging true near-duplicates.
+    """
+    import re
+    t = (text or "").lower().strip()
+    t = re.sub(r"https?://\S+", " <url> ", t)   # URLs first (they contain digits)
+    t = re.sub(r"\d+", " <num> ", t)             # ONE rule for every digit run
+    t = re.sub(r"[^\w\s<>]", " ", t)            # punctuation
+    t = re.sub(r"\s+", " ", t).strip()
+    # ── Anti-collapse guard ───────────────────────────────────────────────
+    # When a text consists almost entirely of digits/URLs/punctuation, the
+    # normalised form can collapse to a handful of tokens shared by thousands
+    # of distinct samples (e.g. synthetic_fraud_0 .. synthetic_fraud_3999
+    # all → "synthetic fraud <num>").  Retaining the first meaningful token of
+    # the original keeps template families separate while still merging
+    # genuine near-duplicates.
+    if len(t.split()) <= 3:
+        # Prepend the first non-noise word from the original text.
+        original_words = re.sub(r"[^\w]", " ", (text or "").lower()).split()
+        if original_words:
+            t = original_words[0] + " " + t
+    return t
+
+
+def group_split(texts, labels, test_ratio: float = 0.2, seed: int = 42):
+    """Split indices into (train_idx, test_idx) so duplicate/templated texts never straddle.
+
+    Grouping key is a hash of the normalised text. Whole groups are assigned to the test
+    side until the target size is reached, then the remainder goes to train. Label balance
+    is preserved approximately by interleaving groups from each majority label.
+
+    Returns
+    -------
+    (train_idx, test_idx) : two sorted lists of integer indices into `texts`.
+    """
+    import hashlib
+    import random
+    from collections import defaultdict, Counter
+
+    groups = defaultdict(list)
+    for i, t in enumerate(texts):
+        key = hashlib.md5(_normalise_for_grouping(t).encode("utf-8")).hexdigest()
+        groups[key].append(i)
+
+    # Order groups deterministically, then shuffle with the caller's seed.
+    keys = sorted(groups.keys())
+    rng = random.Random(seed)
+    rng.shuffle(keys)
+
+    def _dominant_label(idxs):
+        vals = [int(labels[i]) for i in idxs]
+        return max(set(vals), key=vals.count) if vals else 0
+
+    # Fill the test side per label so the class balance survives group assignment.
+    label_counts = Counter(int(l) for l in labels)
+    targets = {l: int(c * test_ratio) for l, c in label_counts.items()}
+    filled = {l: 0 for l in label_counts}
+
+    test_idx, train_idx = [], []
+    for k in keys:
+        g = groups[k]
+        dl = _dominant_label(g)
+        if filled.get(dl, 0) < targets.get(dl, 0):
+            test_idx.extend(g)
+            for i in g:
+                filled[int(labels[i])] = filled.get(int(labels[i]), 0) + 1
+        else:
+            train_idx.extend(g)
+
+    # Coarse-grouping warning: if a handful of huge groups dominate, the achieved test
+    # ratio can drift far from the request. Surface it rather than failing silently.
+    achieved = len(test_idx) / max(1, len(texts))
+    if abs(achieved - test_ratio) > 0.5 * test_ratio:
+        import warnings
+        warnings.warn(
+            f"group_split: requested test_ratio={test_ratio:.2f} but achieved "
+            f"{achieved:.2f} from {len(groups)} groups over {len(texts)} samples. "
+            "The corpus is dominated by a few large duplicate clusters.",
+            RuntimeWarning)
+
+    # ── Safety guard: never return an empty train or test set ────────────────
+    # When _normalise_for_grouping collapses most texts into a handful of groups
+    # (e.g. synthetic data or aggressively-templated corpora), the group-assignment
+    # loop above can push EVERY group into test and leave train empty — a worse
+    # failure than the original leakage bug.  Fall back to a stratified per-sample
+    # shuffle instead of returning a split that guarantees broken training.
+    min_train = max(1, int(len(texts) * min(test_ratio, 1.0 - test_ratio, 0.1)))
+    if len(train_idx) < min_train or len(test_idx) < min_train:
+        import warnings
+        warnings.warn(
+            f"group_split: group-based assignment left train={len(train_idx)} "
+            f"test={len(test_idx)} (min required={min_train}). "
+            "Falling back to stratified per-sample shuffle — template leakage is "
+            "possible because the corpus has too few distinct normalised groups "
+            f"({len(groups)} groups over {len(texts)} samples). "
+            "Check _normalise_for_grouping: it may be over-normalising this dataset.",
+            RuntimeWarning)
+        # Stratified shuffle fallback — preserves label balance per split.
+        by_label = defaultdict(list)
+        for i, lbl in enumerate(labels):
+            by_label[int(lbl)].append(i)
+        rng = random.Random(seed)
+        train_idx, test_idx = [], []
+        for lbl, idxs in by_label.items():
+            rng.shuffle(idxs)
+            n_test = max(1, int(len(idxs) * test_ratio))
+            test_idx.extend(idxs[:n_test])
+            train_idx.extend(idxs[n_test:])
+
+    return sorted(train_idx), sorted(test_idx)
+
+
+def load_dataset(name: str = "taf28k", max_samples: int | None = None) -> dict:
+    """Uniform entry point over the per-corpus loaders (expected by exp14 / B6)."""
+    name = (name or "taf28k").lower()
+    if name in ("taf28k", "taf-28k", "balanced4k", "balanced_4k"):
+        return load_taf28k(max_samples=max_samples)
+    if name in ("chifraud", "chi_fraud"):
+        return load_chifraud(max_samples=max_samples)
+    if name in ("chifraud_balanced", "chifraud-balanced"):
+        return load_chifraud_balanced()
+    if name in ("advfraud", "advfraud3k", "advfraud-3k"):
+        return load_advfraud3k(max_samples=max_samples)
+    if name in ("spam11358", "spam"):
+        return load_spam11358()
+    if name == "synthetic":
+        return load_synthetic(n=max_samples or 100)
+    raise ValueError(f"unknown dataset: {name}")

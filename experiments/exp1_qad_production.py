@@ -23,15 +23,13 @@ def run(config: dict) -> dict:
         ds = data.load_synthetic(n=200)
         texts, labels = ds["texts"], ds["labels"]
 
-    # Shuffle + split
-    import random
-    idx = list(range(len(texts)))
-    random.shuffle(idx)
-    split = int(len(texts) * 0.8)
-    train_texts = [texts[i] for i in idx[:split]]
-    train_labels = [int(labels[i]) for i in idx[:split]]
-    test_texts = [texts[i] for i in idx[split:]]
-    test_labels = [int(labels[i]) for i in idx[split:]]
+    # Leakage-safe split: group_split ensures templated/duplicate texts never straddle
+    from realeval.data import group_split
+    train_idx, test_idx = group_split(texts, labels, test_ratio=0.2, seed=42)
+    train_texts = [texts[i] for i in train_idx]
+    train_labels = [int(labels[i]) for i in train_idx]
+    test_texts = [texts[i] for i in test_idx]
+    test_labels = [int(labels[i]) for i in test_idx]
 
     # Paper path: real QWEN distillation training + student evaluation
     def run_paper(config):
