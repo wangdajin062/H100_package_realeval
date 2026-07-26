@@ -1,0 +1,120 @@
+{
+  "checks": {
+    "rf1_tokenizer": {
+      "status": "FAIL",
+      "detail": "Tokenisers are NOT interchangeable. Speculative decoding requires the draft to propose tokens in the target's own vocabulary; with a mismatch every proposal lands in a near-zero-probability region and alpha collapses to 0.",
+      "evidence": {
+        "target_vocab": 151665,
+        "draft_vocab": 151646,
+        "probe_ids_identical": true
+      }
+    },
+    "rf1_acceptance": {
+      "status": "PASS",
+      "detail": "Acceptance works in isolation (alpha=0.733). The 0.0 in the released exp6 output therefore comes from the experiment's own code path, not from the models.",
+      "evidence": {
+        "alpha_probe": 0.7333,
+        "n_proposed": 15,
+        "ratio_min": 0.33846260422634433,
+        "ratio_median": 0.8107943388045508,
+        "ratio_max": 1.7722368593156508,
+        "n_near_zero_ratios": 0
+      }
+    },
+    "rf2_checkpoint": {
+      "status": "FAIL",
+      "detail": "No experiment saves a trained student. exp1's fine-tuned weights are discarded when the process exits, so exp3/exp5 necessarily evaluate the BASE model \u2014 which explains F1 ~= 0.67 and accuracy ~= 0.50 everywhere, and why the OV-Freeze ablation shows an identical F1 in every row.",
+      "evidence": {
+        "save_sites": [],
+        "load_sites": [],
+        "checkpoint_dirs": [
+          "/workspace/outputs/sft_checkpoints",
+          "/workspace/outputs/.ipynb_checkpoints",
+          "/workspace/outputs/sft_checkpoints/checkpoint-250",
+          "/workspace/outputs/results/.ipynb_checkpoints"
+        ]
+      }
+    },
+    "rf2_constant_f1": {
+      "status": "FAIL",
+      "detail": "F1 is identical (0.6744) in all 13 ablation arms and equals exp5's base-model F1 \u2014 the ablation is not affecting the model that gets scored.",
+      "evidence": {
+        "n_arms": 13,
+        "distinct_f1": [
+          0.6744
+        ],
+        "exp5_taf28k_f1": 0.6744
+      }
+    },
+    "rf2_balance": {
+      "status": "FAIL",
+      "detail": "2 evaluation(s) show F1 high with accuracy at chance (exp5/taf28k, exp5/advfraud). The classifier is emitting one label for nearly every input; the F1 is an artefact of class prior, not skill.",
+      "evidence": {
+        "rows": [
+          [
+            "exp5/taf28k",
+            0.6744,
+            0.5088
+          ],
+          [
+            "exp5/chifraud",
+            0.3684,
+            0.58
+          ],
+          [
+            "exp5/advfraud",
+            0.6547,
+            0.4867
+          ],
+          [
+            "exp4/logreg",
+            0.915,
+            0.915
+          ],
+          [
+            "exp4/xgb",
+            0.8907,
+            0.8812
+          ],
+          [
+            "exp4/mlp",
+            0.936,
+            0.9363
+          ],
+          [
+            "exp4/qwen_base",
+            0.9056,
+            0.9012
+          ]
+        ],
+        "degenerate": [
+          "exp5/taf28k",
+          "exp5/advfraud"
+        ]
+      }
+    },
+    "rf3_split": {
+      "status": "INCONCLUSIVE",
+      "detail": "group_split not defined in data.py",
+      "evidence": {}
+    },
+    "rf3_overlap": {
+      "status": "INCONCLUSIVE",
+      "detail": "could not run split: cannot import name 'group_split' from 'realeval.data' (/workspace/realeval/data.py)",
+      "evidence": {}
+    },
+    "rf3_curve": {
+      "status": "FAIL",
+      "detail": "Training curve is consistent with leakage or memorisation: loss fell 142x between the first two epochs; no validation loss is recorded, so early stopping cannot be justified; final F1=0.9988 is implausibly high for this task.",
+      "evidence": {
+        "n_epochs": 5,
+        "ce_first": 1.266731,
+        "ce_second": 0.008904,
+        "final_f1": 0.9988,
+        "has_val_ce": false,
+        "n_train": 3200,
+        "n_test": 800
+      }
+    }
+  }
+}

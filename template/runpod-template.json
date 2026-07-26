@@ -1,0 +1,20 @@
+{
+  "name": "H100 RealEval",
+  "description": "QAD-MultiGuard H100 paper-validation pipeline with SFT training, persistent /workspace, Jupyter/VSCode/Ollama",
+  "image": "runpod/pytorch:2.8.0-py3.12-cuda12.8.0-devel-ubuntu22.04",
+  "container_disk": 30,
+  "ports": "22/tcp,8888/http,3000/http,11434/http,8000/http",
+  "env": {
+    "WORKSPACE": "/workspace",
+    "HF_HOME": "/workspace/hf_cache",
+    "REALEVAL_MODELS_ROOT": "/workspace/models",
+    "PYTHONUNBUFFERED": "1",
+    "TZ": "Asia/Shanghai"
+  },
+  "volume_mount_path": "/workspace",
+  "volume_size_gb": 50,
+  "docker_args": "",
+  "is_public": false,
+  "category": "Machine Learning",
+  "readme": "# H100 RealEval Template\n\n## One-Click Pipeline\n\n```bash\ncd /workspace\ngit clone https://github.com/wangdajin062/H100_package_realeval.git .\nbash run_all.sh\n```\n\n## Ports\n- **Jupyter Lab**: port 8888\n- **VSCode**: port 3000\n- **Ollama**: port 11434\n- **API**: port 8000\n\n## Environment\n- PyTorch 2.8 + CUDA 12.8\n- Qwen2.5-0.5B-Instruct (auto-downloaded)\n- bitsandbytes 4-bit quantization\n- LoRA SFT training with PEFT\n\n## Storage\n- `/workspace` — persistent network volume (50GB)\n- `/workspace/models` — cached model weights\n- `/workspace/hf_cache` — HuggingFace cache\n- `/workspace/outputs` — experiment results"
+}

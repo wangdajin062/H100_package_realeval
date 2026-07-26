@@ -1,0 +1,76 @@
+[
+  {
+    "id": 1,
+    "change": "data.py: DATA constant removed, replaced by _data_root() function",
+    "severity": "HIGH",
+    "breakage_type": "AttributeError at call site",
+    "affected_callees": [
+      "tests/test_realeval.py:90,92,99,109,111,120,135,137,144 — all reference rdata.DATA to monkey-patch the data root for testing",
+      "tests/test_hf_data.py:29,31,37 — references rdata.DATA to redirect data root"
+    ],
+    "description": "All four test methods in TestData (test_load_taf28k_max_samples_truncation, test_load_taf28k_npz_only, test_load_taf28k_multimodal_mismatch) plus test_hf_data.py::test_local_data_first monkey-patch rdata.DATA = tmp_path. Since DATA no longer exists on the realeval.data module, every try-block that saves rdata.DATA will raise AttributeError before any test assertions run. The tests must be updated to either set the REALEVAL_DATA_ROOT env var or monkey-patch the new _data_root function via realeval.paths.data_root.",
+    "fix": "Replace `rdata.DATA = tmp_path` with monkey-patching `realeval.paths.data_root = lambda: tmp_path` or set env var `REALEVAL_DATA_ROOT`"
+  },
+  {
+    "id": 2,
+    "change": "paths.py: _has_model_files() tightened from 'config.json OR weight files' to 'config.json AND weight files'",
+    "severity": "MEDIUM",
+    "breakage_type": "Behavioral change in model discovery (intentional)",
+    "affected_callers": [
+      "realeval/paths.py:102 — resolve_model() calls _has_model_files for absolute path check",
+      "realeval/paths.py:109 — resolve_model() calls _has_model_files for candidate paths",
+      "realeval/paths.py:113 — resolve_model() calls _has_model_files for case-insensitive scan",
+      "realeval/paths.py:124,128 — list_local_models() calls _has_model_files for model enumeration"
+    ],
+    "description": "Before: a directory with only config.json (no weight files) was considered a valid model. After: both config.json AND at least one weight file (safetensors/bin/gguf/pt) are required. This means incomplete downloads or empty directories with only config.json no longer match, causing resolve_model to fall through to returning the original name_or_path (which then gets treated as an HF repo id for download). This is the intended fix for RunPod scenarios. No external callers of _has_model_files exist — only internal to paths.py. The callees (resolve_model, list_local_models) both use the result for discovery; resolve_model now correctly defers to HF when local dirs are incomplete.",
+    "fix": "Intended change — no fix needed, but verify that any code depending on the old OR semantics (config.json alone being sufficient) is updated."
+  },
+  {
+    "id": 3,
+    "change": "paper_pipeline.py: RESULTS path changed from ROOT/outputs/results to ROOT/results",
+    "severity": "MEDIUM",
+    "breakage_type": "Output directory divergence",
+    "affected_callers": [
+      "paper_pipeline.py:192,193,200,207,226,235 — all write aggregated deliverables to new RESULTS path",
+      "realeval/io.py:15 — io.RESULTS remains ROOT/outputs/results (unchanged)"
+    ],
+    "description": "paper_pipeline.py now writes its aggregated deliverables (metrics.json, latency.csv, throughput.csv, memory.csv, paper_table.md, LaTeX tables) to {ROOT}/results/ instead of {ROOT}/outputs/results/. Meanwhile, _run_experiments() still calls save_results() which writes individual experiment results to io.RESULTS ({ROOT}/outputs/results/). This means paper outputs and individual experiment results now live in separate directory trees — a consumer looking in outputs/results/ for the paper tables won't find them. The runner.py script imports RESULTS from realeval.io (unchanged) so the --resume flag and report generation still operate on outputs/results/. Downstream scripts or README documentation references may need updating.",
+    "fix": "Either revert RESULTS to ROOT/outputs/results for consistency, or update all documentation and downstream consumers. README.md diff already updates reference from 'results/' to 'outputs/results/'."
+  },
+  {
+    "id": 4,
+    "change": "data.py: HF_BUCKET value changed from 'hf://buckets/wangdajin062/TeleAntiFraud-bucket' to 'wangdajin062/TeleAntiFraud-bucket'",
+    "severity": "MEDIUM",
+    "breakage_type": "Possible load_dataset() failure for old URL references",
+    "affected_callers": [
+      "realeval/data.py:107 — load_taf28k fallback: load_hf_bucket(HF_BUCKET, ...)",
+      "realeval/data.py:180 — load_hf_bucket default: repo = name_or_path or HF_BUCKET",
+      "realeval/data.py:259 — prepare_sft_dataset default: repo = name_or_path or HF_BUCKET",
+      "cluster/train_sft.py:35 — separate default='hf://buckets/wangdajin062/TeleAntiFraud-bucket' passed to prepare_sft_dataset()"
+    ],
+    "description": "Old value used hf:// protocol prefix which was likely incompatible with datasets.load_dataset(). New value is a standard HF repo ID. This is a fix, not a regression, for the three call sites that rely on HF_BUCKET default. However, cluster/train_sft.py has its own default argument still using the old hf:// URL and passes it explicitly (overriding the HF_BUCKET default), so running train_sft.py without --bucket will continue using the old URL and may fail. This is a pre-existing issue not caused by the data.py change.",
+    "fix": "No fix needed for data.py callers. train_sft.py should update its default to match if desired."
+  },
+  {
+    "id": 5,
+    "change": "models.py: models_available() expanded weight patterns, added empty-teacher guard, and dual-candidate HF repo check",
+    "severity": "LOW",
+    "breakage_type": "Behavioral — more models detected as available",
+    "affected_callers": [
+      "realeval/real_backend.py:60,124,184 — _require(models.models_available(config), ...) before calling load_causal_lm",
+      "realeval/specdec.py:29 — same pattern before speculative decoding",
+      "experiments/exp5_cross_dataset.py:22 — same pattern before cross-dataset run"
+    ],
+    "description": "Three changes: (1) weight patterns widened from {'model-*.safetensors', 'pytorch_model*.bin', 'model.safetensors'} to also include '*.safetensors' and '*.bin', so more directories match; (2) empty/None teacher key now returns False early instead of calling _resolve(None); (3) HF repo detection now checks both resolved path AND original teacher config value, so absolute paths to empty model dirs on RunPod (e.g. /workspace/models/Qwen/Qwen2.5-0.5B-Instruct) will also check the original 'Qwen/Qwen2.5-0.5B-Instruct' value for HF pattern. Callers that guard with require_assets() will now attempt downloads for valid HF repo IDs rather than skipping. This is intentional but could surface new network errors at model-load time in environments without internet.",
+    "fix": "Intended improvement. No fix needed but monitor for new failures from environments that lack internet access for HF downloads."
+  },
+  {
+    "id": 6,
+    "change": "paper_pipeline.py: _print_summary() now routes exp6 through _extract() instead of direct dict access",
+    "severity": "LOW",
+    "breakage_type": "Cosmetic display bug with None values",
+    "affected_code": "paper_pipeline.py:261-265",
+    "description": "Before: _print_summary accessed all_results['exp6']['diagnostic_B']['h100_measured']['generic'] directly with explicit 'n/a' default. After: it calls _extract('exp6', all_results) which returns {'alpha_generic': None} when no diagnostic data is present, then sd.get('alpha_generic', 'n/a') returns None (key exists with None value, so default 'n/a' is NOT used). This prints 'alpha generic=None' instead of 'alpha generic=n/a'. The 'domain' key correctly shows 'NOT MEASURED' when missing. The display difference is cosmetic only — no crashes or data corruption.",
+    "fix": "Change _extract('exp6') fallback to NOT include alpha_generic when value is None, or change _print_summary to use `sd.get('alpha_generic') or 'n/a'`."
+  }
+]

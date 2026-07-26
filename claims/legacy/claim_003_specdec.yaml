@@ -1,0 +1,32 @@
+# CLAIM-003: Speculative decoding acceptance rate supports speedup claims
+id: CLAIM-003
+status: legacy  # pre-v2 claim format; maintained for historical traceability
+format_note: "Evaluated by runner/claim_runner.py via audit.evidence_graph, NOT by experiments/claim_engine.py"
+
+hypothesis: >
+  The token acceptance rate (alpha) measured on H100 with real Qwen models
+  produces a theoretical speedup consistent with the draft/target architecture,
+  with alpha > 0.75 for the generic draft.
+
+independent_variables:
+  - draft_variant  # generic, domain-tuned
+
+dependent_variables:
+  - alpha  # token acceptance rate
+  - speedup_theoretical
+
+controls:
+  - dataset: TAF-28k
+  - target_model: Qwen2.5-0.5B-Instruct (BF16)
+  - draft_model: Qwen2-0.5B
+  - gamma: 5
+  - seed: 42
+  - gpu: H100
+
+acceptance:
+  alpha_generic: ">0.75"     # Generic draft acceptance > 0.75
+threshold_origin:
+  alpha_generic:
+    value: 0.75
+    source: "paper_hypothesis"
+    note: "0.75 acceptance rate is the paper's lower bound; the v25 manuscript reports 0.85 for the generic draft. This threshold allows for H100 measurement variance."

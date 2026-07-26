@@ -1,0 +1,16 @@
+id: CLAIM-03
+hypothesis: "Speculative decoding with the measured acceptance rate yields >2x token speedup."
+experiment: exp6
+evidence_path: [diagnostic_B, h100_measured]
+independent_variable: draft_model
+dependent_variable: speedup
+control: [gamma, dataset]
+acceptance:
+  - "speedup > 2.0"
+  - "measured_alpha is not None"   # UNSUPPORTED if nothing was measured (sandbox)
+seeds: 1
+threshold_origin:
+  speedup:
+    value: 2.0
+    source: "paper_hypothesis"  # from v25 manuscript claim of >2x token speedup via speculative decoding
+    note: "2x speedup is the paper's own hypothesis threshold; not calibrated from baseline measurements. Actual speedup depends on the measured acceptance rate and gamma parameter."

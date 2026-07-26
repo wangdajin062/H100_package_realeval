@@ -1,0 +1,36 @@
+# CLAIM-002: OV-Freeze reduces variance drift while preserving F1
+id: CLAIM-002
+status: legacy  # pre-v2 claim format; maintained for historical traceability
+format_note: "Evaluated by runner/claim_runner.py via audit.evidence_graph, NOT by experiments/claim_engine.py"
+
+hypothesis: >
+  OV-Freeze variance matching reduces output variance drift below 5%,
+  with F1 remaining within 0.5% of the no-regularization baseline.
+
+independent_variables:
+  - ov_freeze_enabled  # True, False
+
+dependent_variables:
+  - variance_drift_pct
+  - f1
+
+controls:
+  - dataset: TAF-28k
+  - model: Qwen2.5-0.5B-Instruct (student)
+  - teacher: Qwen2.5-0.5B-Instruct (BF16)
+  - quantize: int4
+  - seed: 42
+  - gpu: H100
+
+acceptance:
+  variance_drift_pct: "<5"   # OV-Freeze drift < 5%
+  f1_drop: "<0.005"          # F1 regression < 0.5%
+threshold_origin:
+  variance_drift_pct:
+    value: 5
+    source: "paper_hypothesis"
+    note: "5% drift threshold from v25 manuscript; not calibrated from empirical baseline drift distributions."
+  f1_drop:
+    value: 0.005
+    source: "paper_hypothesis"
+    note: "0.5% F1 tolerance is tighter than the quantization claim (1%); reflects higher confidence in OV-Freeze's utility preservation."

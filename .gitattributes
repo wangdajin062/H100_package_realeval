@@ -1,0 +1,28 @@
+# Normalize line endings to LF for all text files in the repo.
+# This ensures shell scripts and Python source always have LF on Linux (H100 / RunPod).
+* text=auto eol=lf
+
+# Shell scripts must always be LF — CRLF breaks bash on Linux.
+*.sh text eol=lf
+
+# Python source
+*.py text eol=lf
+
+# YAML / TOML / JSON config
+*.yaml text eol=lf
+*.yml  text eol=lf
+*.toml text eol=lf
+*.json text eol=lf
+
+# Markdown / text
+*.md   text eol=lf
+*.txt  text eol=lf
+
+# Binary files — never touch
+*.png  binary
+*.pdf  binary
+*.npz  binary
+*.safetensors binary
+*.bin  binary
+*.pt   binary
+*.gguf binary

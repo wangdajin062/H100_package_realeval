@@ -1,0 +1,311 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "run-exp6-exp8",
+			"type": "shell",
+			"command": "d:/Projects/H100_package_realeval/.venv/Scripts/python.exe",
+			"args": [
+				"-m",
+				"experiments.runner",
+				"--exp",
+				"6,8"
+			],
+			"isBackground": false,
+			"presentation": {
+				"reveal": "always",
+				"panel": "new",
+				"clear": true,
+				"showReuseMessage": false
+			}
+		},
+		{
+			"label": "install-requirements",
+			"type": "shell",
+			"command": "d:/Projects/H100_package_realeval/.venv/Scripts/python.exe",
+			"args": [
+				"-m",
+				"pip",
+				"install",
+				"-r",
+				"d:/Projects/H100_package_realeval/requirements.txt"
+			],
+			"isBackground": false,
+			"presentation": {
+				"reveal": "always",
+				"panel": "new",
+				"clear": true,
+				"showReuseMessage": false
+			}
+		},
+		{
+			"label": "run-exp6-exp8-once-20260723",
+			"type": "shell",
+			"command": "d:/Projects/H100_package_realeval/.venv/Scripts/python.exe",
+			"args": [
+				"-m",
+				"experiments.runner",
+				"--exp",
+				"6,8"
+			],
+			"isBackground": false,
+			"presentation": {
+				"reveal": "always",
+				"panel": "new",
+				"clear": true,
+				"showReuseMessage": false
+			}
+		},
+		{
+			"label": "check-exp6-exp8-proc",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"$p = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'experiments\\.runner' -and $_.CommandLine -match '--exp 6,8' }; if ($p) { $p | Select-Object ProcessId, Name | Format-Table -AutoSize } else { Write-Output 'NO_PROCESS' }"
+			],
+			"isBackground": false,
+			"presentation": {
+				"reveal": "always",
+				"panel": "new",
+				"clear": true,
+				"showReuseMessage": false
+			}
+		},
+		{
+			"label": "dry-run-sync-to-runpod",
+			"type": "shell",
+			"command": "d:/Projects/H100_package_realeval/.venv/Scripts/python.exe",
+			"args": [
+				"d:/Projects/H100_package_realeval/scripts/sync_to_runpod.py",
+				"--base-url",
+				"https://tkrpgy6mqloa3d-8888.proxy.runpod.net",
+				"--token",
+				"c2shxchdiaetpi4jjlsy",
+				"--local-root",
+				"d:/Projects/H100_package_realeval",
+				"--remote-root",
+				"/workspace/H100_package_realeval",
+				"--dry-run"
+			],
+			"isBackground": false,
+			"presentation": {
+				"reveal": "always",
+				"panel": "new",
+				"clear": true,
+				"showReuseMessage": false
+			}
+		},
+		{
+			"label": "sync-to-runpod-now",
+			"type": "shell",
+			"command": "d:/Projects/H100_package_realeval/.venv/Scripts/python.exe",
+			"args": [
+				"d:/Projects/H100_package_realeval/scripts/sync_to_runpod.py",
+				"--base-url",
+				"https://tkrpgy6mqloa3d-8888.proxy.runpod.net",
+				"--token",
+				"c2shxchdiaetpi4jjlsy",
+				"--local-root",
+				"d:/Projects/H100_package_realeval",
+				"--remote-root",
+				"/workspace/H100_package_realeval"
+			],
+			"isBackground": false,
+			"presentation": {
+				"reveal": "always",
+				"panel": "new",
+				"clear": true,
+				"showReuseMessage": false
+			}
+		},
+		{
+			"label": "verify-runpod-upload",
+			"type": "shell",
+			"command": "d:/Projects/H100_package_realeval/.venv/Scripts/python.exe",
+			"args": [
+				"-c",
+				"import json,urllib.request,urllib.parse; base='https://tkrpgy6mqloa3d-8888.proxy.runpod.net'; token='c2shxchdiaetpi4jjlsy'; hdr={'User-Agent':'Mozilla/5.0','Accept':'application/json,text/plain,*/*','Referer':base+'/lab'}; paths=['/workspace/H100_package_realeval/run_h100.sh','/workspace/H100_package_realeval/experiments/exp8_latency_benchmark.py','/workspace/H100_package_realeval/scripts/sync_to_runpod.py'];\nfor p in paths:\n u=base+'/api/contents'+urllib.parse.quote(p,safe='/')+'?'+urllib.parse.urlencode({'token':token,'content':0});\n try:\n  d=json.loads(urllib.request.urlopen(urllib.request.Request(u,headers=hdr),timeout=30).read().decode());\n  print('OK',p,d.get('last_modified',''),d.get('size',''))\n except Exception as e:\n  print('FAIL',p,e)"
+			],
+			"isBackground": false,
+			"presentation": {
+				"reveal": "always",
+				"panel": "new",
+				"clear": true,
+				"showReuseMessage": false
+			}
+		},
+		{
+			"label": "verify-runpod-upload-file",
+			"type": "shell",
+			"command": "d:/Projects/H100_package_realeval/.venv/Scripts/python.exe",
+			"args": [
+				"d:/Projects/H100_package_realeval/tmp_verify_runpod_sync.py"
+			],
+			"isBackground": false,
+			"presentation": {
+				"reveal": "always",
+				"panel": "new",
+				"clear": true,
+				"showReuseMessage": false
+			}
+		},
+		{
+			"label": "sync-to-runpod-retry",
+			"type": "shell",
+			"command": "d:/Projects/H100_package_realeval/.venv/Scripts/python.exe",
+			"args": [
+				"d:/Projects/H100_package_realeval/scripts/sync_to_runpod.py",
+				"--base-url",
+				"https://tkrpgy6mqloa3d-8888.proxy.runpod.net",
+				"--token",
+				"c2shxchdiaetpi4jjlsy",
+				"--local-root",
+				"d:/Projects/H100_package_realeval",
+				"--remote-root",
+				"/workspace/H100_package_realeval"
+			],
+			"isBackground": false,
+			"presentation": {
+				"reveal": "always",
+				"panel": "new",
+				"clear": true,
+				"showReuseMessage": false
+			}
+		},
+		{
+			"label": "sync-to-runpod-final",
+			"type": "shell",
+			"command": "d:/Projects/H100_package_realeval/.venv/Scripts/python.exe",
+			"args": [
+				"d:/Projects/H100_package_realeval/scripts/sync_to_runpod.py",
+				"--base-url",
+				"https://tkrpgy6mqloa3d-8888.proxy.runpod.net",
+				"--token",
+				"c2shxchdiaetpi4jjlsy",
+				"--local-root",
+				"d:/Projects/H100_package_realeval",
+				"--remote-root",
+				"/workspace/H100_package_realeval"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "verify-sync-full",
+			"type": "shell",
+			"command": "d:/Projects/H100_package_realeval/.venv/Scripts/python.exe",
+			"args": [
+				"d:/Projects/H100_package_realeval/tmp_verify_sync_full.py"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "verify-sync-full-json",
+			"type": "shell",
+			"command": "d:/Projects/H100_package_realeval/.venv/Scripts/python.exe",
+			"args": [
+				"d:/Projects/H100_package_realeval/tmp_verify_sync_full.py"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "validate-contract-now",
+			"type": "shell",
+			"command": "d:/Projects/H100_package_realeval/.venv/Scripts/python.exe",
+			"args": [
+				"-c",
+				"from experiments.contract import validate_latest_results; import json; print(json.dumps(validate_latest_results(['exp1','exp2','exp3','exp5','exp6','exp8','exp10','exp11']), ensure_ascii=False, indent=2))"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "refresh-paper-report-now",
+			"type": "shell",
+			"command": "d:/Projects/H100_package_realeval/.venv/Scripts/python.exe",
+			"args": [
+				"-m",
+				"experiments.runner",
+				"--report"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "refresh-paper-pipeline-smoke",
+			"type": "shell",
+			"command": "d:/Projects/H100_package_realeval/.venv/Scripts/python.exe",
+			"args": [
+				"-m",
+				"experiments.paper_pipeline",
+				"--smoke",
+				"--config",
+				"d:/Projects/H100_package_realeval/config/h100.yaml"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "refresh-paper-results-only",
+			"type": "shell",
+			"command": "d:/Projects/H100_package_realeval/.venv/Scripts/python.exe",
+			"args": [
+				"-m",
+				"experiments.runner",
+				"--report"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "rerun-interface-checks-now",
+			"type": "shell",
+			"command": "d:/Projects/H100_package_realeval/.venv/Scripts/python.exe",
+			"args": [
+				"-m",
+				"experiments.runner",
+				"--smoke",
+				"--exp",
+				"3,6,8"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "run-exp8-smoke-once",
+			"type": "shell",
+			"command": "d:/Projects/H100_package_realeval/.venv/Scripts/python.exe",
+			"args": [
+				"-m",
+				"experiments.runner",
+				"--smoke",
+				"--exp",
+				"8"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "run-exp8-smoke-final",
+			"type": "shell",
+			"command": "d:/Projects/H100_package_realeval/.venv/Scripts/python.exe",
+			"args": [
+				"-m",
+				"experiments.runner",
+				"--smoke",
+				"--exp",
+				"8"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		}
+	]
+}
