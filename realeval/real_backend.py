@@ -75,6 +75,7 @@ def real_distillation_step_metrics(config: dict, texts: list[str], *, apply_ov_r
     effective_max_batch = config.get("distillation", {}).get("max_batch", max_batch)
 
     kl_sum, drift_sum, n_batches, tdtype = 0.0, 0.0, 0, None
+    total_batches = (len(texts) + effective_max_batch - 1) // effective_max_batch
     for start in range(0, len(texts), effective_max_batch):
         batch = texts[start:start + effective_max_batch]
         enc = tok(batch, return_tensors="pt", padding=True, truncation=True, max_length=256).to(dev)
@@ -112,6 +113,18 @@ def real_distillation_step_metrics(config: dict, texts: list[str], *, apply_ov_r
                     s_var = s_real.var(dim=0)
                 drift = float((s_var - t_var).abs().mean() / (t_var.abs().mean() + 1e-9) * 100)
         kl_sum += float(kl); drift_sum += drift; n_batches += 1
+        
+        # Progress logging every 5 batches (allows hang detection on H100)
+        if n_batches % 5 == 0:
+            try:
+                torch.cuda.synchronize()  # Ensure CUDA operations complete before checking memory
+                free_mem_gb = torch.cuda.mem_get_info()[0] / 1e9
+                logger.info("Distillation batch %d/%d: KL=%.4f, drift=%.2f%%, GPU free=%.1fGB",
+                           n_batches, total_batches, kl_sum / n_batches, 
+                           drift_sum / n_batches, free_mem_gb)
+            except RuntimeError as e:
+                logger.error("CUDA error during progress check: %s (experiment may be stuck)", e)
+                raise
 
     n_batches = max(1, n_batches)
     return {"kl": kl_sum / n_batches, "variance_drift_pct": drift_sum / n_batches,

@@ -67,14 +67,31 @@ def _import_exp(modname: str):
 
 
 def run_experiment(modname: str, short: str, config: dict[str, Any]) -> dict[str, Any]:
-    """Run a single experiment, save result, return result dict."""
+    """Run a single experiment, save result, return result dict.
+    
+    Cleans up GPU memory before and after execution to prevent OOM cascade.
+    """
+    import torch
     from realeval.io import save_results
     from realeval.runlog import log_experiment_start, log_experiment_end
+    
+    # Pre-experiment cleanup
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.reset_peak_memory_stats()
+    
     log_experiment_start(short, config)
     mod = _import_exp(modname)
     result = mod.run(config)
     save_results(short, result)
     log_experiment_end(short, result)
+    
+    # Post-experiment cleanup (critical for multi-experiment batches)
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        logger.info("%s: GPU memory cleaned up (peak: %.1fGB)",
+                   short, torch.cuda.max_memory_allocated() / 1e9)
+    
     return result
 
 

@@ -35,7 +35,11 @@ def _data_root() -> Path:
 
 
 def _load_jsonl(path: Path, max_samples: int | None = None) -> tuple[list[str], list[int]]:
-    """Load JSONL file with 'text' and 'label' fields. Returns (texts, labels)."""
+    """Load JSONL file with 'text' and 'label' fields. Returns (texts, labels).
+    
+    Validates minimum dataset size to catch corrupted/empty files early.
+    Raises ValueError if load fails validation.
+    """
     texts, labels = [], []
     with open(path, encoding="utf-8") as f:
         for i, line in enumerate(f):
@@ -54,6 +58,15 @@ def _load_jsonl(path: Path, max_samples: int | None = None) -> tuple[list[str], 
                     labels.append(int(obj["label"]))
             except (json.JSONDecodeError, ValueError, TypeError) as e:
                 logger.warning("Skipping line %d in %s: %s", i, path.name, e)
+    
+    # Validation: ensure minimum viable dataset
+    if len(texts) < 10:
+        raise ValueError(
+            f"Dataset validation failed: {path.name} has only {len(texts)} samples (need ≥10). "
+            "File may be corrupted or not found."
+        )
+    
+    logger.info("Loaded %s: %d texts, %d labels", path.name, len(texts), len(labels))
     return texts, labels
 
 

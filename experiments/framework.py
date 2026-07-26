@@ -96,16 +96,63 @@ def leakage_safe_split(dataset: TextDataset, test_ratio: float = 0.2, seed: int 
     )
 
 
+def pre_run_validation(config: dict[str, Any], exp_id: str) -> None:
+    """Pre-flight checks before experiment execution on H100.
+    
+    Validates:
+    - GPU memory sufficient (if paper mode)
+    - Model assets available
+    - Data files accessible
+    
+    Raises ExperimentRuntimeError if validation fails.
+    """
+    smoke = bool(config.get("_smoke", False))
+    if smoke:
+        return  # Skip H100 checks for smoke mode
+    
+    # Check GPU memory (H100 has 80GB, need ~40GB min for paper runs)
+    try:
+        import torch
+        if torch.cuda.is_available():
+            gpu_mem_gb = torch.cuda.get_device_properties(0).total_memory / 1e9
+            free_mem_gb = torch.cuda.mem_get_info()[0] / 1e9
+            if free_mem_gb < 35.0:
+                raise ExperimentRuntimeError(
+                    f"{exp_id}: Insufficient GPU memory ({free_mem_gb:.1f}GB free, need 35GB). "
+                    "Clear cache or restart GPU."
+                )
+            logger.info("%s: GPU memory check OK (%.1f/%.1f GB free)", exp_id, free_mem_gb, gpu_mem_gb)
+    except Exception as e:
+        if isinstance(e, ExperimentRuntimeError):
+            raise
+        logger.warning("%s: Could not check GPU memory: %s", exp_id, e)
+    
+    # Check model assets
+    from realeval import models
+    if not models.models_available(config):
+        raise ExperimentRuntimeError(
+            f"{exp_id}: Model weights unavailable. Verify models_root() and H100 mount point."
+        )
+    logger.info("%s: Model assets check OK", exp_id)
+
+
 def run_with_mode(
     exp_id: str,
     config: dict[str, Any],
     run_paper: Callable[[dict[str, Any]], dict[str, Any]],
     run_smoke: Callable[[dict[str, Any]], dict[str, Any]],
 ) -> dict[str, Any]:
-    """Run paper path when available, otherwise run smoke path."""
+    """Run paper path when available, otherwise run smoke path.
+    
+    Pre-flight validation ensures H100 safety before expensive computation.
+    """
     from realeval.real_backend import run_paper_safe
 
     smoke = bool(config.get("_smoke", False))
+    
+    # Pre-flight checks (fails fast if conditions not met)
+    pre_run_validation(config, exp_id)
+    
     try:
         paper_result = run_paper_safe(smoke, config, run_paper)
         if paper_result is not None:
