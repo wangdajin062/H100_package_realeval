@@ -18,6 +18,8 @@ from typing import Any, Callable, Iterable, Sequence
 ROOT = Path(__file__).resolve().parent.parent
 LOG_DIR = ROOT / "outputs" / "logs"
 
+logger = logging.getLogger("framework")
+
 
 class ExperimentRuntimeError(RuntimeError):
     """Raised when an experiment fails schema or runtime checks."""
