@@ -28,14 +28,6 @@ outputs/predictions/
 outputs/models/
 outputs/audit/
 
-# ── Data directories (large datasets — keep only scripts) ─
-data/TAF28k/
-data/ChiFraud/
-data/AdvFraud3k/
-data/balanced4k/
-data/spam11358/
-data/balanced600/
-data/balanced10c/
 
 # ── Temp / sync verification files ───────────────────────
 tmp_verify_sync_result.json
