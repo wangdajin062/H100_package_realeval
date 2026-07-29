@@ -19,9 +19,9 @@ logger = logging.getLogger("exp14")
 
 def run(config: dict) -> dict:
     from realeval import data
+    # The paper compares runtimes on the SAME TAF-28k test split.
     ds = load_first_nonempty(
-        loaders=[lambda: data.load_dataset(config.get("data", {}).get("dataset", "balanced4k"),
-                                           max_samples=config.get("data", {}).get("max_samples", 2000))],
+        loaders=[lambda: data.load_taf28k(max_samples=config.get("data", {}).get("max_samples", 2000))],
         synthetic_loader=lambda: data.load_synthetic(n=200),
     )
     texts, labels = ds.texts, ds.labels

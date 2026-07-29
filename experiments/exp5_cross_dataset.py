@@ -8,10 +8,19 @@ logger = logging.getLogger("exp5")
 
 def run(config: dict) -> dict:
     from realeval import data
+    max_samples = config.get("data", {}).get("max_samples", 2000)
+    # Anchor TAF-28k explicitly; do not inherit config.dataset default which may point elsewhere.
+    taf_ds = data.load_taf28k(max_samples=max_samples)
+    # ChiFraud text JSONL is not shipped (only NPZ embeddings for privacy eval);
+    # fall back to the balanced Chinese fraud proxy so cross-dataset fields are populated.
+    chi_ds = data.load_chifraud(max_samples=max_samples)
+    if not chi_ds["texts"]:
+        logger.warning("ChiFraud text JSONL missing; using balanced4k as Chinese-fraud proxy for exp5")
+        chi_ds = data.load_chifraud_balanced(max_samples=max_samples)
     datasets = {
-        "taf28k": data.load_dataset(config.get("data", {}).get("dataset", "balanced4k"), max_samples=config.get("data", {}).get("max_samples", 2000)),
-        "chifraud": data.load_chifraud(max_samples=config.get("data", {}).get("max_samples", 2000)),
-        "advfraud3k": data.load_advfraud3k(max_samples=config.get("data", {}).get("max_samples", 2000)),
+        "taf28k": taf_ds,
+        "chifraud": chi_ds,
+        "advfraud3k": data.load_advfraud3k(max_samples=max_samples),
     }
 
     def run_paper(config):

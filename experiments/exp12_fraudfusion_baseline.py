@@ -8,9 +8,9 @@ logger = logging.getLogger("exp12")
 
 def run(config: dict) -> dict:
     from realeval import data
+    # Anchor to TAF-28k, the paper's main evaluation corpus.
     ds = load_first_nonempty(
-        loaders=[lambda: data.load_dataset(config.get("data", {}).get("dataset", "balanced4k"),
-                                           max_samples=config.get("data", {}).get("max_samples", 2000))],
+        loaders=[lambda: data.load_taf28k(max_samples=config.get("data", {}).get("max_samples", 2000))],
         synthetic_loader=lambda: data.load_synthetic(n=100),
     )
     split = leakage_safe_split(ds, test_ratio=0.2, seed=42)
