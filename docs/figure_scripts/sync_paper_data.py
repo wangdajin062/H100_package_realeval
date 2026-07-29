@@ -147,7 +147,9 @@ def compute_updates(results: dict[str, dict]) -> dict[str, object]:
         loss_map = {
             "kl_only": "Pure KL\n(ours)",
             "mse_only": "MSE",
+            "ce_only": "CE\n(= QAT)",
             "kl_mse_combined": "3-term\nhybrid",
+            "kl_task": "KL +\ntask",
         }
         # Check if F1 values actually differ across variants before updating
         f1_vals = {vk: vd.get("f1", 0) for vk, vd in variants.items()}

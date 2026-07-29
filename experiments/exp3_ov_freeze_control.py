@@ -9,7 +9,7 @@ logger = logging.getLogger("exp3")
 def run(config: dict) -> dict:
     from realeval import data
     ds = load_first_nonempty(
-        loaders=[lambda: data.load_chifraud_balanced()],
+        loaders=[lambda: data.load_taf28k()],
         synthetic_loader=lambda: data.load_synthetic(n=200),
     )
     split = leakage_safe_split(ds, test_ratio=0.2, seed=42)
@@ -17,49 +17,62 @@ def run(config: dict) -> dict:
     def run_paper(config):
         from realeval import real_backend
         import math
-        # Layer selection: freeze a growing fraction of dims (early->all), so drift genuinely varies.
+        # Use lightweight QAD training (fewer epochs) so each condition produces
+        # genuinely different F1 and drift values via varying OV-Freeze parameters.
+        qad_epochs = 3
+        import copy
+        qad_config = copy.deepcopy(config)
+        qad_config.setdefault("training", {})["epochs"] = qad_epochs
+
+        # Layer selection: vary freeze_frac to control fraction of variance-matched dims.
         layer_selection = {}
         for layer, frac in (("early", 0.25), ("mid", 0.5), ("late", 0.75), ("all", 1.0)):
-            metrics = real_backend.real_distillation_step_metrics(
-                config,
-                split.train_texts,
-                apply_ov_rescaling=True,
-                quantize="int4",
-                freeze_frac=frac,
+            result = real_backend.real_qad_distill_train(
+                qad_config,
+                split.train_texts, split.train_labels,
+                split.test_texts, split.test_labels,
+                quantize="int4", apply_ov_rescaling=True, freeze_frac=frac,
             )
-            result = real_backend.real_llm_classify(config, split.test_texts, split.test_labels, quantize="int4")
-            layer_selection[layer] = {"f1": result["f1"], "variance_drift_pct": metrics["variance_drift_pct"]}
-        # rho sweep: vary the activation window, so drift/ppl genuinely vary per rho.
+            layer_selection[layer] = {
+                "f1": result["f1"],
+                "variance_drift_pct": result["drift_pct_final"],
+            }
+
+        # rho sweep: vary the activation window for OV-Freeze rescaling.
         rho_sweep = {}
         for rho in (0.0, 0.1, 0.2, 0.3, 0.4, 0.5):
-            m = real_backend.real_distillation_step_metrics(
-                config,
-                split.train_texts,
-                apply_ov_rescaling=True,
-                quantize="int4",
-                window=rho,
+            result = real_backend.real_qad_distill_train(
+                qad_config,
+                split.train_texts, split.train_labels,
+                split.test_texts, split.test_labels,
+                quantize="int4", apply_ov_rescaling=(rho > 0), freeze_frac=1.0, window=rho,
             )
-            r_cls = real_backend.real_llm_classify(config, split.test_texts, split.test_labels, quantize="int4")
             PPL_KL_CLAMP = 10
-            rho_sweep[f"rho_{rho}"] = {"f1": r_cls["f1"], "variance_drift_pct": m["variance_drift_pct"],
-                                       "ppl": round(math.exp(min(m.get("kl", 0.0), PPL_KL_CLAMP)), 3)}
-        # Matched-regulariser control (reviewer C): compares no regulariser vs OV-Freeze at
-        # different variance-matching strengths. All apply_ov_rescaling=True conditions use the same
-        # OV-Freeze mechanism, varying only freeze_frac (fraction of dimensions matched).
+            rho_sweep[f"rho_{rho}"] = {
+                "f1": result["f1"],
+                "variance_drift_pct": result["drift_pct_final"],
+                "ppl": round(math.exp(min(result.get("kl_final", 0.0), PPL_KL_CLAMP)), 3),
+            }
+
+        # Matched-regulariser control: compare no OV-Freeze vs different freeze strengths.
         conditions = {}
         for cond, fov, frac in (("no_reg", False, 0.0), ("ov_freeze_full", True, 1.0),
                                 ("ov_freeze_half", True, 0.5), ("ov_freeze_quarter", True, 0.25)):
-            m = real_backend.real_distillation_step_metrics(
-                config,
-                split.train_texts,
-                apply_ov_rescaling=fov,
-                quantize="int4",
-                freeze_frac=max(frac, 0.01),
+            result = real_backend.real_qad_distill_train(
+                qad_config,
+                split.train_texts, split.train_labels,
+                split.test_texts, split.test_labels,
+                quantize="int4", apply_ov_rescaling=fov, freeze_frac=max(frac, 0.01),
             )
-            r_cls = real_backend.real_llm_classify(config, split.test_texts, split.test_labels, quantize="int4")
-            conditions[cond] = {"f1": r_cls["f1"], "variance_drift_pct": m["variance_drift_pct"]}
-        return {"experiment": "exp3", "computation": "h100_real_qwen",
-                "layer_selection": layer_selection, "rho_sweep": rho_sweep, "conditions": conditions}
+            conditions[cond] = {
+                "f1": result["f1"],
+                "variance_drift_pct": result["drift_pct_final"],
+            }
+
+        return {
+            "experiment": "exp3", "computation": "h100_real_qwen",
+            "layer_selection": layer_selection, "rho_sweep": rho_sweep, "conditions": conditions,
+        }
 
     def run_smoke(_: dict) -> dict:
         logger.info("SMOKE: running small-model verification for exp3")
@@ -105,8 +118,8 @@ def run(config: dict) -> dict:
         # Use same freeze_frac values as paper path (early=0.25, mid=0.5, late=0.75, all=1.0)
         # so key names carry the same semantic meaning in smoke and paper runs.
         layer_selection = {}
-        for frac, layer in ((0.0, "none"), (0.25, "early"), (0.5, "mid"), (0.75, "late"), (1.0, "all")):
-            drift, _ = _train(frac if frac > 0 else 1.0, 0.5 if frac > 0 else 0.0)
+        for frac, layer in ((0.25, "early"), (0.5, "mid"), (0.75, "late"), (1.0, "all")):
+            drift, _ = _train(frac, 0.5)
             layer_selection[layer] = {"f1": base_f1, "variance_drift_pct": round(drift, 3)}
 
         rho_sweep = {}

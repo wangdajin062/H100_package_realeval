@@ -95,11 +95,55 @@ def run(config: dict) -> dict:
             }
 
         latencies = {k: v["p50_ms"] for k, v in latency_detail.items()}
+
+        # Batch-level efficiency benchmark (for Table 7)
+        # Measures latency/throughput/memory at different batch sizes with int4 quant.
+        batch_benchmark = {}
+        try:
+            import torch
+            model, tok = models.load_causal_lm(
+                config["models"]["teacher"], quantize="int4", bf16=True
+            )
+            dev = next(model.parameters()).device
+            model.eval()
+            for bs in (1, 8, 32, 64):
+                try:
+                    batch_prompts = prompts[:min(bs, len(prompts))]
+                    if len(batch_prompts) < bs:
+                        batch_prompts = batch_prompts * ((bs // len(batch_prompts)) + 1)
+                    batch_prompts = batch_prompts[:bs]
+                    enc = tok(batch_prompts, return_tensors="pt", padding=True,
+                             truncation=True, max_length=max_seq).to(dev)
+                    torch.cuda.reset_peak_memory_stats(dev)
+                    # Warmup
+                    for _ in range(2):
+                        with torch.inference_mode():
+                            _ = model(**enc).logits
+                    torch.cuda.synchronize()
+                    t0 = time.perf_counter()
+                    for _ in range(repeat):
+                        with torch.inference_mode():
+                            _ = model(**enc).logits
+                    torch.cuda.synchronize()
+                    elapsed_ms = (time.perf_counter() - t0) / repeat * 1000
+                    mem_mb = torch.cuda.max_memory_allocated(dev) / 1e6 if torch.cuda.is_available() else 0
+                    batch_benchmark[str(bs)] = {
+                        "latency_p50_ms": round(elapsed_ms, 2),
+                        "throughput_sps": round(bs / (elapsed_ms / 1000), 1) if elapsed_ms > 0 else 0,
+                        "peak_mem_mb": round(mem_mb, 1),
+                    }
+                except Exception as e:
+                    logger.warning("Batch benchmark bs=%d failed: %s", bs, e)
+        except Exception as e:
+            logger.warning("Batch-level benchmark unavailable: %s", e)
+
         return {
             "experiment": "exp8",
             "computation": "h100_real_qwen",
             "latencies": latencies,
             "latency_detail": latency_detail,
+            "batch_benchmark": batch_benchmark,
+            "all_batch_sizes": batch_benchmark,  # alias for paper_pipeline compatibility
         }
 
     def run_smoke(_: dict) -> dict:
@@ -137,11 +181,21 @@ def run(config: dict) -> dict:
             }
 
         latencies = {k: v["p50_ms"] for k, v in latency_detail.items()}
+        batch_benchmark = {
+            str(bs): {
+                "latency_p50_ms": round(latencies["int4"] * max(1, bs) / 8, 4),
+                "throughput_sps": round(bs / (latencies["int4"] * max(1, bs) / 8 / 1000), 1),
+                "peak_mem_mb": None,
+            }
+            for bs in (1, 8, 32, 64)
+        }
         return {
             "experiment": "exp8",
             "computation": "smoke_cpu",
             "latencies": latencies,
             "latency_detail": latency_detail,
+            "batch_benchmark": batch_benchmark,
+            "all_batch_sizes": batch_benchmark,
         }
 
     return run_with_mode("exp8", config, run_paper, run_smoke)

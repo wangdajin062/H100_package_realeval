@@ -13,7 +13,8 @@ models:
                                                # available official release and serves the same architectural role.
   # Teacher-scale ablation (exp10 / Fig 6b): tested as teachers to justify the homologous 0.5B choice.
   teacher_1.5b: "Qwen/Qwen2.5-1.5B-Instruct"
-  teacher_7b:   "Qwen/Qwen2.5-7B-Instruct"     # also the SAFE-QAQ 7B comparison baseline (BF16, unquantised)
+  teacher_3b:   "Qwen/Qwen2.5-3B-Instruct"      # intermediate teacher scale for ablation (exp10)
+  teacher_7b:   "Qwen/Qwen2.5-7B-Instruct"      # also the SAFE-QAQ 7B comparison baseline (BF16, unquantised)
   # Edge deployment GGUF: 0.5B Q4_K_M (~240 MB) — the on-device student format (paper line 200).
   student_gguf: "Qwen/Qwen2.5-0.5B-Instruct-GGUF"
 
@@ -36,6 +37,8 @@ distillation:
   max_seq_length: 256
   freeze_frac_default: 1.0
   window_default: 1.0
+  total_steps: 2000              # concept-step space for Fig4 alignment (OVF schedule + SNR range)
+  ovf_activation_ratio: 0.7      # activate OV-Freeze at 70% of total training steps
 
 hardware:
   use_flash_attn: true

@@ -7,7 +7,7 @@ Loss-function and teacher-selection ablation.
       trade-off (F1 = 0.916, KL = 0.005); cross-entropy (= QAT) suffers severe
       distribution drift (KL = 0.311).
   (b) Teacher selection: homologous 0.5B BF16 teacher vs larger heterogeneous
-      teachers (1.8B-7B), under a fixed 0.5B-token budget vs training to
+      teachers (1.5B-7B), under a fixed 0.5B-token budget vs training to
       convergence. The homologous teacher reaches the best F1 with the fewest
       tokens, validating the self-distillation design.
 

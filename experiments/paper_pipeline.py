@@ -125,7 +125,11 @@ def _extract(short, all_results):
     """Pull headline metrics from each experiment's own result shape."""
     r = all_results.get(short, {})
     if short == "exp1":
-        return {"F1": r.get("f1")}
+        return {"F1": r.get("f1"), "kl_final": r.get("kl_final"),
+                "drift_pct_final": r.get("drift_pct_final"),
+                "kl_plateau": r.get("kl_plateau"), "kl_converged": r.get("kl_converged"),
+                "total_steps": r.get("total_steps"), "ovf_step": r.get("ovf_activation_step"),
+                "snr_min": r.get("snr_min"), "snr_max": r.get("snr_max")}
     if short == "exp2":
         v = r.get("variants", {})
         return {f"kl_final[{k}]": x.get("kl_final") for k, x in v.items()}
@@ -141,42 +145,53 @@ def _extract(short, all_results):
             taf = r.get("balanced4k", {}).get("f1")
         chi = r.get("chifraud", {}).get("f1")
         adv = r.get("advfraud", {}).get("full_pool", {}).get("f1") if isinstance(r.get("advfraud"), dict) else None
+        adv_curated = r.get("advfraud", {}).get("curated", {}).get("f1") if isinstance(r.get("advfraud"), dict) else None
         cross_tc = r.get("cross_taf_on_chifraud", {}).get("f1")
         cross_ct = r.get("cross_chifraud_on_taf", {}).get("f1")
+        bf16_matched = r.get("bf16_matched_advfraud")
         out = {}
         if taf is not None: out["taf28k"] = taf
         if chi is not None: out["chifraud"] = chi
         if adv is not None: out["advfraud"] = adv
+        if adv_curated is not None: out["advfraud_curated"] = adv_curated
         if cross_tc is not None: out["cross_taf->chi"] = cross_tc
         if cross_ct is not None: out["cross_chi->taf"] = cross_ct
+        if bf16_matched is not None: out["bf16_matched"] = bf16_matched
         return out or {"cross_taf->chi": None, "cross_chi->taf": None}
     if short == "exp6":
         d = r.get("diagnostic_B", {})
         hm = d.get("h100_measured", {})
+        ref = r.get("paper_reference", {})
         out = {}
         if hm.get("generic") is not None: out["alpha_generic"] = hm["generic"]
-        if hm.get("domain") is not None:
-            out["alpha_domain"] = hm["domain"]
-        elif hm.get("generic") is not None:
-            # Keep table metrics experiment-derived even when legacy outputs miss domain.
-            out["alpha_domain"] = hm["generic"]
+        if hm.get("domain") is not None: out["alpha_domain"] = hm["domain"]
+        if ref.get("alpha_generic") is not None: out["ref_alpha_generic"] = ref["alpha_generic"]
+        if ref.get("alpha_tuned") is not None: out["ref_alpha_tuned"] = ref["alpha_tuned"]
         return out or {"alpha_generic": None}
     if short == "exp7":
         return {"speaker_id_acc": r.get("speaker_id_accuracy"), "asv_eer_pct": r.get("asv_eer_pct")}
     if short == "exp8":
-        return {f"lat_ms[{k}]": v for k, v in r.get("latencies", {}).items()}
+        out = {f"lat_ms[{k}]": v for k, v in r.get("latencies", {}).items()}
+        bb = r.get("batch_benchmark", {})
+        if bb:
+            out["batch_benchmark"] = bb
+        return out
     if short == "exp9":
         wc = r.get("with_cot", {}); wo = r.get("without_cot", {})
         return {"cot_f1": wc.get("f1"), "direct_f1": wo.get("f1"),
                 "cot_fpr": wc.get("fpr"), "direct_fpr": wo.get("fpr")}
     if short == "exp10":
-        return {f"F1[{k}]": x.get("f1") for k, x in r.get("scales", {}).items()}
+        scales = r.get("scales", {})
+        out = {}
+        for k, x in scales.items():
+            if x.get("f1_fixed") is not None:
+                out[f"F1_fixed[{k}]"] = x["f1_fixed"]
+            if x.get("f1_conv") is not None:
+                out[f"F1_conv[{k}]"] = x["f1_conv"]
+        return out
     if short == "exp11":
         schemes = r.get("schemes", {})
-        out = {f"F1[{k}]": x.get("f1") for k, x in schemes.items()}
-        if "F1[int4]" not in out and "F1[fp16]" in out:
-            # Legacy fine-tuned outputs may only expose fp32/fp16/bf16.
-            out["F1[int4]"] = out["F1[fp16]"]
+        out = {f"F1[{k}]": x.get("f1") for k, x in schemes.items() if x.get("f1") is not None}
         return out
     if short == "exp12":
         comp = r.get("competitor_comparison_real", {})

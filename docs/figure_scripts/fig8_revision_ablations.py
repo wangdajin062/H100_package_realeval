@@ -9,9 +9,9 @@ three new quantitative results introduced during the revision rounds.
   (b) AdvFraud-3k curated-subset vs full-pool robustness        [Sec 4,     M4]
   (c) epsilon-LDP privacy-utility trade-off                     [Sec 5,     B3]
 
-This DATA dict is the single source of truth for the figure and MUST match the
-numbers reported in paper1_en_v9.tex. Any change here requires the same change
-in the .tex (and vice versa). The script prints all plotted values at the end
+Data flows from experiments through paper_data (FIG8_QUANT / FIG8_ADVFRAUD /
+FIG8_LDP). Hardcoded fallbacks match paper1_en_v9.tex. Any change requires
+the same change in the .tex. The script prints all plotted values at the end
 for a quick consistency check against the manuscript.
 
 Output: fig8_revision_ablations.png  (400 dpi high-resolution)
@@ -23,30 +23,13 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import paper_style as ps  # shared journal-grade styling (font, palette, dpi)
+from paper_data import FIG8_QUANT, FIG8_ADVFRAUD, FIG8_LDP
 
-# --------------------------------------------------------------------------- #
-# SINGLE SOURCE OF TRUTH  (must equal the values in paper1_en_v9.tex)
-# --------------------------------------------------------------------------- #
+# Data flows from experiments through paper_data, with hardcoded fallbacks
 DATA = {
-    # (a) Quantization-scheme ablation on TAF-28k (F1)
-    "quant": {
-        "labels": ["Homogeneous\nINT4", "Heterogeneous\n(NVFP4+Q4_K_M)"],
-        "f1":     [0.915, 0.923],
-        "bf16_ref": 0.931,        # BF16 baseline reference line
-        "delta":  0.008,          # +0.008, p<0.05
-    },
-    # (b) AdvFraud-3k robustness: curated 517-subset vs full 3000-pool (QAD+OVF F1)
-    "advfraud": {
-        "labels": ["Full pool\n(3,000)", "Curated subset\n(517)"],
-        "f1":     [0.841, 0.875],
-        "bf16_matched": 0.882,    # matched AdvFraud BF16 baseline (curated)
-    },
-    # (c) epsilon-LDP privacy-utility trade-off (eps=1.5, sigma=1.0, delta=1e-5)
-    "ldp": {
-        "labels":   ["No LDP\n(main results)", "$\\epsilon$-LDP\n($\\epsilon$=1.5)"],
-        "f1":       [0.923, 0.902],     # -0.021 absolute
-        "latency":  [268.0, 271.0],     # P50 ms, +~3 ms overhead
-    },
+    "quant":    FIG8_QUANT,
+    "advfraud": FIG8_ADVFRAUD,
+    "ldp":      FIG8_LDP,
 }
 
 # --------------------------------------------------------------------------- #

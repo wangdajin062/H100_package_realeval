@@ -9,24 +9,68 @@ logger = logging.getLogger("exp10")
 def run(config: dict) -> dict:
     from realeval import data
     ds = load_first_nonempty(
-        loaders=[lambda: data.load_dataset(config.get("data", {}).get("dataset", "balanced4k"),
-                                           max_samples=config.get("data", {}).get("max_samples", 2000))],
-        synthetic_loader=lambda: data.load_synthetic(n=100),
+        loaders=[lambda: data.load_taf28k()],
+        synthetic_loader=lambda: data.load_synthetic(n=200),
     )
     split = leakage_safe_split(ds, test_ratio=0.2, seed=42)
 
     def run_paper(config):
         from realeval import real_backend
+        models_cfg = config.get("models", {})
+
+        # Teacher-scale ablation: each teacher trains the same student.
+        # Two scenarios per teacher:
+        #   f1_fixed: limited training (fixed token budget, 1 epoch)
+        #   f1_conv:  full training to convergence (5 epochs)
+        teacher_keys = [
+            ("teacher",        models_cfg.get("teacher")),
+            ("teacher_1.5b",   models_cfg.get("teacher_1.5b")),
+            ("teacher_3b",     models_cfg.get("teacher_3b")),
+            ("teacher_7b",     models_cfg.get("teacher_7b")),
+        ]
+
+        import copy
+        fixed_config = copy.deepcopy(config)
+        fixed_config.setdefault("training", {})["epochs"] = 1
+        conv_config = copy.deepcopy(config)
+        conv_config.setdefault("training", {})["epochs"] = 5
+
         scales = {}
-        for teacher_key in ("teacher", "teacher_1.5b", "teacher_7b"):
-            if teacher_key not in config.get("models", {}):
+        for key, model_id in teacher_keys:
+            if not model_id:
                 continue
-            cfg = dict(config)
-            cfg["models"] = dict(config.get("models", {}))
-            cfg["models"]["teacher"] = config["models"][teacher_key]
-            result = real_backend.real_llm_classify(cfg, split.test_texts, split.test_labels, quantize="int4")
-            scales[teacher_key] = {"f1": result["f1"], "accuracy": result["accuracy"]}
-        return {"experiment": "exp10", "computation": "h100_real_qwen", "scales": scales}
+            try:
+                # Fixed token budget (1 epoch)
+                fixed_result = real_backend.real_qad_distill_train(
+                    fixed_config,
+                    split.train_texts, split.train_labels,
+                    split.test_texts, split.test_labels,
+                    quantize="int4",
+                    teacher_model=model_id,
+                )
+                # To convergence (5 epochs)
+                conv_result = real_backend.real_qad_distill_train(
+                    conv_config,
+                    split.train_texts, split.train_labels,
+                    split.test_texts, split.test_labels,
+                    quantize="int4",
+                    teacher_model=model_id,
+                )
+                scales[key] = {
+                    "f1_fixed": fixed_result["f1"],
+                    "f1_conv": conv_result["f1"],
+                    "accuracy": conv_result["accuracy"],
+                    "teacher_model": model_id,
+                }
+            except Exception as e:
+                logger.warning("Teacher scale %s (%s) failed: %s", key, model_id, e)
+                scales[key] = {"f1_fixed": None, "f1_conv": None, "error": str(e)}
+
+        return {
+            "experiment": "exp10",
+            "computation": "h100_real_qwen",
+            "scales": scales,
+        }
 
 
     def run_smoke(_: dict) -> dict:
@@ -44,9 +88,15 @@ def run(config: dict) -> dict:
         for teacher, overlap in synthetic_overlaps:
             X, y = verification_features(split.train_labels + split.test_labels, overlap=overlap)
             ntr = len(split.train_labels)
-            clf = GradientBoostingClassifier(n_estimators=100, random_state=42).fit(X[:ntr], y[:ntr])
-            m = classification_metrics(y[ntr:], clf.predict(X[ntr:]))
-            scales[teacher] = {"f1": m["f1"], "accuracy": m["accuracy"]}
+            clf_fixed = GradientBoostingClassifier(n_estimators=50, random_state=42).fit(X[:ntr], y[:ntr])
+            m_fixed = classification_metrics(y[ntr:], clf_fixed.predict(X[ntr:]))
+            clf_conv = GradientBoostingClassifier(n_estimators=100, random_state=42).fit(X[:ntr], y[:ntr])
+            m_conv = classification_metrics(y[ntr:], clf_conv.predict(X[ntr:]))
+            scales[teacher] = {
+                "f1_fixed": m_fixed["f1"],
+                "f1_conv": m_conv["f1"],
+                "accuracy": m_conv["accuracy"],
+            }
         return {"experiment": "exp10", "computation": "smoke_sklearn", "scales": scales}
 
     return run_with_mode("exp10", config, run_paper, run_smoke)

@@ -9,7 +9,7 @@ logger = logging.getLogger("exp11")
 def run(config: dict) -> dict:
     from realeval import data
     ds = load_first_nonempty(
-        loaders=[lambda: data.load_chifraud_balanced()],
+        loaders=[lambda: data.load_taf28k()],
         synthetic_loader=lambda: data.load_synthetic(n=200),
     )
     split = leakage_safe_split(ds, test_ratio=0.2, seed=42)
@@ -19,26 +19,36 @@ def run(config: dict) -> dict:
         from realeval import models
         from pathlib import Path
         import torch
-        ft_path = Path(__file__).resolve().parent.parent / "outputs" / "models" / "exp1_finetuned"
         schemes = {}
-        if ft_path.exists():
-            # Load fine-tuned model at different precisions
-            for dtype_name, dtype in [("fp32", torch.float32), ("fp16", torch.float16), ("bf16", torch.bfloat16)]:
-                model, tok = models.load_causal_lm(str(ft_path), quantize=None, bf16=(dtype == torch.bfloat16))
-                if dtype != torch.bfloat16 and model is not None:
-                    model = model.to(dtype=dtype)
-                result = real_backend.real_llm_classify(config, split.test_texts, split.test_labels,
-                                                         quantize=dtype_name, finetuned_path=str(ft_path),
-                                                         finetuned_dtype=dtype_name)
-                schemes[dtype_name] = {"f1": result["f1"], "accuracy": result["accuracy"]}
-        else:
-            # Fallback: base Qwen quantization comparison
-            for quant in ("fp16", "int8", "int4", "nf4"):
-                result = real_backend.real_llm_classify(config, split.test_texts, split.test_labels, quantize=quant)
-                schemes[quant] = {"f1": result["f1"], "accuracy": result["accuracy"]}
-        if "int4" not in schemes and "fp16" in schemes:
-            schemes["int4"] = dict(schemes["fp16"])
-        return {"experiment": "exp11", "computation": "h100_real_qwen", "schemes": schemes}
+
+        # Prefer QAD-trained model from exp1, otherwise fall back to base Qwen
+        qad_path = Path(__file__).resolve().parent.parent / "outputs" / "models" / "exp1_qad"
+
+        # Test each quantisation scheme by loading with real bitsandbytes quantisation
+        quant_schemes = [
+            ("fp16", "fp16"),
+            ("int8", "int8"),
+            ("int4", "int4"),
+            ("nf4", "nf4"),
+        ]
+        for scheme_name, quant_arg in quant_schemes:
+            try:
+                result = real_backend.real_llm_classify(
+                    config, split.test_texts, split.test_labels,
+                    quantize=quant_arg,
+                    finetuned_path=str(qad_path) if qad_path.exists() else None,
+                )
+                schemes[scheme_name] = {"f1": result["f1"], "accuracy": result["accuracy"]}
+            except Exception as e:
+                logger.warning("Quantisation scheme %s failed: %s", scheme_name, e)
+                schemes[scheme_name] = {"f1": None, "accuracy": None, "error": str(e)}
+
+        return {
+            "experiment": "exp11",
+            "computation": "h100_real_qwen",
+            "schemes": schemes,
+            "model_source": "exp1_qad" if qad_path.exists() else "base_qwen",
+        }
 
     def run_smoke(_: dict) -> dict:
         logger.info("SMOKE: running small-model verification for exp11")
