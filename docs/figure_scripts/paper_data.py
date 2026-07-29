@@ -133,8 +133,8 @@ while len(LATENCY_P99_MS) < 4:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _traj = _get("exp1", "trajectory") or []
-LOSS_PLATEAU        = _get("exp1", "kl_plateau") or (_r(_traj[0]["kl"]) if _traj else 0.045)
-LOSS_CONVERGED      = _get("exp1", "kl_converged") or (_r(_traj[-1]["kl"]) if _traj else 0.016)
+LOSS_PLATEAU        = _get("exp1", "kl_plateau") or (_r(_traj[0].get("kl")) if _traj else 0.045)
+LOSS_CONVERGED      = _get("exp1", "kl_converged") or (_r(_traj[-1].get("kl")) if _traj else 0.016)
 OVF_ACTIVATION_STEP = _get("exp1", "ovf_activation_step") or 1400
 TOTAL_STEPS         = _get("exp1", "total_steps") or 2000
 _snr_min            = _get("exp1", "snr_min") or 18.4

@@ -52,7 +52,9 @@ def run(config: dict) -> dict:
             ("logreg", LogisticRegression(max_iter=1000, random_state=42)),
             ("xgb", GradientBoostingClassifier(n_estimators=50, random_state=42)),
             ("mlp", MLPClassifier(hidden_layer_sizes=(64,), max_iter=500, random_state=42)),
-            ("qwen_int4", LogisticRegression(max_iter=1000, random_state=42)),
+            # Smoke uses a surrogate classifier for the LLM baseline so the output
+            # schema matches the paper path (qwen_base) and contract validation.
+            ("qwen_base", LogisticRegression(max_iter=1000, random_state=42)),
         ]:
             clf.fit(Xtr, split.train_labels)
             m = classification_metrics(split.test_labels, clf.predict(Xte))

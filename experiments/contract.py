@@ -16,6 +16,12 @@ REQUIRED_PATHS: dict[str, list[tuple[str, ...]]] = {
     "exp1": [("f1",), ("trajectory",), ("kl_final",), ("drift_pct_final",),
              ("kl_plateau",), ("kl_converged",), ("total_steps",), ("ovf_activation_step",),
              ("snr_min",), ("snr_max",)],
+    "exp4": [
+        ("classifiers", "logreg", "f1"),
+        ("classifiers", "xgb", "f1"),
+        ("classifiers", "mlp", "f1"),
+        ("classifiers", "qwen_base", "f1"),
+    ],
     "exp2": [
         ("variants", "kl_only", "f1"),
         ("variants", "kl_only", "kl_final"),
