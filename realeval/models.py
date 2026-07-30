@@ -41,10 +41,16 @@ def _resolve(path: str) -> str | None:
 
 
 def load_causal_lm(path: str, *, quantize: str = None, bf16: bool = True,
-                   compile_model: bool = True, device: str = None):
+                   compile_model: bool = False, device: str = None):
     """Load causal LM. Returns (model, tokenizer) or (None, None) (when unavailable).
 
     quantize: None | 'int4' (bitsandbytes 4-bit) | 'int8'
+
+    compile_model defaults to False to honour config ``hardware.use_torch_compile: false``.
+    torch.compile wraps the module (``_orig_mod.`` prefix); if a LoRA adapter is injected
+    afterwards the compiled graph bypasses the adapter, so its gradients are zero (lora_B
+    stays 0) and the saved adapter keys carry the ``_orig_mod.`` prefix and fail to reload.
+    Pass compile_model=True explicitly only for pure inference paths with no adapter.
     """
     if not _have_transformers():
         logger.warning("transformers unavailable, cannot load real model %s", path)

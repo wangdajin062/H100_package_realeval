@@ -20,6 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, "/workspace")
 import torch
+import torch.nn.functional as F
 
 MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
 PROMPT = "Determine if the following text is fraud or normal.\n\nText: {text}\n\nAnswer:"
@@ -79,14 +80,16 @@ def evaluate(model, rows, tok, device, batch_size=32):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--corpus", default="balanced4k")
+    ap.add_argument("--corpus", default="chifraud")
     ap.add_argument("--epochs", type=int, default=1)
     ap.add_argument("--lr", type=float, default=5e-6)
     ap.add_argument("--batch-size", type=int, default=32)
     ap.add_argument("--max-grad-norm", type=float, default=1.0)
     ap.add_argument("--warmup-ratio", type=float, default=0.1)
     ap.add_argument("--lora-r", type=int, default=16)
-    ap.add_argument("--max-samples", type=int, default=4000)
+    ap.add_argument("--max-samples", type=int, default=16000)
+    ap.add_argument("--pos-weight", type=float, default=0.0,
+                    help="loss weight for the fraud (minority) class; 0 = auto (n_neg/n_pos, capped at 8)")
     ap.add_argument("--output-dir", default="/workspace/outputs/lora_manual")
     args = ap.parse_args()
 
@@ -106,6 +109,11 @@ def main():
     print(f"[data] {args.corpus}: {len(texts)} rows, {len(set(texts))} distinct")
     print(f"[data] train {len(train_rows)} / test {len(test_rows)}  "
           f"(train pos {sum(r['label'] for r in train_rows)})")
+
+    n_pos = sum(r["label"] for r in train_rows)
+    n_neg = len(train_rows) - n_pos
+    pos_weight = args.pos_weight if args.pos_weight > 0 else min(8.0, n_neg / max(1, n_pos))
+    print(f"[data] class imbalance: pos {n_pos} neg {n_neg} -> pos_weight {pos_weight:.3f}")
 
     model = AutoModelForCausalLM.from_pretrained(
         MODEL, torch_dtype=torch.bfloat16, device_map="auto")
@@ -145,8 +153,18 @@ def main():
             batch = [train_rows[i] for i in order[s:s + args.batch_size]]
             ids, lab, att = collate(batch, tok.pad_token_id, device)
 
-            out = model(input_ids=ids, attention_mask=att, labels=lab)
-            loss = out.loss
+            out = model(input_ids=ids, attention_mask=att)
+            # Per-sample weighted LM loss so the minority fraud class is not drowned out.
+            logits = out.logits[:, :-1, :].float()
+            tgt = lab[:, 1:]
+            tok_loss = F.cross_entropy(
+                logits.reshape(-1, logits.size(-1)), tgt.reshape(-1),
+                ignore_index=-100, reduction="none").reshape(tgt.shape)
+            tok_mask = (tgt != -100).float()
+            sample_loss = (tok_loss * tok_mask).sum(1) / tok_mask.sum(1).clamp(min=1)
+            sample_lab = torch.tensor([r["label"] for r in batch], device=device, dtype=torch.float32)
+            w = torch.where(sample_lab > 0.5, float(pos_weight), 1.0)
+            loss = (sample_loss * w).sum() / w.sum()
             if not torch.isfinite(loss):
                 sys.exit(f"[ABORT] non-finite loss at step {gstep}")
 

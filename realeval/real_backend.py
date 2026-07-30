@@ -202,6 +202,16 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
         {"params": head.parameters(), "lr": head_lr},
     ], weight_decay=0.05)
 
+    # ── Class weighting for imbalanced corpora (fraud is the minority class) ──
+    class_weight = None
+    if bool(config.get("training", {}).get("balance_class_weight", False)):
+        import numpy as _np
+        counts = _np.bincount([int(l) for l in train_labels], minlength=2).astype(float)
+        counts[counts == 0] = 1.0
+        cw = counts.sum() / (2.0 * counts)
+        class_weight = torch.tensor(cw, device=dev, dtype=torch.float32)
+        logger.info("QAD class weighting: counts=%s weight=%s", counts.tolist(), [round(x, 3) for x in cw.tolist()])
+
     # ── Compute OV-Freeze activation schedule (concept-step space) ──
     # Fig4 expects TOTAL_STEPS=2000, OVF_ACTIVATION_STEP=1400.
     # Actual training produces N_real batches; we map each batch to a concept step
@@ -247,7 +257,7 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
 
             # Classification logits via head
             logits = head(s_last)  # (batch, 2)
-            ce_loss = F.cross_entropy(logits, labels_t)
+            ce_loss = F.cross_entropy(logits, labels_t, weight=class_weight)
 
             # Loss components depend on loss_fn mode
             kl_loss = torch.tensor(0.0, device=dev)

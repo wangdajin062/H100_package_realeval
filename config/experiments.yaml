@@ -19,9 +19,9 @@ models:
   student_gguf: "Qwen/Qwen2.5-0.5B-Instruct-GGUF"
 
 data:
-  source: auto       # data source mode: auto, taf28k, synthetic (also configurable via REALEVAL_DATA__SOURCE env)
-  dataset: taf28k    # default corpus for experiments that load via load_dataset/load_text_corpus
-  max_samples: 4000  # max samples per dataset (None = all)
+  source: auto        # data source mode: auto, taf28k, synthetic (also configurable via REALEVAL_DATA__SOURCE env)
+  dataset: chifraud   # primary discriminative corpus (ChiFraud: 404k, ~14.3% fraud, TF-IDF ceiling 0.896). balanced4k is saturated (TF-IDF 0.997) and only a sanity set.
+  max_samples: 16000  # sample from ChiFraud, keeping the natural ~14.3% fraud imbalance
 
 training:
   batch_size: 64
@@ -29,6 +29,7 @@ training:
   epochs: 5
   apply_ov_rescaling: true
   quantize: "int4"  # fp16, int8, int4, nf4
+  balance_class_weight: true  # weight the classification-head CE by inverse class frequency (fraud is the minority class)
 
 distillation:
   temperature: 2.0

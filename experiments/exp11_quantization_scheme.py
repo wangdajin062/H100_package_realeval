@@ -8,8 +8,11 @@ logger = logging.getLogger("exp11")
 
 def run(config: dict) -> dict:
     from realeval import data
+    # TAF-28k is audio-only (no per-sample text); text distillation uses the configured text corpus.
+    dataset_name = config.get("data", {}).get("dataset", "balanced4k")
+    max_samples = config.get("data", {}).get("max_samples")
     ds = load_first_nonempty(
-        loaders=[lambda: data.load_taf28k()],
+        loaders=[lambda: data.load_dataset(dataset_name, max_samples=max_samples)],
         synthetic_loader=lambda: data.load_synthetic(n=200),
     )
     split = leakage_safe_split(ds, test_ratio=0.2, seed=42)

@@ -114,6 +114,9 @@ class RunpodSync:
 
 
 def should_exclude(path: Path, root: Path, exclude_dirs: set[str], exclude_suffix: set[str]) -> bool:
+    # Jupyter Contents API returns HTTP 400 for dotfiles
+    if path.name.startswith("."):
+        return True
     rel = path.relative_to(root)
     for part in rel.parts:
         if part in exclude_dirs:
