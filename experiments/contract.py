@@ -89,6 +89,10 @@ REQUIRED_PATHS: dict[str, list[tuple[str, ...]]] = {
         ("schemes", "int8", "f1"),
         ("model_source",),
     ],
+    # exp7, exp9, exp12, exp13, exp14 are intentionally omitted from
+    # REQUIRED_PATHS because they do not feed any paper figure or main table
+    # (Figures 3-8 / Table 2). They are validated indirectly through smoke runs
+    # and the paper_pipeline _extract() aggregator.
 }
 
 

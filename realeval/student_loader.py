@@ -10,8 +10,15 @@ import os
 import warnings
 from pathlib import Path
 
-ADAPTER_ROOT = Path(os.environ.get("REALEVAL_ADAPTER_ROOT",
-                                   "/workspace/outputs/sft_checkpoints"))
+# Adapter root resolution:
+#   1. REALEVAL_ADAPTER_ROOT environment variable
+#   2. /workspace/outputs/sft_checkpoints (RunPod default)
+#   3. Package-relative outputs/sft_checkpoints (local sandbox fallback)
+_ADAPTER_ROOT_DEFAULT = Path("/workspace/outputs/sft_checkpoints")
+if not _ADAPTER_ROOT_DEFAULT.is_dir() and not any(os.environ.get(m) for m in
+    ("RUNPOD_POD_ID", "RUNPOD_POD_HOSTNAME", "RUNPOD_API_KEY")):
+    _ADAPTER_ROOT_DEFAULT = Path(__file__).resolve().parent.parent / "outputs" / "sft_checkpoints"
+ADAPTER_ROOT = Path(os.environ.get("REALEVAL_ADAPTER_ROOT", str(_ADAPTER_ROOT_DEFAULT)))
 BASE_MODEL_DEFAULT = "Qwen/Qwen2.5-0.5B-Instruct"
 
 

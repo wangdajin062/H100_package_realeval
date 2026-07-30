@@ -80,6 +80,9 @@ def run(config: dict) -> dict:
                "model_source": "exp1_qad" if finetuned_path else "base_qwen"}
         if "taf28k" in results:
             out["taf28k"] = results["taf28k"]
+            # balanced4k is the in-distribution proxy used during development;
+            # for paper runs it aliases the TAF-28k score so downstream reports
+            # see the same main-result value regardless of which dataset name they query.
             out["balanced4k"] = results["taf28k"]
         if "chifraud" in results:
             out["chifraud"] = results["chifraud"]
@@ -147,6 +150,7 @@ def run(config: dict) -> dict:
         out: dict = {"experiment": "exp5", "computation": "smoke_sklearn"}
         if "taf28k" in results:
             out["taf28k"] = results["taf28k"]
+            # balanced4k aliases the TAF-28k in-distribution score for report compatibility.
             out["balanced4k"] = results["taf28k"]
         if "chifraud" in results:
             out["chifraud"] = results["chifraud"]
