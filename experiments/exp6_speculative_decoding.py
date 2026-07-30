@@ -12,7 +12,7 @@ def run(config: dict) -> dict:
     # on natural language, giving a real non-zero acceptance rate.
     # taf28k instruction templates cause near-zero alpha because base models
     # don't follow instruction format the way instruct-tuned models do.
-    dataset_name = config.get("data", {}).get("dataset", "balanced4k")
+    dataset_name = config.get("data", {}).get("dataset", "taf28k")
     max_samples = config.get("data", {}).get("max_samples", 100)
     ds = load_first_nonempty(
         loaders=[

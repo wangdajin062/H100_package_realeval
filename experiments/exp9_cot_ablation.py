@@ -9,7 +9,7 @@ logger = logging.getLogger("exp9")
 def run(config: dict) -> dict:
     from realeval import data
     ds = load_first_nonempty(
-        loaders=[lambda: data.load_dataset(config.get("data", {}).get("dataset", "balanced4k"),
+        loaders=[lambda: data.load_dataset(config.get("data", {}).get("dataset", "taf28k"),
                                            max_samples=config.get("data", {}).get("max_samples", 1000))],
         synthetic_loader=lambda: data.load_synthetic(n=100),
     )

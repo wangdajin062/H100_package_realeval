@@ -8,7 +8,7 @@ logger = logging.getLogger("exp8")
 
 def run(config: dict) -> dict:
     from realeval import data
-    dataset_name = config.get("data", {}).get("dataset", "balanced4k")
+    dataset_name = config.get("data", {}).get("dataset", "taf28k")
     max_samples = config.get("data", {}).get("max_samples", 100)
     ds = load_first_nonempty(
         loaders=[
