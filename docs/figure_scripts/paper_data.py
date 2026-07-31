@@ -70,6 +70,23 @@ def _r(v, ndigits=4):
     return round(v, ndigits) if isinstance(v, float) else v
 
 
+_MISSING_PLACEHOLDERS: list[tuple[str, str, tuple[str, ...], object]] = []
+
+
+def _from_result(exp_name: str, *keys: str, placeholder: str, fallback, cited: bool = False):
+    """Resolve a value from experiment outputs; fall back only when unavailable.
+
+    Non-cited placeholders are tracked when fallback is used, so callers can
+    detect values that are not coming from real experiment outputs.
+    """
+    value = _get(exp_name, *keys)
+    if value is not None:
+        return value
+    if not cited:
+        _MISSING_PLACEHOLDERS.append((placeholder, exp_name, keys, fallback))
+    return fallback
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Project-wide constants (paper-verified — not experiment-derived)
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -97,17 +114,32 @@ EXP01_QUANT_QUALITY = [
     {"key": "bitdistiller", "name": "NVFP4 + BitDistill","f1": 0.858, "recovery": 92.2, "std": 0.009},
 ]
 
-# QAT / QAD / OV-Freeze (from exp1 + exp11 where available)
-_qad_f1   = _get("exp1",  "f1") or 0.916
-_OVF_FULL_F1 = _r(_get("exp3", "conditions", "ov_freeze_full", "f1") or 0.923)
+# QAT / QAD / OV-Freeze placeholders (resolved from experiment outputs)
+PH_EXP1_F1 = _from_result("exp1", "f1", placeholder="PH_EXP1_F1", fallback=0.916)
+PH_EXP3_OVF_FULL_F1 = _from_result(
+    "exp3", "conditions", "ov_freeze_full", "f1",
+    placeholder="PH_EXP3_OVF_FULL_F1", fallback=0.923
+)
+PH_EXP11_INT4_F1 = _from_result(
+    "exp11", "schemes", "int4", "f1",
+    placeholder="PH_EXP11_INT4_F1", fallback=0.844
+)
+PH_EXP14_Q4KM_F1 = _from_result(
+    "exp14", "models", "q4km_0.5b_llama_cpp", "f1",
+    placeholder="PH_EXP14_Q4KM_F1", fallback=0.917
+)
+
+_qad_f1 = PH_EXP1_F1
+_OVF_FULL_F1 = _r(PH_EXP3_OVF_FULL_F1)
 _ovf_f1   = _OVF_FULL_F1   # alias for Fig3 QAT_QAD_OVF compatibility
-_qat_f1   = _get("exp11", "schemes", "int4", "f1") or 0.844
+_qat_f1 = PH_EXP11_INT4_F1
 
 QAT_QAD_OVF = [
     {"name": "NVFP4 QAT (CE)",         "f1": _qat_f1, "f1_err": 0.014, "recovery": round(_qat_f1 / BF16_F1 * 100, 1)},
     {"name": "NVFP4 QAD",              "f1": _qad_f1, "f1_err": 0.007, "recovery": round(_qad_f1 / BF16_F1 * 100, 1)},
     {"name": "NVFP4 QAD + OV-Freeze",  "f1": _ovf_f1, "f1_err": 0.006, "recovery": round(_ovf_f1 / BF16_F1 * 100, 1)},
-    {"name": "Q4_K_M QAD + OV-Freeze", "f1": 0.917,   "f1_err": 0.007, "recovery": 98.5},
+    {"name": "Q4_K_M QAD + OV-Freeze", "f1": PH_EXP14_Q4KM_F1, "f1_err": 0.007,
+     "recovery": round(PH_EXP14_Q4KM_F1 / BF16_F1 * 100, 1)},
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -117,11 +149,16 @@ QAT_QAD_OVF = [
 LATENCY_COMPONENTS = ["Feat.", "Fast", "CoT spec.", "Fus.+UI"]
 
 # exp8 latencies if available, else paper constants
-_lat = _get("exp8", "latencies") or {}
-LATENCY_P50_MS = [_lat.get(s, d) for s, d in
-                  zip(["int4", "fp16", "bf16"], [16, 28, 212])]
-LATENCY_P99_MS = [_lat.get(s, d) for s, d in
-                  zip(["int4", "fp16", "bf16"], [22, 36, 268])]
+LATENCY_P50_MS = [
+    _from_result("exp8", "latencies", "int4", placeholder="PH_EXP8_INT4_P50", fallback=16),
+    _from_result("exp8", "latencies", "fp16", placeholder="PH_EXP8_FP16_P50", fallback=28),
+    _from_result("exp8", "latencies", "bf16", placeholder="PH_EXP8_BF16_P50", fallback=212),
+]
+LATENCY_P99_MS = [
+    _from_result("exp8", "latencies", "int4", placeholder="PH_EXP8_INT4_P99", fallback=22),
+    _from_result("exp8", "latencies", "fp16", placeholder="PH_EXP8_FP16_P99", fallback=36),
+    _from_result("exp8", "latencies", "bf16", placeholder="PH_EXP8_BF16_P99", fallback=268),
+]
 # Pad to 4 components if needed
 while len(LATENCY_P50_MS) < 4:
     LATENCY_P50_MS.append(12)
@@ -133,12 +170,22 @@ while len(LATENCY_P99_MS) < 4:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _traj = _get("exp1", "trajectory") or []
-LOSS_PLATEAU        = _get("exp1", "kl_plateau") or (_r(_traj[0].get("kl")) if _traj else 0.045)
-LOSS_CONVERGED      = _get("exp1", "kl_converged") or (_r(_traj[-1].get("kl")) if _traj else 0.016)
-OVF_ACTIVATION_STEP = _get("exp1", "ovf_activation_step") or 1400
-TOTAL_STEPS         = _get("exp1", "total_steps") or 2000
-_snr_min            = _get("exp1", "snr_min") or 18.4
-_snr_max            = _get("exp1", "snr_max") or 18.9
+LOSS_PLATEAU = _from_result(
+    "exp1", "kl_plateau", placeholder="PH_EXP1_KL_PLATEAU",
+    fallback=(_r(_traj[0].get("kl")) if _traj else 0.045)
+)
+LOSS_CONVERGED = _from_result(
+    "exp1", "kl_converged", placeholder="PH_EXP1_KL_CONVERGED",
+    fallback=(_r(_traj[-1].get("kl")) if _traj else 0.016)
+)
+OVF_ACTIVATION_STEP = _from_result(
+    "exp1", "ovf_activation_step", placeholder="PH_EXP1_OVF_ACTIVATION_STEP", fallback=1400
+)
+TOTAL_STEPS = _from_result(
+    "exp1", "total_steps", placeholder="PH_EXP1_TOTAL_STEPS", fallback=2000
+)
+_snr_min = _from_result("exp1", "snr_min", placeholder="PH_EXP1_SNR_MIN", fallback=18.4)
+_snr_max = _from_result("exp1", "snr_max", placeholder="PH_EXP1_SNR_MAX", fallback=18.9)
 SNR_RANGE           = (_snr_min, _snr_max)
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -157,11 +204,21 @@ def _loss_entry(vk, label, fallback_f1, fallback_kl):
             "std": v.get("std", 0.007) if isinstance(v, dict) else 0.007}
 
 EXP03_LOSS_ABLATION = [
-    _loss_entry("kl_only",          "Pure KL\n(ours)", 0.916, 0.005),
-    _loss_entry("mse_only",         "MSE",            0.901, 0.082),
-    _loss_entry("ce_only",          "CE\n(= QAT)",    0.844, 0.311),
-    _loss_entry("kl_mse_combined",  "3-term\nhybrid", 0.879, 0.124),
-    _loss_entry("kl_task",          "KL +\ntask",     0.908, 0.041),
+    _loss_entry("kl_only",          "Pure KL\n(ours)",
+                _from_result("exp2", "variants", "kl_only", "f1", placeholder="PH_EXP2_KL_ONLY_F1", fallback=0.916),
+                _from_result("exp2", "variants", "kl_only", "kl_final", placeholder="PH_EXP2_KL_ONLY_KL", fallback=0.005)),
+    _loss_entry("mse_only",         "MSE",
+                _from_result("exp2", "variants", "mse_only", "f1", placeholder="PH_EXP2_MSE_ONLY_F1", fallback=0.901),
+                _from_result("exp2", "variants", "mse_only", "kl_final", placeholder="PH_EXP2_MSE_ONLY_KL", fallback=0.082)),
+    _loss_entry("ce_only",          "CE\n(= QAT)",
+                _from_result("exp2", "variants", "ce_only", "f1", placeholder="PH_EXP2_CE_ONLY_F1", fallback=0.844),
+                _from_result("exp2", "variants", "ce_only", "kl_final", placeholder="PH_EXP2_CE_ONLY_KL", fallback=0.311)),
+    _loss_entry("kl_mse_combined",  "3-term\nhybrid",
+                _from_result("exp2", "variants", "kl_mse_combined", "f1", placeholder="PH_EXP2_KL_MSE_F1", fallback=0.879),
+                _from_result("exp2", "variants", "kl_mse_combined", "kl_final", placeholder="PH_EXP2_KL_MSE_KL", fallback=0.124)),
+    _loss_entry("kl_task",          "KL +\ntask",
+                _from_result("exp2", "variants", "kl_task", "f1", placeholder="PH_EXP2_KL_TASK_F1", fallback=0.908),
+                _from_result("exp2", "variants", "kl_task", "kl_final", placeholder="PH_EXP2_KL_TASK_KL", fallback=0.041)),
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -178,10 +235,18 @@ def _teacher_entry(tk, label, tokens, fallback_f1, fallback_conv):
             "tokens_B": tokens}
 
 EXP09_TEACHER = [
-    _teacher_entry("teacher",        "0.5B\n(same)", 0.5, 0.916, 0.916),
-    _teacher_entry("teacher_1.5b",   "1.5B",         0.7, 0.911, 0.913),
-    _teacher_entry("teacher_3b",     "3B",           1.0, 0.904, 0.910),
-    _teacher_entry("teacher_7b",     "7B",           2.0, 0.892, 0.915),
+    _teacher_entry("teacher",        "0.5B\n(same)", 0.5,
+                   _from_result("exp10", "scales", "teacher", "f1_fixed", placeholder="PH_EXP10_T_05B_FIXED", fallback=0.916),
+                   _from_result("exp10", "scales", "teacher", "f1_conv", placeholder="PH_EXP10_T_05B_CONV", fallback=0.916)),
+    _teacher_entry("teacher_1.5b",   "1.5B",         0.7,
+                   _from_result("exp10", "scales", "teacher_1.5b", "f1_fixed", placeholder="PH_EXP10_T_15B_FIXED", fallback=0.911),
+                   _from_result("exp10", "scales", "teacher_1.5b", "f1_conv", placeholder="PH_EXP10_T_15B_CONV", fallback=0.913)),
+    _teacher_entry("teacher_3b",     "3B",           1.0,
+                   _from_result("exp10", "scales", "teacher_3b", "f1_fixed", placeholder="PH_EXP10_T_3B_FIXED", fallback=0.904),
+                   _from_result("exp10", "scales", "teacher_3b", "f1_conv", placeholder="PH_EXP10_T_3B_CONV", fallback=0.910)),
+    _teacher_entry("teacher_7b",     "7B",           2.0,
+                   _from_result("exp10", "scales", "teacher_7b", "f1_fixed", placeholder="PH_EXP10_T_7B_FIXED", fallback=0.892),
+                   _from_result("exp10", "scales", "teacher_7b", "f1_conv", placeholder="PH_EXP10_T_7B_CONV", fallback=0.915)),
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -194,21 +259,21 @@ _layers = _get("exp3", "layer_selection") or {}
 # Individual F1 values from each condition/layer (not all from ov_freeze_full)
 # exp3 outputs layer_selection keys: early(0.25), mid(0.5), late(0.75), all(1.0).
 # Map them to the figure labels used by fig6_ovf_ablation.py.
-_f1_no_ovf = _r(_cond.get("no_reg", {}).get("f1") or 0.911)
+_f1_no_ovf = _r(_from_result("exp3", "conditions", "no_reg", "f1", placeholder="PH_EXP3_NO_OVF_F1", fallback=0.911))
 _f1_ovf    = _OVF_FULL_F1   # reuse consolidated constant
-_f1_half   = _r(_cond.get("ov_freeze_half",   {}).get("f1") or 0.918)
-_f1_qrt    = _r(_cond.get("ov_freeze_quarter", {}).get("f1") or 0.915)
-_f1_early  = _r(_layers.get("early", {}).get("f1") or 0.915)
-_f1_mid    = _r(_layers.get("mid",   {}).get("f1") or 0.914)
-_f1_late   = _r(_layers.get("late",  {}).get("f1") or 0.920)
+_f1_half   = _r(_from_result("exp3", "conditions", "ov_freeze_half", "f1", placeholder="PH_EXP3_OVF_HALF_F1", fallback=0.918))
+_f1_qrt    = _r(_from_result("exp3", "conditions", "ov_freeze_quarter", "f1", placeholder="PH_EXP3_OVF_QUARTER_F1", fallback=0.915))
+_f1_early  = _r(_from_result("exp3", "layer_selection", "early", "f1", placeholder="PH_EXP3_LAYER_EARLY_F1", fallback=0.915))
+_f1_mid    = _r(_from_result("exp3", "layer_selection", "mid", "f1", placeholder="PH_EXP3_LAYER_MID_F1", fallback=0.914))
+_f1_late   = _r(_from_result("exp3", "layer_selection", "late", "f1", placeholder="PH_EXP3_LAYER_LATE_F1", fallback=0.920))
 
-_drift_no   = _r(_cond.get("no_reg",            {}).get("variance_drift_pct", 18.2), 1)
-_drift_full = _r(_cond.get("ov_freeze_full",    {}).get("variance_drift_pct", 1.3), 1)
-_drift_half = _r(_cond.get("ov_freeze_half",    {}).get("variance_drift_pct", 5.1), 1)
-_drift_qrt  = _r(_cond.get("ov_freeze_quarter", {}).get("variance_drift_pct", 15.4), 1)
-_drift_early = _r(_layers.get("early", {}).get("variance_drift_pct", 15.4), 1)
-_drift_mid   = _r(_layers.get("mid",   {}).get("variance_drift_pct", 9.4), 1)
-_drift_late  = _r(_layers.get("late",  {}).get("variance_drift_pct", 2.8), 1)
+_drift_no   = _r(_from_result("exp3", "conditions", "no_reg", "variance_drift_pct", placeholder="PH_EXP3_NO_OVF_DRIFT", fallback=18.2), 1)
+_drift_full = _r(_from_result("exp3", "conditions", "ov_freeze_full", "variance_drift_pct", placeholder="PH_EXP3_OVF_FULL_DRIFT", fallback=1.3), 1)
+_drift_half = _r(_from_result("exp3", "conditions", "ov_freeze_half", "variance_drift_pct", placeholder="PH_EXP3_OVF_HALF_DRIFT", fallback=5.1), 1)
+_drift_qrt  = _r(_from_result("exp3", "conditions", "ov_freeze_quarter", "variance_drift_pct", placeholder="PH_EXP3_OVF_QUARTER_DRIFT", fallback=15.4), 1)
+_drift_early = _r(_from_result("exp3", "layer_selection", "early", "variance_drift_pct", placeholder="PH_EXP3_LAYER_EARLY_DRIFT", fallback=15.4), 1)
+_drift_mid   = _r(_from_result("exp3", "layer_selection", "mid", "variance_drift_pct", placeholder="PH_EXP3_LAYER_MID_DRIFT", fallback=9.4), 1)
+_drift_late  = _r(_from_result("exp3", "layer_selection", "late", "variance_drift_pct", placeholder="PH_EXP3_LAYER_LATE_DRIFT", fallback=2.8), 1)
 
 EXP04_OVF_LAYER_ABLATION = [
     {"config": "no OVF",        "f1": _f1_no_ovf, "drift_pct": _drift_no},
@@ -234,12 +299,24 @@ def _rho_entry(pct, rk, fallback_f1, fallback_ppl):
     }
 
 EXP10_OVF_STEP_RATIO = [
-    _rho_entry( 0, "rho_0.0", 0.916, 8.73),
-    _rho_entry(10, "rho_0.1", 0.919, 8.68),
-    _rho_entry(20, "rho_0.2", 0.921, 8.65),
-    _rho_entry(30, "rho_0.3", 0.923, 8.62),
-    _rho_entry(40, "rho_0.4", 0.922, 8.63),
-    _rho_entry(50, "rho_0.5", 0.918, 8.66),
+    _rho_entry( 0, "rho_0.0",
+               _from_result("exp3", "rho_sweep", "rho_0.0", "f1", placeholder="PH_EXP3_RHO_00_F1", fallback=0.916),
+               _from_result("exp3", "rho_sweep", "rho_0.0", "ppl", placeholder="PH_EXP3_RHO_00_PPL", fallback=8.73)),
+    _rho_entry(10, "rho_0.1",
+               _from_result("exp3", "rho_sweep", "rho_0.1", "f1", placeholder="PH_EXP3_RHO_01_F1", fallback=0.919),
+               _from_result("exp3", "rho_sweep", "rho_0.1", "ppl", placeholder="PH_EXP3_RHO_01_PPL", fallback=8.68)),
+    _rho_entry(20, "rho_0.2",
+               _from_result("exp3", "rho_sweep", "rho_0.2", "f1", placeholder="PH_EXP3_RHO_02_F1", fallback=0.921),
+               _from_result("exp3", "rho_sweep", "rho_0.2", "ppl", placeholder="PH_EXP3_RHO_02_PPL", fallback=8.65)),
+    _rho_entry(30, "rho_0.3",
+               _from_result("exp3", "rho_sweep", "rho_0.3", "f1", placeholder="PH_EXP3_RHO_03_F1", fallback=0.923),
+               _from_result("exp3", "rho_sweep", "rho_0.3", "ppl", placeholder="PH_EXP3_RHO_03_PPL", fallback=8.62)),
+    _rho_entry(40, "rho_0.4",
+               _from_result("exp3", "rho_sweep", "rho_0.4", "f1", placeholder="PH_EXP3_RHO_04_F1", fallback=0.922),
+               _from_result("exp3", "rho_sweep", "rho_0.4", "ppl", placeholder="PH_EXP3_RHO_04_PPL", fallback=8.63)),
+    _rho_entry(50, "rho_0.5",
+               _from_result("exp3", "rho_sweep", "rho_0.5", "f1", placeholder="PH_EXP3_RHO_05_F1", fallback=0.918),
+               _from_result("exp3", "rho_sweep", "rho_0.5", "ppl", placeholder="PH_EXP3_RHO_05_PPL", fallback=8.66)),
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -309,7 +386,7 @@ _FIG8_REF = {
 }
 
 # Panel (a): quantization scheme — homogeneous INT4 vs heterogeneous NVFP4+Q4_K_M
-_f1_homo = _get("exp1", "f1") or 0.915                      # QAD int4 (homogeneous)
+_f1_homo = _from_result("exp1", "f1", placeholder="PH_EXP1_HOMO_F1", fallback=0.915)  # QAD int4 (homogeneous)
 _f1_hetero = _OVF_FULL_F1  # QAD+OVF (heterogeneous)
 
 FIG8_QUANT = {
@@ -323,7 +400,7 @@ FIG8_QUANT = {
 FIG8_ADVFRAUD = {
     "labels": ["Full pool\n(3,000)", "Curated subset\n(517)"],
     "f1": [
-        _get("exp5", "advfraud", "full_pool", "f1") or 0.841,
+        _from_result("exp5", "advfraud", "full_pool", "f1", placeholder="PH_EXP5_ADVFRAUD_FULL_POOL_F1", fallback=0.841),
         _get("exp5", "advfraud", "curated", "f1") or _FIG8_REF["advfraud_curated_f1"],
     ],
     "bf16_matched": (_get("exp5", "bf16_matched_advfraud")
@@ -379,6 +456,11 @@ if __name__ == "__main__":
     for k in ("exp1", "exp2", "exp3", "exp5", "exp6", "exp8", "exp10", "exp11"):
         status = "✓" if k in _RESULTS else "✗"
         print(f"  {status} {k}")
+    if _MISSING_PLACEHOLDERS:
+        print(f"\n[WARN] {len(_MISSING_PLACEHOLDERS)} non-cited placeholder(s) using fallback:")
+        for ph, exp_name, keys, fallback in _MISSING_PLACEHOLDERS:
+            key_path = ".".join(keys)
+            print(f"  - {ph}: missing {exp_name}.{key_path}, fallback={fallback}")
 
     if errors:
         print(f"\n[WARN] {len(errors)} self-check(s) failed:")
