@@ -4,11 +4,12 @@
 gpu_viz.py — RunPod H100 GPU 实时可视化监控（rich 仪表盘）
 
 通过一条 SSH 长连接拉取远端 nvidia-smi 数据流，本地渲染：
-  - GPU 利用率 / 显存 / 功耗 / 温度 条形图
-  - 历史趋势曲线（最近 ~90 帧）
+  - GPU 利用率 / 显存 / 功耗 / 温度 状态色条（绿=正常 黄=警戒 红=危险）
+  - 历史趋势曲线（最近 ~90 帧，每指标独立强调色）
   - GPU 计算进程表
 
 用法: python gpu_viz.py    (Ctrl+C 退出)
+      python gpu_viz.py --once   (快照模式，打印一帧后退出)
 依赖: pip install rich
 """
 import os
@@ -32,6 +33,11 @@ POD = "mhypfkvge474n8-64411fb1@ssh.runpod.io"
 KEY = os.path.expanduser("~/.ssh/id_ed25519")
 REFRESH = 1.0
 
+# 状态阈值（占比 0~1）：< warn 正常 / warn~crit 警戒 / >= crit 危险
+WARN, CRIT = 0.80, 0.95
+# 温度阈值（°C），H100 满载典型 70~85°C
+T_WARN, T_CRIT = 75.0, 85.0
+
 # RunPod 代理忽略 ssh 命令参数，须经 stdin 管道喂命令。
 # 远端循环每秒输出一帧（=F= 分隔），本地解析渲染。
 REMOTE = (
@@ -43,22 +49,44 @@ REMOTE = (
 )
 
 
-def spark(values, width=60, lo=None, hi=None):
-    """把最近值序列画成 ASCII 阶梯曲线"""
+def state_color(frac, warn=WARN, crit=CRIT):
+    """占比 0~1 → 状态色：green(正常)/yellow(警戒)/bright_red(危险)"""
+    if frac >= crit:
+        return "bright_red"
+    if frac >= warn:
+        return "yellow"
+    return "green"
+
+
+def temp_color(t, warn=T_WARN, crit=T_CRIT):
+    """温度 °C → 状态色（阈值见模块常量）"""
+    if t >= crit:
+        return "bright_red"
+    if t >= warn:
+        return "yellow"
+    return "green"
+
+
+def bar(frac, w, color_fn=state_color):
+    """状态色区块条：█ 填充 / ░ 空。颜色 + 填充比例双重编码信息。"""
+    n = max(0, min(w, int(round(frac * w))))
+    fill = Text("█" * n, style=color_fn(frac))
+    empty = Text("░" * (w - n), style="dim")
+    return fill + empty
+
+
+def spark(values, width=60, lo=None, hi=None, color="cyan"):
+    """把最近值序列画成 ASCII 阶梯曲线，整线着色（配合左侧文字标签辨识）。"""
     if not values:
-        return ""
+        return Text("")
     lo = lo if lo is not None else min(values)
     hi = hi if hi is not None else max(values)
     rng = (hi - lo) or 1.0
     glyphs = " _.-=+*#%@"
     step = max(1, len(values) // width)
     sampled = list(values)[::step][:width]
-    return "".join(glyphs[min(9, max(0, int(round((v - lo) / rng * 9))))] for v in sampled)
-
-
-def bar(frac, w=26):
-    n = max(0, min(w, int(frac * w)))
-    return "[" + "#" * n + "-" * (w - n) + "]"
+    s = "".join(glyphs[min(9, max(0, int(round((v - lo) / rng * 9))))] for v in sampled)
+    return Text(s, style=color)
 
 
 def main():
@@ -67,6 +95,12 @@ def main():
     once = "--once" in sys.argv
     console = Console()
     console.print("[cyan]连接 RunPod 拉取 GPU 数据…[/cyan]" + ("（快照模式）" if once else ""))
+
+    # 按终端宽度自适应条长 / 曲线宽，避免窄终端溢出
+    term_w = console.width or 100
+    bar_w = max(12, min(30, (term_w - 45) // 2))
+    spark_w = max(40, min(100, term_w - 20))
+
     proc = subprocess.Popen(
         ["ssh", "-tt", "-o", "BatchMode=yes", "-o", "ConnectTimeout=20",
          "-o", "StrictHostKeyChecking=accept-new", "-o", "ServerAliveInterval=15",
@@ -82,14 +116,14 @@ def main():
 
     hu, hv, hp, ht = deque(maxlen=90), deque(maxlen=90), deque(maxlen=90), deque(maxlen=90)
 
-    def render(g, procs):
+    def render(g, procs, start):
         try:
             idx, name, ug, _um, mu, mt, pw, pl, temp, smc, memc = [x.strip() for x in g]
             u = float(ug)
             mur = float(mu)
             mtr = float(mt)
             p = float(pw)
-            plr = float(pl)
+            plr = float(pl) or 1.0
             t = float(temp)
         except Exception:
             return None
@@ -98,24 +132,60 @@ def main():
         hp.append(p)
         ht.append(t)
 
+        elapsed = int(time.time() - start)
+
+        # ---- 整体状态（取各指标最差者）----
+        worst = max(u / 100, mur / mtr, p / plr)
+        if worst >= CRIT:
+            overall, ocolor = "危险", "bright_red"
+        elif worst >= WARN:
+            overall, ocolor = "警戒", "yellow"
+        else:
+            overall, ocolor = "正常", "green"
+
+        # ---- 告警（文字 + 颜色，避免仅靠颜色传达信息）----
+        alerts = []
+        if t >= T_CRIT:
+            alerts.append("高温 %.0f°C" % t)
+        if u / 100 >= CRIT:
+            alerts.append("利用率 %.0f%%" % u)
+        if mur / mtr >= CRIT:
+            alerts.append("显存 %.1f/%.1f GB" % (mur / 1024, mtr / 1024))
+        if p / plr >= CRIT:
+            alerts.append("功率 %.0f/%.0f W" % (p, plr))
+
+        # ---- 状态头行 ----
+        header = Text.from_markup(
+            "[bold]%s[/bold] GPU %s    POD: [cyan]%s[/cyan]    刷新 %.1fs    已运行 %d:%02d    状态: [%s]%s[/%s]"
+            % (name, idx, POD, REFRESH, elapsed // 60, elapsed % 60, ocolor, overall, ocolor)
+        )
+
+        # ---- GPU 面板 ----
         stats = Table.grid(padding=(0, 2))
         stats.add_column(justify="left", width=8)
-        stats.add_column(justify="left", width=30)
+        stats.add_column(justify="left", width=bar_w + 2)
         stats.add_column(justify="right", width=22)
-        stats.add_row("Util", Text(bar(u / 100)), "%5.1f %%" % u)
-        stats.add_row("VRAM", Text(bar(mur / mtr)), "%5.2f / %5.2f GB" % (mur / 1024, mtr / 1024))
-        stats.add_row("Power", Text(bar(p / plr)), "%6.1f / %5.0f W" % (p, plr))
-        stats.add_row("Temp", "", "%5.0f C" % t)
+        stats.add_row("Util", bar(u / 100, bar_w), "%5.1f %%" % u)
+        stats.add_row("VRAM", bar(mur / mtr, bar_w), "%5.2f / %5.2f GB" % (mur / 1024, mtr / 1024))
+        stats.add_row("Power", bar(p / plr, bar_w), "%6.1f / %5.0f W" % (p, plr))
+        stats.add_row("Temp", bar(t / 105.0, bar_w, temp_color), "%5.0f C" % t)
         stats.add_row("Clock", "", "SM %s / Mem %s MHz" % (smc, memc))
-        gpu_panel = Panel(stats, title="[bold]%s[/bold]   [cyan]GPU %s[/cyan]" % (name, idx),
+        gpu_panel = Panel(stats, title="[bold]实时状态[/bold]",
                           subtitle=time.strftime("%Y-%m-%d %H:%M:%S"))
 
+        # ---- 历史趋势（每指标独立强调色）----
         lines = []
-        for label, d, lo, hi in (("Util % ", hu, 0, 100), ("VRAM GB", hv, 0, mtr / 1024),
-                                 ("Power W ", hp, 0, plr), ("Temp C  ", ht, 20, 100)):
-            lines.append(Text.from_markup("[bold]%s[/bold]  [cyan]%s[/cyan]" % (label, spark(d, 60, lo, hi))))
+        for label, d, lo, hi, color in (
+                ("Util %", hu, 0, 100, "cyan"),
+                ("VRAM GB", hv, 0, mtr / 1024, "bright_blue"),
+                ("Power W", hp, 0, plr, "yellow"),
+                ("Temp C", ht, 20, 100, "bright_red")):
+            row = Text("[bold]%s[/bold] " % label, style=None)
+            row.append(spark(d, spark_w, lo, hi, color))
+            lines.append(row)
         curve_panel = Panel("\n".join(str(x) for x in lines), title="历史趋势（最近 %d 帧）" % len(hu))
 
+        # ---- 计算进程表 ----
         pt = Table(title="GPU 计算进程", box=None, header_style="bold cyan")
         pt.add_column("PID", justify="right", width=8, no_wrap=True)
         pt.add_column("显存 MiB", justify="right", width=10, no_wrap=True)
@@ -125,13 +195,19 @@ def main():
         for pid, mem, pname in procs[:8]:
             pt.add_row(pid, mem, pname)
 
+        # ---- 组装 ----
+        parts = [header]
+        if alerts:
+            banner = Text("  ".join("!! " + a for a in alerts), style="bright_red bold")
+            parts.append(Panel(banner, title="[bright_red]告警[/bright_red]",
+                               border_style="bright_red"))
+        parts.extend([Align.center(gpu_panel), Align.center(curve_panel), pt])
         grid = Table.grid(expand=True)
-        grid.add_row(Align.center(gpu_panel))
-        grid.add_row(Align.center(curve_panel))
-        grid.add_row(pt)
+        for part in parts:
+            grid.add_row(part)
         return grid
 
-    def parse_and_render(frame):
+    def parse_and_render(frame, start):
         """解析一帧并更新界面；once 模式返回 True 表示已完成"""
         g = None
         procs = []
@@ -145,7 +221,7 @@ def main():
             if m:
                 procs.append((m.group(1), m.group(2), m.group(3)))
         if g and len(g) >= 11:
-            r = render(g, procs)
+            r = render(g, procs, start)
             if r is not None:
                 if once:
                     console.print(r)
@@ -153,7 +229,7 @@ def main():
                 live.update(r)
         return False
 
-    def frame_loop(handle_frame):
+    def frame_loop(handle_frame, start):
         """逐行累积帧，遇到 =F= 分隔符交给 handle_frame"""
         frame = []
         while proc.poll() is None:
@@ -162,20 +238,21 @@ def main():
                 break
             text = line.decode(errors="replace").strip()
             if text == "=F=":
-                if frame and handle_frame(frame):
+                if frame and handle_frame(frame, start):
                     return
                 frame = []
             elif text:
                 frame.append(text)
         if frame:
-            handle_frame(frame)
+            handle_frame(frame, start)
 
+    start = time.time()
     try:
         if once:
-            frame_loop(parse_and_render)
+            frame_loop(parse_and_render, start)
         else:
             with Live(console=console, refresh_per_second=2, screen=True) as live:
-                frame_loop(parse_and_render)
+                frame_loop(parse_and_render, start)
     except KeyboardInterrupt:
         pass
     finally:
