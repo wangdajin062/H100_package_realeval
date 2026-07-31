@@ -1,18 +1,21 @@
-"""scripts/archive_and_clear.py — Archive experiment results then clear outputs.
+"""scripts/archive_and_clear.py — 归档实验结果并清理输出目录
 
-Usage:
-    python scripts/archive_and_clear.py              # archive + clear
-    python scripts/archive_and_clear.py --dry-run    # preview only, no delete
-    python scripts/archive_and_clear.py --archive-only  # write markdown, skip clear
+用法：
+    python scripts/archive_and_clear.py              # 归档 + 清理
+    python scripts/archive_and_clear.py --dry-run    # 仅预览，不写文件
+    python scripts/archive_and_clear.py --archive-only  # 仅写 Markdown，不清理
 
-Workflow (designed for pre-pipeline cleanup):
-    1. Read all latest experiment result JSONs from outputs/results/
-    2. Read figures list and metrics/benchmark CSVs
-    3. Write a comprehensive Markdown snapshot to outputs/archive/<DATE>_results.md
-    4. Delete outputs/results/exp*_*.json, predictions/, figures/, metrics/,
-       and outputs/results/{metrics,paper_table,latency,throughput,memory}.*
-       Keeps: outputs/results/paper_tables/ (LaTeX), outputs/models/, outputs/audit/,
-              outputs/logs/
+工作流（设计为每次流水线运行前的标准预处理步骤）：
+    1. 从 outputs/results/ 读取最新的各实验结果 JSON（含 all_experiments.json）
+    2. 读取 figures 列表与 metrics/benchmark CSV
+    3. 将完整快照写入 outputs/archive/<DATE>_<TIME>_results.md
+    4. 删除 outputs/results/exp*_*.json、all_experiments.json、predictions/、
+       figures/、metrics/，以及 outputs/results/{metrics,paper_table,latency,
+       throughput,memory}.*
+       保留：outputs/results/paper_tables/（LaTeX）、outputs/models/、
+             outputs/audit/、outputs/logs/
+
+可通过 archive_if_needed() 在流水线代码中按需调用。
 """
 from __future__ import annotations
 
@@ -84,18 +87,18 @@ def build_archive_markdown(date_str: str) -> str:
     figures = _figure_files()
 
     lines: list[str] = [
-        f"# Experiment Results Archive",
-        f"",
-        f"**Generated:** {date_str}  ",
-        f"**Experiments archived:** {sorted(results.keys())}  ",
-        f"**Total result files:** {len(all_files)}  ",
-        f"",
+        "# 实验结果归档快照",
+        "",
+        f"**生成时间：** {date_str}  ",
+        f"**已归档实验：** {sorted(results.keys())}  ",
+        f"**结果文件总数：** {len(all_files)}  ",
+        "",
         "---",
         "",
     ]
 
-    # ── 1. Summary banner (paper-facing) ─────────────────────────────────────
-    lines += ["## Summary (latest result per experiment)", ""]
+    # ── 1. 摘要（面向论文）─────────────────────────────────────────────────────
+    lines += ["## 各实验最新结果摘要", ""]
 
     summary_rows: list[tuple[str, str, str]] = []
     for exp in sorted(results):
@@ -103,7 +106,7 @@ def build_archive_markdown(date_str: str) -> str:
         comp = r.get("computation", "?")
         f1   = r.get("f1") or r.get("F1")
         if f1 is None:
-            # try nested
+            # 尝试从嵌套字段提取
             for sub in ("conditions", "classifiers", "schemes", "scales", "strategies"):
                 inner = r.get(sub, {})
                 if isinstance(inner, dict):
@@ -115,14 +118,14 @@ def build_archive_markdown(date_str: str) -> str:
         f1_str = f"{f1:.4f}" if isinstance(f1, float) else str(f1) if f1 is not None else "—"
         summary_rows.append((exp, comp, f1_str))
 
-    lines.append("| Experiment | Computation | F1 (headline) |")
-    lines.append("|------------|-------------|---------------|")
+    lines.append("| 实验 | 计算路径 | F1（headline） |")
+    lines.append("|------|----------|----------------|")
     for exp, comp, f1s in summary_rows:
         lines.append(f"| {exp} | {comp} | {f1s} |")
     lines += ["", "---", ""]
 
-    # ── 2. Per-experiment full JSON dump ──────────────────────────────────────
-    lines += ["## Full Experiment Data", ""]
+    # ── 2. 各实验完整 JSON 数据 ──────────────────────────────────────────────
+    lines += ["## 各实验完整数据", ""]
 
     for exp in sorted(results):
         r = results[exp]
@@ -135,36 +138,54 @@ def build_archive_markdown(date_str: str) -> str:
         lines.append("```")
         lines.append("")
 
-    # ── 3. All result files index ─────────────────────────────────────────────
-    lines += ["## Result File Index", ""]
-    lines.append("| File | Size (KB) | Modified |")
-    lines.append("|------|-----------|----------|")
+    # ── 3. 结果文件索引 ───────────────────────────────────────────────────────
+    lines += ["## 结果文件索引", ""]
+    lines.append("| 文件名 | 大小 (KB) | 修改时间 |")
+    lines.append("|--------|-----------|----------|")
     for f in all_files:
         stat = f.stat()
         lines.append(
             f"| {f.name} | {stat.st_size / 1024:.1f} |"
             f" {datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')} |"
         )
+    # 也将 all_experiments.json 纳入索引
+    all_exp_file = RESULTS / "all_experiments.json"
+    if all_exp_file.exists():
+        stat = all_exp_file.stat()
+        lines.append(
+            f"| {all_exp_file.name} | {stat.st_size / 1024:.1f} |"
+            f" {datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')} |"
+        )
     lines += ["", "---", ""]
 
-    # ── 4. Aggregated metrics.json ────────────────────────────────────────────
+    # ── 4. all_experiments.json 内容（paper_data.py 主要候补来源）─────────────
+    if all_exp_file.exists():
+        try:
+            ae = json.loads(all_exp_file.read_text(encoding="utf-8"))
+            lines += ["## all_experiments.json（paper_data.py 候补来源）", "", "```json",
+                       json.dumps(ae, ensure_ascii=False, indent=2, default=str),
+                       "```", ""]
+        except Exception:
+            pass
+
+    # ── 5. Aggregated metrics.json ────────────────────────────────────────────
     metrics_file = RESULTS / "metrics.json"
     if metrics_file.exists():
         try:
             m = json.loads(metrics_file.read_text(encoding="utf-8"))
-            lines += ["## Aggregated metrics.json", "", "```json",
+            lines += ["## 聚合指标 metrics.json", "", "```json",
                        json.dumps(m, ensure_ascii=False, indent=2, default=str),
                        "```", ""]
         except Exception:
             pass
 
-    # ── 5. CSV tables ─────────────────────────────────────────────────────────
+    # ── 6. CSV 表格 ──────────────────────────────────────────────────────────
     for csv_path, title in [
-        (METRICS_DIR / "summary.csv",    "Summary CSV (outputs/metrics/summary.csv)"),
-        (RESULTS / "latency.csv",        "Latency CSV"),
-        (RESULTS / "throughput.csv",     "Throughput CSV"),
-        (RESULTS / "memory.csv",         "Memory CSV"),
-        (METRICS_DIR / "benchmark.csv",  "Benchmark CSV"),
+        (METRICS_DIR / "summary.csv",    "汇总 CSV（outputs/metrics/summary.csv）"),
+        (RESULTS / "latency.csv",        "延迟 CSV"),
+        (RESULTS / "throughput.csv",     "吞吐量 CSV"),
+        (RESULTS / "memory.csv",         "内存 CSV"),
+        (METRICS_DIR / "benchmark.csv",  "基准测试 CSV"),
     ]:
         headers, rows = _csv_rows(csv_path)
         if not headers:
@@ -176,9 +197,9 @@ def build_archive_markdown(date_str: str) -> str:
             lines.append("| " + " | ".join(str(c) for c in row) + " |")
         lines += [""]
 
-    # ── 6. Figures index ──────────────────────────────────────────────────────
+    # ── 7. 图像文件索引 ───────────────────────────────────────────────────────
     if figures:
-        lines += ["## Figures", ""]
+        lines += ["## 图像文件", ""]
         for f in figures:
             stat = f.stat()
             rel  = f.relative_to(OUTDIR)
@@ -189,19 +210,21 @@ def build_archive_markdown(date_str: str) -> str:
     return "\n".join(lines)
 
 
-# ── clear logic ───────────────────────────────────────────────────────────────
+# ── 清理逻辑 ─────────────────────────────────────────────────────────────────
 
 _CLEAR_GLOBS = [
-    # timestamped experiment result files
-    (RESULTS,     "exp*_*.json",      False),
-    # predictions mirror
-    (PREDICTIONS, "*.json",           False),
-    # generated aggregate outputs
-    (RESULTS,     "metrics.json",     False),
-    (RESULTS,     "paper_table.md",   False),
-    (RESULTS,     "latency.csv",      False),
-    (RESULTS,     "throughput.csv",   False),
-    (RESULTS,     "memory.csv",       False),
+    # 带时间戳的实验结果文件
+    (RESULTS,     "exp*_*.json",         False),
+    # predictions 镜像
+    (PREDICTIONS, "*.json",              False),
+    # 全量归并文件（paper_data.py 候补来源）
+    (RESULTS,     "all_experiments.json", False),
+    # 生成的聚合输出
+    (RESULTS,     "metrics.json",        False),
+    (RESULTS,     "paper_table.md",      False),
+    (RESULTS,     "latency.csv",         False),
+    (RESULTS,     "throughput.csv",      False),
+    (RESULTS,     "memory.csv",          False),
 ]
 
 _CLEAR_DIRS = [
@@ -215,6 +238,10 @@ def clear_outputs(dry_run: bool = False) -> list[str]:
     """Delete experiment outputs. Returns list of deleted paths."""
     deleted: list[str] = []
 
+def clear_outputs(dry_run: bool = False) -> list[str]:
+    """删除实验输出文件。返回已删除路径列表。"""
+    deleted: list[str] = []
+
     for dirpath, pattern, _recursive in _CLEAR_GLOBS:
         for f in dirpath.glob(pattern):
             if f.is_file():
@@ -224,7 +251,7 @@ def clear_outputs(dry_run: bool = False) -> list[str]:
 
     for d in _CLEAR_DIRS:
         if d.exists():
-            # Remove contents, keep the directory itself
+            # 删除目录内容，保留目录本身
             for child in list(d.iterdir()):
                 if not dry_run:
                     if child.is_dir():
@@ -236,48 +263,94 @@ def clear_outputs(dry_run: bool = False) -> list[str]:
     return deleted
 
 
-# ── main ──────────────────────────────────────────────────────────────────────
+def _has_results() -> bool:
+    """检查 outputs/results/ 中是否存在实验结果文件。"""
+    return bool(list(RESULTS.glob("exp*_*.json"))) or (RESULTS / "all_experiments.json").exists()
+
+
+def archive_if_needed(force: bool = False) -> str | None:
+    """若存在旧实验结果则自动归档并清理，返回归档文件路径（无结果时返回 None）。
+
+    该函数供 paper_pipeline.py / runner.py 在每次运行前调用，
+    实现"每次重跑前将旧结果保存为带时间戳的 Markdown 文件并清理输出目录"。
+
+    参数：
+        force：True 表示即使目录为空也强制执行（用于测试）。
+
+    返回：归档文件路径字符串，若无结果可归档则返回 None。
+    """
+    if not force and not _has_results():
+        log.info("outputs/results/ 中无实验结果，跳过归档步骤。")
+        return None
+
+    now = datetime.now()
+    date_str = now.strftime("%Y-%m-%d %H:%M:%S")
+    date_tag = now.strftime("%Y-%m-%d_%H%M%S")
+
+    log.info("检测到旧实验结果，开始自动归档…")
+    md = build_archive_markdown(date_str)
+
+    ARCHIVE.mkdir(parents=True, exist_ok=True)
+    archive_path = ARCHIVE / f"{date_tag}_experiment_results.md"
+    archive_path.write_text(md, encoding="utf-8")
+    log.info("归档完成 → %s  (%d KB)", archive_path, len(md) // 1024)
+
+    log.info("清理旧实验输出…")
+    deleted = clear_outputs(dry_run=False)
+    log.info("已清理 %d 个文件。", len(deleted))
+
+    # 重建空占位目录，避免后续流水线报错
+    for d in [RESULTS, PREDICTIONS, FIGURES, METRICS_DIR, TABLES_DIR]:
+        d.mkdir(parents=True, exist_ok=True)
+    log.info("输出目录已重置，准备接受新一轮实验结果。")
+
+    return str(archive_path)
+
+
+# ── main ────────────────────────────────────────────────────────────────────
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Archive results → Markdown, then clear outputs.")
-    ap.add_argument("--dry-run",      action="store_true", help="Preview changes, write no files")
-    ap.add_argument("--archive-only", action="store_true", help="Write archive markdown, skip clear")
+    ap = argparse.ArgumentParser(description="归档实验结果 → Markdown，然后清理输出目录。")
+    ap.add_argument("--dry-run",      action="store_true", help="仅预览，不写入文件")
+    ap.add_argument("--archive-only", action="store_true", help="仅写 Markdown，跳过清理")
+    ap.add_argument("--force",        action="store_true", help="即使无结果也强制执行")
     args = ap.parse_args()
 
     date_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    date_tag = datetime.now().strftime("%Y-%m-%d")
+    date_tag = datetime.now().strftime("%Y-%m-%d_%H%M%S")
 
-    # ── Step 1: build and save archive markdown ───────────────────────────────
-    log.info("Building archive markdown …")
+    # ── 步骤 1：构建并保存归档 Markdown ─────────────────────────────────────
+    log.info("正在构建归档 Markdown …")
     md = build_archive_markdown(date_str)
 
     archive_path = ARCHIVE / f"{date_tag}_experiment_results.md"
     if not args.dry_run:
         ARCHIVE.mkdir(parents=True, exist_ok=True)
         archive_path.write_text(md, encoding="utf-8")
-        log.info("Archive written → %s  (%d KB)", archive_path, len(md) // 1024)
+        log.info("归档已写入 → %s  (%d KB)", archive_path, len(md) // 1024)
     else:
-        log.info("[dry-run] Would write → %s  (%d KB)", archive_path, len(md) // 1024)
+        log.info("[dry-run] 将写入 → %s  (%d KB)", archive_path, len(md) // 1024)
 
     if args.archive_only:
-        log.info("--archive-only: skipping clear step")
+        log.info("--archive-only：跳过清理步骤")
         return 0
 
-    # ── Step 2: clear ─────────────────────────────────────────────────────────
-    log.info("Clearing experiment outputs …")
+    # ── 步骤 2：清理 ─────────────────────────────────────────────────────────
+    log.info("正在清理实验输出目录 …")
     deleted = clear_outputs(dry_run=args.dry_run)
 
     for p in deleted:
-        mode = "[dry-run] would delete" if args.dry_run else "deleted"
+        mode = "[dry-run] 将删除" if args.dry_run else "已删除"
         log.info("  %s %s", mode, p)
 
-    log.info("%s %d output file(s).", "[dry-run] Would delete" if args.dry_run else "Cleared", len(deleted))
+    log.info("%s %d 个输出文件。",
+             "[dry-run] 将删除" if args.dry_run else "已清理", len(deleted))
 
     if not args.dry_run:
-        # Re-create empty placeholder dirs so subsequent pipelines don't error.
+        # 重建空占位目录
         for d in [RESULTS, PREDICTIONS, FIGURES, METRICS_DIR, TABLES_DIR]:
             d.mkdir(parents=True, exist_ok=True)
-        log.info("Output directories reset and ready for next pipeline run.")
+        log.info("输出目录已重置，可进行下一轮流水线运行。")
 
     return 0
 

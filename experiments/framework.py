@@ -1,12 +1,12 @@
-"""Shared runtime framework for experiment scripts.
+"""experiments/framework.py — 实验共享运行时框架
 
-This module centralizes common experiment concerns:
-- smoke/paper mode dispatch
-- dataset loading fallback
-- leakage-safe train/test split
-- result schema sanity checks
-- structured logging setup
-- consistent error handling
+集中处理实验公共关切：
+- smoke/paper 模式分发
+- 数据集加载回退链
+- 防泄漏训练/测试分割
+- 结果 schema 合规检查
+- 结构化日志配置
+- 统一错误处理
 """
 from __future__ import annotations
 
@@ -22,21 +22,19 @@ logger = logging.getLogger("framework")
 
 
 class ExperimentRuntimeError(RuntimeError):
-    """Raised when an experiment fails schema or runtime checks."""
+    """实验失败 schema 或运行时检查时抛出。"""
 
 
 @dataclass(frozen=True)
 class TextDataset:
-    """Simple text classification dataset payload."""
-
+    """文本分类数据集载体。"""
     texts: list[str]
     labels: list[int]
 
 
 @dataclass(frozen=True)
 class DatasetSplit:
-    """Train/test split used by experiments."""
-
+    """实验使用的训练/测试分割。"""
     train_texts: list[str]
     train_labels: list[int]
     test_texts: list[str]
@@ -44,7 +42,7 @@ class DatasetSplit:
 
 
 def configure_logging(level: int = logging.INFO) -> None:
-    """Configure console + file logging once for the experiment package."""
+    """一次性配置控制台 + 文件双路日志。"""
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     root_logger = logging.getLogger()
     if root_logger.handlers:
@@ -63,8 +61,11 @@ def configure_logging(level: int = logging.INFO) -> None:
     root_logger.addHandler(file_handler)
 
 
-def load_first_nonempty(loaders: Sequence[Callable[[], dict[str, Any]]], synthetic_loader: Callable[[], dict[str, Any]]) -> TextDataset:
-    """Try candidate loaders in order and return the first non-empty dataset."""
+def load_first_nonempty(
+    loaders: Sequence[Callable[[], dict[str, Any]]],
+    synthetic_loader: Callable[[], dict[str, Any]],
+) -> TextDataset:
+    """按顺序尝试各 loader，返回第一个非空数据集；全部失败则使用合成数据。"""
     for loader in loaders:
         ds = loader() or {}
         texts = list(ds.get("texts", []))
@@ -76,43 +77,40 @@ def load_first_nonempty(loaders: Sequence[Callable[[], dict[str, Any]]], synthet
     texts = list(ds.get("texts", []))
     labels = [int(x) for x in ds.get("labels", [])]
     if not texts:
-        raise ExperimentRuntimeError("No usable dataset from real or synthetic loaders")
+        raise ExperimentRuntimeError("所有加载器（含合成）均返回空数据集")
     return TextDataset(texts=texts, labels=labels)
 
 
-def leakage_safe_split(dataset: TextDataset, test_ratio: float = 0.2, seed: int = 42) -> DatasetSplit:
-    """Perform group-based train/test split to avoid template leakage."""
+def leakage_safe_split(
+    dataset: TextDataset,
+    test_ratio: float = 0.2,
+    seed: int = 42,
+) -> DatasetSplit:
+    """基于分组的训练/测试分割，避免模板泄漏。"""
     from realeval.data import group_split
 
-    train_idx, test_idx = group_split(dataset.texts, dataset.labels, test_ratio=test_ratio, seed=seed)
-    train_texts = [dataset.texts[i] for i in train_idx]
-    train_labels = [int(dataset.labels[i]) for i in train_idx]
-    test_texts = [dataset.texts[i] for i in test_idx]
-    test_labels = [int(dataset.labels[i]) for i in test_idx]
-
+    train_idx, test_idx = group_split(dataset.texts, dataset.labels,
+                                      test_ratio=test_ratio, seed=seed)
     return DatasetSplit(
-        train_texts=train_texts,
-        train_labels=train_labels,
-        test_texts=test_texts,
-        test_labels=test_labels,
+        train_texts=[dataset.texts[i] for i in train_idx],
+        train_labels=[int(dataset.labels[i]) for i in train_idx],
+        test_texts=[dataset.texts[i] for i in test_idx],
+        test_labels=[int(dataset.labels[i]) for i in test_idx],
     )
 
 
 def pre_run_validation(config: dict[str, Any], exp_id: str) -> None:
-    """Pre-flight checks before experiment execution on H100.
-    
-    Validates:
-    - GPU memory sufficient (if paper mode)
-    - Model assets available
-    - Data files accessible
-    
-    Raises ExperimentRuntimeError if validation fails.
+    """H100 实验执行前的预检查。
+
+    验证项：GPU 显存是否充足、模型资产是否可用。
+    smoke 模式下跳过全部 H100 检查。
+
+    Raises:
+        ExperimentRuntimeError: 任一检查不通过时抛出。
     """
-    smoke = bool(config.get("_smoke", False))
-    if smoke:
-        return  # Skip H100 checks for smoke mode
-    
-    # Check GPU memory (H100 has 80GB, need ~40GB min for paper runs)
+    if bool(config.get("_smoke", False)):
+        return
+
     try:
         import torch
         if torch.cuda.is_available():
@@ -120,22 +118,22 @@ def pre_run_validation(config: dict[str, Any], exp_id: str) -> None:
             free_mem_gb = torch.cuda.mem_get_info()[0] / 1e9
             if free_mem_gb < 35.0:
                 raise ExperimentRuntimeError(
-                    f"{exp_id}: Insufficient GPU memory ({free_mem_gb:.1f}GB free, need 35GB). "
-                    "Clear cache or restart GPU."
+                    f"{exp_id}：GPU 显存不足（{free_mem_gb:.1f}GB 可用，需要 35GB）。"
+                    "请清理缓存或重启 GPU。"
                 )
-            logger.info("%s: GPU memory check OK (%.1f/%.1f GB free)", exp_id, free_mem_gb, gpu_mem_gb)
-    except Exception as e:
-        if isinstance(e, ExperimentRuntimeError):
-            raise
-        logger.warning("%s: Could not check GPU memory: %s", exp_id, e)
-    
-    # Check model assets
+            logger.info("%s：GPU 显存检查通过（%.1f/%.1f GB 可用）",
+                        exp_id, free_mem_gb, gpu_mem_gb)
+    except ExperimentRuntimeError:
+        raise
+    except Exception as exc:
+        logger.warning("%s：无法检查 GPU 显存：%s", exp_id, exc)
+
     from realeval import models
     if not models.models_available(config):
         raise ExperimentRuntimeError(
-            f"{exp_id}: Model weights unavailable. Verify models_root() and H100 mount point."
+            f"{exp_id}：模型权重不可用。请检查 models_root() 和 H100 挂载点。"
         )
-    logger.info("%s: Model assets check OK", exp_id)
+    logger.info("%s：模型资产检查通过", exp_id)
 
 
 def run_with_mode(
@@ -144,46 +142,48 @@ def run_with_mode(
     run_paper: Callable[[dict[str, Any]], dict[str, Any]],
     run_smoke: Callable[[dict[str, Any]], dict[str, Any]],
 ) -> dict[str, Any]:
-    """Run paper path when available, otherwise run smoke path.
-    
-    Pre-flight validation ensures H100 safety before expensive computation.
+    """优先运行 paper 路径，不可用时回退到 smoke 路径。
+
+    预检查确保 H100 安全性后再执行高代价计算。
     """
     from realeval.real_backend import run_paper_safe
 
-    smoke = bool(config.get("_smoke", False))
-    
-    # Pre-flight checks (fails fast if conditions not met)
     pre_run_validation(config, exp_id)
-    
+
     try:
-        paper_result = run_paper_safe(smoke, config, run_paper)
+        paper_result = run_paper_safe(bool(config.get("_smoke", False)), config, run_paper)
         if paper_result is not None:
             return ensure_result_contract(exp_id, paper_result)
         return ensure_result_contract(exp_id, run_smoke(config))
     except Exception as exc:
-        raise ExperimentRuntimeError(f"{exp_id} failed: {exc}") from exc
+        raise ExperimentRuntimeError(f"{exp_id} 运行失败：{exc}") from exc
 
 
 def ensure_result_contract(exp_id: str, result: dict[str, Any]) -> dict[str, Any]:
-    """Normalize and validate top-level result contract."""
+    """规范化并验证顶层结果合约。
+
+    Raises:
+        ExperimentRuntimeError: result 不满足最小合约要求时抛出。
+    """
     if not isinstance(result, dict):
-        raise ExperimentRuntimeError(f"{exp_id} result must be dict, got {type(result).__name__}")
+        raise ExperimentRuntimeError(
+            f"{exp_id} 结果必须为 dict，实际得到 {type(result).__name__}"
+        )
 
     result.setdefault("experiment", exp_id)
     result.setdefault("computation", "unknown")
 
     if result.get("experiment") != exp_id:
         raise ExperimentRuntimeError(
-            f"{exp_id} result has mismatched experiment={result.get('experiment')!r}"
+            f"{exp_id} 结果中 experiment={result.get('experiment')!r} 与期望不符"
         )
     if not isinstance(result.get("computation"), str) or not result["computation"]:
-        raise ExperimentRuntimeError(f"{exp_id} missing non-empty computation field")
+        raise ExperimentRuntimeError(f"{exp_id} 缺少非空 computation 字段")
 
     return result
 
 
 def quantile_ms(values_ms: Iterable[float], q: float) -> float:
-    """Small helper to compute quantiles with a stable dependency boundary."""
+    """计算毫秒单位延迟的分位数（q 取 0-100）。"""
     import numpy as np
-
     return float(np.percentile(list(values_ms), q))

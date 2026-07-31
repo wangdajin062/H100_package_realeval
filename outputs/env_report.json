@@ -1,21 +1,21 @@
 {
-  "timestamp": "2026-07-26T19:16:30",
+  "timestamp": "2026-07-30T16:18:10",
   "python": {
-    "version": "3.14.4",
-    "executable": "D:\\Projects\\H100_package_realeval\\.venv\\Scripts\\python.exe"
+    "version": "3.14.5",
+    "executable": "C:\\Users\\wang\\Projects\\H100_package_realeval\\.venv\\Scripts\\python.exe"
   },
   "os": {
     "system": "Windows",
-    "release": "10",
+    "release": "11",
     "machine": "AMD64",
-    "platform": "Windows-10-10.0.19045-SP0"
+    "platform": "Windows-11-10.0.26200-SP0"
   },
   "cpu": {
-    "processor": "Intel64 Family 6 Model 78 Stepping 3, GenuineIntel",
-    "count": 4
+    "processor": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+    "count": 32
   },
   "torch": {
-    "version": "2.13.0+cpu",
+    "version": null,
     "cuda_version": null,
     "cudnn_version": null
   },
@@ -25,8 +25,8 @@
     "names": [],
     "is_h100": false,
     "compute_capability": [],
-    "driver_version": null,
-    "nvidia_smi": null
+    "driver_version": "591.86",
+    "nvidia_smi": "NVIDIA GeForce RTX 3060, 12288 MiB, 1283 MiB, 21 %"
   },
   "distributed": {
     "nccl_available": false,
@@ -34,15 +34,15 @@
   },
   "optimizations": {
     "bf16_supported": false,
-    "torch_compile_available": true,
+    "torch_compile_available": false,
     "flash_attn_available": false
   },
   "key_packages": {
-    "transformers": "5.14.1",
+    "transformers": "not_installed",
     "accelerate": "not_installed",
     "bitsandbytes": "not_installed",
-    "scikit-learn": "1.9.0",
-    "numpy": "2.4.6",
+    "scikit-learn": "not_installed",
+    "numpy": "2.5.1",
     "matplotlib": "3.11.1"
   }
 }

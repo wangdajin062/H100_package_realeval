@@ -1,17 +1,24 @@
-"""paper_pipeline.py — one-command H100 paper-validation pipeline.
+"""paper_pipeline.py — 一键式 H100 论文验证流水线
 
-Orchestrates the full flow and writes the paper deliverables to results/:
+协调完整流程并向 results/ 写入论文交付物：
 
-    CUDA check -> GPU detect -> env report -> model load -> benchmark -> metrics -> save
+    CUDA 检测 -> GPU 探测 -> 环境报告 -> 模型加载 -> 基准测试 -> 指标 -> 保存
 
-Outputs (results/):
-    metrics.json      aggregated real experiment metrics (accuracy/F1/FPR per experiment group)
-    latency.csv       per-batch-size latency (p50/p90/p99) on the real device
-    throughput.csv    tokens/samples per second per batch size
-    memory.csv        peak/used device memory per batch size
-    paper_table.md    ready-to-paste paper Table (Main / Ablation / Efficiency / Robustness)
+重跑行为：
+    每次运行前，若 outputs/results/ 中已有旧实验结果，
+    自动将其以带时间戳的 Markdown 归档到 outputs/archive/，
+    然后清空结果目录（保留 paper_tables/、models/、audit/、logs/）。
 
-Run:  bash run_h100.sh   (wraps `python -m experiments.paper_pipeline --paper`)
+输出（results/）：
+    exp{N}_{timestamp}.json   各实验结果文件
+    all_experiments.json      全量归并结果（paper_data.py 主要候补来源）
+    metrics.json              聚合指标（accuracy/F1/FPR，按实验分组）
+    latency.csv               各批次大小延迟（p50/p90/p99）
+    throughput.csv            tokens/samples per second
+    memory.csv                峰值/已用显存
+    paper_table.md            可直接粘贴的论文表格（主表/消融表/效率表/鲁棒性表）
+
+运行：  bash run_h100.sh   （封装了 `python -m experiments.paper_pipeline --paper`）
 """
 from __future__ import annotations
 
@@ -84,10 +91,12 @@ def _apply_h100_optims(config: dict, has_cuda: bool) -> dict:
 
 
 def _run_experiments(config: dict, smoke: bool) -> dict:
-    """[4/7] model load + [5/7] benchmark: run each experiment group, collect real metrics."""
-    logger.info("[4/7] Model load + [5/7] Benchmark (running experiment groups) ...")
+    """[4/7] 加载模型 + [5/7] 基准测试：运行各实验分组，收集真实指标。
+    运行完成后将全量结果写入 all_experiments.json。
+    """
+    logger.info("[4/7] 加载模型 + [5/7] 基准测试（运行实验分组）…")
     from experiments.runner import _import_exp, _SHORT_TO_FULL
-    from realeval.io import save_results
+    from realeval.io import save_results, save_all_results
     all_results = {}
     for group, shorts in PAPER_GROUPS.items():
         for short in shorts:
@@ -98,8 +107,13 @@ def _run_experiments(config: dict, smoke: bool) -> dict:
                 all_results[short] = res
                 logger.info("      %s/%s -> %s", group, short, res.get("computation", "?"))
             except Exception as e:
-                logger.error("      %s/%s failed: %s", group, short, e, exc_info=True)
+                logger.error("      %s/%s 失败：%s", group, short, e, exc_info=True)
                 all_results[short] = {"error": str(e)}
+
+    # 写入全量归并文件，供 paper_data.py 候补加载
+    if all_results:
+        save_all_results(all_results)
+
     return all_results
 
 
@@ -302,12 +316,25 @@ def _print_summary(all_results, bench_summary):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="One-command H100 paper-validation pipeline")
-    ap.add_argument("--paper", action="store_true", help="Paper-grade run (real Qwen + H100)")
-    ap.add_argument("--smoke", action="store_true", help="Sandbox verification (no GPU/weights)")
-    ap.add_argument("--config", type=str, default=None)
+    ap = argparse.ArgumentParser(description="一键式 H100 论文验证流水线")
+    ap.add_argument("--paper",      action="store_true", help="论文级运行（真实 Qwen + H100）")
+    ap.add_argument("--smoke",      action="store_true", help="沙盒验证（无 GPU/权重）")
+    ap.add_argument("--no-archive", action="store_true", help="跳过运行前的自动归档步骤")
+    ap.add_argument("--config",     type=str, default=None, help="配置 YAML 路径")
     args = ap.parse_args()
     smoke = args.smoke or not args.paper
+
+    # ── 运行前自动归档旧结果 ────────────────────────────────────────────────
+    if not args.no_archive:
+        try:
+            import sys as _sys
+            _sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+            from archive_and_clear import archive_if_needed
+            archived = archive_if_needed()
+            if archived:
+                logger.info("旧实验结果已归档至：%s", archived)
+        except Exception as _ae:
+            logger.warning("归档步骤失败（继续运行）：%s", _ae)
 
     from realeval.io import load_config
     config = load_config(args.config)

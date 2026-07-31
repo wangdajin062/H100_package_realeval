@@ -74,15 +74,18 @@ def run(config: dict) -> dict:
 
 
     def run_smoke(_: dict) -> dict:
-        logger.info("SMOKE: running small-model verification for exp10")
+        logger.info("SMOKE: 运行 exp10 小模型验证（teacher_scale）")
         from sklearn.ensemble import GradientBoostingClassifier
         from realeval.metrics import classification_metrics
         from realeval.data import verification_features
 
+        # 用合成重叠度模拟不同规模教师的蒸馏效果：
+        # 同构 0.5B 教师特征重叠最高 → F1 最优；大教师特征分布偏移更明显
         synthetic_overlaps = (
-            ("teacher", 0.95),
-            ("teacher_1.5b", 0.88),
-            ("teacher_7b", 0.82),
+            ("teacher",       0.95),   # 0.5B 同构（最佳）
+            ("teacher_1.5b",  0.88),   # 1.5B 异构
+            ("teacher_3b",    0.85),   # 3B 异构（exp10/Fig5b 所需）
+            ("teacher_7b",    0.82),   # 7B 异构
         )
         scales = {}
         for teacher, overlap in synthetic_overlaps:

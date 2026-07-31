@@ -96,12 +96,14 @@ def run_experiment(modname: str, short: str, config: dict[str, Any]) -> dict[str
 
 
 def run_all(config: dict[str, Any], selected: list[str] | None = None, resume: bool = False) -> dict[str, Any]:
-    """Run all (or selected) experiments. Returns {exp_short: result}."""
-    from realeval.io import load_config, RESULTS
+    """运行全部（或指定）实验，返回 {exp_short: result} 字典。
+    完成后自动写入 all_experiments.json。
+    """
+    from realeval.io import load_config, RESULTS, save_all_results
     import json
 
     cfg = load_config() if config is None else config
-    results = {}
+    results: dict[str, Any] = {}
     for modname, short, desc in EXPERIMENTS:
         if selected and short not in selected:
             continue
@@ -109,33 +111,53 @@ def run_all(config: dict[str, Any], selected: list[str] | None = None, resume: b
             existing = list(RESULTS.glob(f"{short}_*.json"))
             if existing:
                 results[short] = json.loads(max(existing).read_text(encoding="utf-8"))
-                logger.info("Skipping %s (already completed)", short)
+                logger.info("跳过 %s（已有结果）", short)
                 continue
-        logger.info("Running %s: %s", short, desc)
+        logger.info("运行 %s：%s", short, desc)
         try:
             r = run_experiment(modname, short, cfg)
             results[short] = r
         except Exception as e:
-            logger.error("Experiment %s failed: %s", short, e)
+            logger.error("实验 %s 失败：%s", short, e)
             results[short] = {"experiment": short, "error": str(e), "computation": "failed"}
+
+    # 写入全量归并文件，供 paper_data.py 候补读取
+    if results:
+        save_all_results(results)
+
     return results
 
 
 def _parse_args():
-    """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(description="QAD-MultiGuard Experiment Runner")
+    """解析命令行参数。"""
+    parser = argparse.ArgumentParser(
+        description="QAD-MultiGuard 实验运行器",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+示例：
+  python -m experiments.runner --smoke          # 快速验证（小模型路径）
+  python -m experiments.runner --paper          # 论文级运行（真实 Qwen + H100）
+  python -m experiments.runner --exp 1,3,6      # 指定实验
+  python -m experiments.runner --no-archive     # 跳过运行前归档
+  python -m experiments.runner --check          # 硬件检查
+  python -m experiments.runner --validate-contract  # 验证字段合约
+        """,
+    )
     parser.add_argument("experiments", nargs="?", default=None,
-                        help="Comma-separated experiment names (e.g. exp1,exp4,exp7) or 'all'")
-    parser.add_argument("--smoke", action="store_true", help="Quick verification (small model path)")
-    parser.add_argument("--paper", action="store_true", help="Paper-grade (real Qwen + H100)")
-    parser.add_argument("--exp", type=str, default=None, help="Comma-separated experiment numbers (e.g. 1,3,6)")
-    parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
-    parser.add_argument("--check", action="store_true", help="Hardware check")
-    parser.add_argument("--storage-check", action="store_true", help="Storage mount check")
-    parser.add_argument("--benchmark", action="store_true", help="Benchmark only")
-    parser.add_argument("--resume", action="store_true", help="Skip completed experiments")
-    parser.add_argument("--report", action="store_true", help="Generate paper tables/figures from existing results (no experiments run)")
-    parser.add_argument("--validate-contract", action="store_true", help="Validate latest results against paper figure field contract")
+                        help="逗号分隔的实验名（如 exp1,exp4）或 'all'")
+    parser.add_argument("--smoke",             action="store_true", help="快速验证（小模型路径）")
+    parser.add_argument("--paper",             action="store_true", help="论文级运行（真实 Qwen + H100）")
+    parser.add_argument("--exp",               type=str, default=None, help="逗号分隔的实验编号（如 1,3,6）")
+    parser.add_argument("--config",            type=str, default=None, help="配置 YAML 路径")
+    parser.add_argument("--check",             action="store_true", help="硬件检查")
+    parser.add_argument("--storage-check",     action="store_true", help="存储挂载检查")
+    parser.add_argument("--benchmark",         action="store_true", help="仅运行基准测试")
+    parser.add_argument("--resume",            action="store_true", help="跳过已完成的实验")
+    parser.add_argument("--no-archive",        action="store_true", help="跳过运行前的自动归档步骤")
+    parser.add_argument("--report",            action="store_true",
+                        help="从已有结果生成论文表格/图像（不运行实验）")
+    parser.add_argument("--validate-contract", action="store_true",
+                        help="验证最新结果是否符合图像脚本字段合约")
     return parser.parse_args()
 
 
@@ -260,11 +282,26 @@ def main():
     args = _parse_args()
     if _handle_standalone_checks(args):
         return
+
+    # ── 运行前自动归档旧结果（除非显式传入 --no-archive）──────────────────
+    no_archive = getattr(args, "no_archive", False)
+    if not no_archive:
+        try:
+            import sys as _sys
+            _sys.path.insert(0, str(ROOT / "scripts"))
+            from archive_and_clear import archive_if_needed
+            archived = archive_if_needed()
+            if archived:
+                logger.info("旧实验结果已归档至：%s", archived)
+        except Exception as _ae:
+            logger.warning("归档步骤失败（继续运行）：%s", _ae)
+
     config = _load_and_validate_config(args)
     selected = _resolve_experiment_selection(args)
     results = run_all(config, selected, resume=args.resume)
-    logger.info("Experiments completed: %s", list(results.keys()))
-    logger.info("Results saved to outputs/results/. Run 'python -m experiments.runner --report' to generate tables/figures.")
+    logger.info("实验完成：%s", list(results.keys()))
+    logger.info("结果已保存至 outputs/results/。"
+                "运行 'python -m experiments.runner --report' 生成论文表格/图像。")
 
 
 if __name__ == "__main__":
