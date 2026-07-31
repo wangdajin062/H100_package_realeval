@@ -27,6 +27,10 @@ outputs/logs/
 outputs/predictions/
 outputs/models/
 outputs/audit/
+outputs/archive/
+outputs/evidence/
+outputs/*.json
+outputs/*.md
 
 
 # ── Temp / sync verification files ───────────────────────

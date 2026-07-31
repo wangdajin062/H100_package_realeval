@@ -4,524 +4,83 @@
 		{
 			"label": "install-requirements",
 			"type": "shell",
-			"command": "c:/Users/wang/Projects/H100_package_realeval/.venv/Scripts/python.exe",
+			"command": "python",
 			"args": [
 				"-m",
 				"pip",
 				"install",
 				"-r",
-				"c:/Users/wang/Projects/H100_package_realeval/requirements.txt"
+				"${workspaceFolder}/requirements.txt"
 			],
-			"isBackground": false,
-			"presentation": {
-				"reveal": "always",
-				"panel": "new",
-				"clear": true,
-				"focus": false,
-				"showReuseMessage": false,
-				"close": true
-			}
+			"group": "build",
+			"problemMatcher": []
 		},
 		{
-			"label": "run-exp6-exp8",
+			"label": "run-smoke-all",
 			"type": "shell",
-			"command": "c:/Users/wang/Projects/H100_package_realeval/.venv/Scripts/python.exe",
+			"command": "python",
 			"args": [
 				"-m",
 				"experiments.runner",
-				"--exp",
-				"6,8"
+				"--smoke"
 			],
-			"isBackground": false,
-			"presentation": {
-				"reveal": "always",
-				"panel": "new",
-				"clear": true,
-				"focus": false,
-				"showReuseMessage": false,
-				"close": true
-			}
+			"group": "test",
+			"problemMatcher": []
 		},
 		{
-			"label": "run-exp8-smoke",
+			"label": "run-paper-all",
 			"type": "shell",
-			"command": "c:/Users/wang/Projects/H100_package_realeval/.venv/Scripts/python.exe",
+			"command": "python",
 			"args": [
 				"-m",
 				"experiments.runner",
-				"--smoke",
-				"--exp",
-				"8"
+				"--paper"
 			],
-			"isBackground": false,
-			"presentation": {
-				"reveal": "always",
-				"panel": "new",
-				"clear": true,
-				"focus": false,
-				"showReuseMessage": false,
-				"close": true
-			},
-			"problemMatcher": [],
-			"group": "build"
+			"group": "build",
+			"problemMatcher": []
 		},
 		{
-			"label": "rerun-interface-checks",
+			"label": "validate-result-contract",
 			"type": "shell",
-			"command": "c:/Users/wang/Projects/H100_package_realeval/.venv/Scripts/python.exe",
+			"command": "python",
 			"args": [
 				"-m",
 				"experiments.runner",
-				"--smoke",
-				"--exp",
-				"3,6,8"
+				"--validate-contract"
 			],
-			"isBackground": false,
-			"presentation": {
-				"reveal": "always",
-				"panel": "new",
-				"clear": true,
-				"focus": false,
-				"showReuseMessage": false,
-				"close": true
-			},
-			"problemMatcher": [],
-			"group": "build"
+			"group": "test",
+			"problemMatcher": []
 		},
 		{
-			"label": "validate-contract",
+			"label": "rerun-and-validate-smoke",
 			"type": "shell",
-			"command": "c:/Users/wang/Projects/H100_package_realeval/.venv/Scripts/python.exe",
+			"command": "python",
 			"args": [
-				"-m",
-				"experiments.runner",
-				"--report"
+				"scripts/rerun_and_validate_contract.py",
+				"--smoke"
 			],
-			"isBackground": false,
-			"presentation": {
-				"reveal": "always",
-				"panel": "new",
-				"clear": true,
-				"focus": false,
-				"showReuseMessage": false,
-				"close": true
-			},
-			"problemMatcher": [],
-			"group": "build"
+			"group": "test",
+			"problemMatcher": []
 		},
 		{
-			"label": "refresh-paper-report",
+			"label": "generate-paper-figures",
 			"type": "shell",
-			"command": "c:/Users/wang/Projects/H100_package_realeval/.venv/Scripts/python.exe",
+			"command": "python",
 			"args": [
-				"-m",
-				"experiments.runner",
-				"--report"
+				"docs/figure_scripts/generate_all.py"
 			],
-			"isBackground": false,
-			"presentation": {
-				"reveal": "always",
-				"panel": "new",
-				"clear": true,
-				"focus": false,
-				"showReuseMessage": false,
-				"close": true
-			},
-			"problemMatcher": [],
-			"group": "build"
+			"group": "build",
+			"problemMatcher": []
 		},
 		{
-			"label": "refresh-paper-pipeline-smoke",
+			"label": "archive-and-clear-results",
 			"type": "shell",
-			"command": "c:/Users/wang/Projects/H100_package_realeval/.venv/Scripts/python.exe",
+			"command": "python",
 			"args": [
-				"-m",
-				"experiments.paper_pipeline",
-				"--smoke",
-				"--config",
-				"c:/Users/wang/Projects/H100_package_realeval/config/h100.yaml"
+				"scripts/archive_and_clear.py"
 			],
-			"isBackground": false,
-			"presentation": {
-				"reveal": "always",
-				"panel": "new",
-				"clear": true,
-				"focus": false,
-				"showReuseMessage": false,
-				"close": true
-			},
-			"problemMatcher": [],
-			"group": "build"
-		},
-		{
-			"label": "check-runpod-state",
-			"type": "shell",
-			"command": "c:/Users/wang/Projects/H100_package_realeval/.venv/Scripts/python.exe",
-			"args": [
-				"c:/Users/wang/Projects/H100_package_realeval/tmp_ws_check.py"
-			],
-			"isBackground": false,
-			"presentation": {
-				"reveal": "always",
-				"panel": "new",
-				"clear": true,
-				"focus": false,
-				"showReuseMessage": false,
-				"close": true
-			}
-		},
-		{
-			"label": "upload-chifraud-data",
-			"type": "shell",
-			"command": "c:/Users/wang/Projects/H100_package_realeval/.venv/Scripts/python.exe",
-			"args": [
-				"c:/Users/wang/Projects/H100_package_realeval/tmp_upload_chifraud.py"
-			],
-			"isBackground": false,
-			"presentation": {
-				"reveal": "always",
-				"panel": "new",
-				"clear": true,
-				"focus": false,
-				"showReuseMessage": false,
-				"close": true
-			}
-		},
-		{
-			"label": "mkdir-chifraud",
-			"type": "shell",
-			"command": "c:/Users/wang/Projects/H100_package_realeval/.venv/Scripts/python.exe",
-			"args": [
-				"c:/Users/wang/Projects/H100_package_realeval/tmp_mkdir_chifraud.py"
-			],
-			"isBackground": false,
-			"presentation": {
-				"reveal": "always",
-				"panel": "new",
-				"clear": true,
-				"focus": false,
-				"showReuseMessage": false,
-				"close": true
-			}
-		},
-		{
-			"label": "upload-chifraud-data-retry",
-			"type": "shell",
-			"command": "c:/Users/wang/Projects/H100_package_realeval/.venv/Scripts/python.exe",
-			"args": [
-				"c:/Users/wang/Projects/H100_package_realeval/tmp_upload_chifraud.py"
-			],
-			"isBackground": false,
-			"presentation": {
-				"reveal": "always",
-				"panel": "new",
-				"clear": true,
-				"focus": false,
-				"showReuseMessage": false,
-				"close": true
-			}
-		},
-		{
-			"label": "verify-upload",
-			"type": "shell",
-			"command": "c:/Users/wang/Projects/H100_package_realeval/.venv/Scripts/python.exe",
-			"args": [
-				"c:/Users/wang/Projects/H100_package_realeval/tmp_verify_upload.py"
-			],
-			"isBackground": false,
-			"presentation": {
-				"reveal": "always",
-				"panel": "new",
-				"clear": true,
-				"focus": false,
-				"showReuseMessage": false,
-				"close": true
-			}
-		},
-		{
-			"label": "sync-code-retry-full",
-			"type": "shell",
-			"command": "c:/Users/wang/Projects/H100_package_realeval/.venv/Scripts/python.exe",
-			"args": [
-				"c:/Users/wang/Projects/H100_package_realeval/scripts/sync_to_runpod.py",
-				"--base-url",
-				"https://40e69wcbga2q1d-8888.proxy.runpod.net",
-				"--token",
-				"vbul2cc1qmltayxrjyws",
-				"--local-root",
-				"c:/Users/wang/Projects/H100_package_realeval",
-				"--remote-root",
-				"/workspace/H100_package_realeval"
-			],
-			"isBackground": false,
-			"presentation": {
-				"reveal": "always",
-				"panel": "new",
-				"clear": true,
-				"focus": false,
-				"showReuseMessage": false,
-				"close": true
-			}
-		},
-		{
-			"label": "upload-required-files",
-			"type": "shell",
-			"command": "c:/Users/wang/Projects/H100_package_realeval/.venv/Scripts/python.exe",
-			"args": [
-				"c:/Users/wang/Projects/H100_package_realeval/tmp_upload_required_files.py"
-			],
-			"isBackground": false,
-			"presentation": {
-				"reveal": "always",
-				"panel": "new",
-				"clear": true,
-				"focus": false,
-				"showReuseMessage": false,
-				"close": true
-			}
-		},
-		{
-			"label": "verify-required-files",
-			"type": "shell",
-			"command": "c:/Users/wang/Projects/H100_package_realeval/.venv/Scripts/python.exe",
-			"args": [
-				"c:/Users/wang/Projects/H100_package_realeval/tmp_verify_required_files.py"
-			],
-			"isBackground": false,
-			"presentation": {
-				"reveal": "always",
-				"panel": "new",
-				"clear": true,
-				"focus": false,
-				"showReuseMessage": false,
-				"close": true
-			}
-		},
-		{
-			"label": "scp-upload-5-files-now",
-			"type": "shell",
-			"command": "scp",
-			"args": [
-				"-P",
-				"10116",
-				"-i",
-				"C:/Users/wang/.ssh/id_ed25519",
-				"C:/Users/wang/Projects/H100_package_realeval/config/experiments.yaml",
-				"C:/Users/wang/Projects/H100_package_realeval/realeval/real_backend.py",
-				"C:/Users/wang/Projects/H100_package_realeval/cluster/train_lora_manual.py",
-				"C:/Users/wang/Projects/H100_package_realeval/scripts/train_and_run_paper.sh",
-				"C:/Users/wang/Projects/H100_package_realeval/data/ChiFraud/chifraud.jsonl",
-				"root@103.207.149.65:/workspace/H100_package_realeval/"
-			],
-			"isBackground": false,
-			"presentation": {
-				"reveal": "always",
-				"panel": "new",
-				"clear": true,
-				"focus": false,
-				"showReuseMessage": false,
-				"close": true
-			}
-		},
-		{
-			"label": "ssh-mkdir-runpod-new",
-			"type": "shell",
-			"command": "ssh",
-			"args": [
-				"-o",
-				"StrictHostKeyChecking=no",
-				"-i",
-				"C:/Users/wang/.ssh/id_ed25519",
-				"root@64.247.201.56",
-				"-p",
-				"19434",
-				"mkdir -p /workspace/H100_package_realeval/{config,realeval,cluster,scripts,data/ChiFraud,outputs/lora_manual} && ls -la /workspace/H100_package_realeval"
-			],
-			"isBackground": false,
-			"presentation": {
-				"reveal": "always",
-				"panel": "new",
-				"clear": true,
-				"focus": false,
-				"showReuseMessage": false,
-				"close": true
-			}
-		},
-		{
-			"label": "ssh-proxy-user-test",
-			"type": "shell",
-			"command": "ssh",
-			"args": [
-				"-o",
-				"StrictHostKeyChecking=no",
-				"-i",
-				"C:/Users/wang/.ssh/id_ed25519",
-				"br1naf6hilokdu-64411fc2@ssh.runpod.io",
-				"echo ok && hostname && whoami"
-			],
-			"isBackground": false,
-			"presentation": {
-				"reveal": "always",
-				"panel": "new",
-				"clear": true,
-				"focus": false,
-				"showReuseMessage": false,
-				"close": true
-			}
-		},
-		{
-			"label": "probe-jupyter-token-newpod",
-			"type": "shell",
-			"command": "c:/Users/wang/Projects/H100_package_realeval/.venv/Scripts/python.exe",
-			"args": [
-				"-c",
-				"import json,urllib.request,urllib.parse; b='https://40e69wcbga2q1d-8888.proxy.runpod.net'; t='vbul2cc1qmltayxrjyws'; u=b+'/api/contents/workspace?'+urllib.parse.urlencode({'token':t,'content':1}); h={'User-Agent':'Mozilla/5.0','Accept':'application/json','Referer':b+'/lab'}; print(json.loads(urllib.request.urlopen(urllib.request.Request(u,headers=h),timeout=20).read().decode()).get('type'))"
-			],
-			"isBackground": false,
-			"presentation": {
-				"reveal": "always",
-				"panel": "new",
-				"clear": true,
-				"focus": false,
-				"showReuseMessage": false,
-				"close": true
-			}
-		},
-		{
-			"label": "probe-token-script",
-			"type": "shell",
-			"command": "c:/Users/wang/Projects/H100_package_realeval/.venv/Scripts/python.exe",
-			"args": [
-				"c:/Users/wang/Projects/H100_package_realeval/tmp_probe_token.py"
-			],
-			"isBackground": false,
-			"presentation": {
-				"reveal": "always",
-				"panel": "new",
-				"clear": true,
-				"focus": false,
-				"showReuseMessage": false,
-				"close": true
-			}
-		},
-		{
-			"label": "compileall-package-check",
-			"type": "shell",
-			"command": "c:/Users/wang/Projects/H100_package_realeval/.venv/Scripts/python.exe",
-			"args": [
-				"-m",
-				"compileall",
-				"-q",
-				"c:/Users/wang/Projects/H100_package_realeval/realeval",
-				"c:/Users/wang/Projects/H100_package_realeval/experiments",
-				"c:/Users/wang/Projects/H100_package_realeval/cluster"
-			],
-			"isBackground": false
-		},
-		{
-			"label": "install-pytest-local",
-			"type": "shell",
-			"command": "c:/Users/wang/Projects/H100_package_realeval/.venv/Scripts/python.exe",
-			"args": [
-				"-m",
-				"pip",
-				"install",
-				"pytest"
-			],
-			"isBackground": false
-		},
-		{
-			"label": "run-pytest-all",
-			"type": "shell",
-			"command": "c:/Users/wang/Projects/H100_package_realeval/.venv/Scripts/python.exe",
-			"args": [
-				"-m",
-				"pytest",
-				"tests",
-				"-q"
-			],
-			"isBackground": false
-		},
-		{
-			"label": "show-test-process-status",
-			"type": "shell",
-			"command": "powershell",
-			"args": [
-				"-NoProfile",
-				"-Command",
-				"$p = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'pytest|python\\.exe\\s+-m\\s+pytest' }; if ($p) { $p | Select-Object ProcessId, Name, CommandLine | Format-Table -AutoSize } else { Write-Output 'NO_PYTEST_PROCESS' }"
-			],
-			"isBackground": false
-		},
-		{
-			"label": "rerun-pytest-summary",
-			"type": "shell",
-			"command": "powershell",
-			"args": [
-				"-NoProfile",
-				"-Command",
-				"$env:PYTHONUNBUFFERED='1'; & 'c:/Users/wang/Projects/H100_package_realeval/.venv/Scripts/python.exe' -m pytest tests -q --maxfail=20; $code=$LASTEXITCODE; Write-Output ('PYTEST_EXIT_CODE=' + $code); exit $code"
-			],
-			"isBackground": false
-		},
-		{
-			"label": "show-test-process-fixed",
-			"type": "shell",
-			"command": "powershell",
-			"args": [
-				"-NoProfile",
-				"-ExecutionPolicy",
-				"Bypass",
-				"-File",
-				"c:/Users/wang/Projects/H100_package_realeval/tmp_show_test_process.ps1"
-			],
-			"isBackground": false
-		},
-		{
-			"label": "run-h100-preflight-now",
-			"type": "shell",
-			"command": "c:/Users/wang/Projects/H100_package_realeval/.venv/Scripts/python.exe",
-			"args": [
-				"c:/Users/wang/Projects/H100_package_realeval/h100_preflight_check.py"
-			],
-			"isBackground": false
-		},
-		{
-			"label": "run-exp6-exp8-now",
-			"type": "shell",
-			"command": "c:/Users/wang/Projects/H100_package_realeval/.venv/Scripts/python.exe",
-			"args": [
-				"-m",
-				"experiments.runner",
-				"--exp",
-				"6,8"
-			],
-			"isBackground": false
-		},
-		{
-			"label": "install-runtime-deps-for-exp",
-			"type": "shell",
-			"command": "c:/Users/wang/Projects/H100_package_realeval/.venv/Scripts/python.exe",
-			"args": [
-				"-m",
-				"pip",
-				"install",
-				"torch",
-				"scikit-learn",
-				"datasets",
-				"scipy"
-			],
-			"isBackground": false
-		},
-		{
-			"label": "probe-runpod-api-host",
-			"type": "shell",
-			"command": "c:/Users/wang/Projects/H100_package_realeval/.venv/Scripts/python.exe",
-			"args": [
-				"-c",
-				"import urllib.request, json; b='https://br1naf6hilokdu-8888.proxy.runpod.net'; urls=[b+'/api', b+'/api/contents/workspace', b+'/api/terminals'];\nfor u in urls:\n  try:\n    r=urllib.request.urlopen(urllib.request.Request(u,headers={'User-Agent':'Mozilla/5.0'}),timeout=15)\n    print('OK',u,r.status)\n  except Exception as e:\n    print('FAIL',u,type(e).__name__,getattr(e,'code',''))"
-			],
-			"isBackground": false
+			"group": "build",
+			"problemMatcher": []
 		}
 	]
 }
