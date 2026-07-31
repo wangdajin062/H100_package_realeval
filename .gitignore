@@ -67,3 +67,10 @@ htmlcov/
 # ── Ruff / mypy ──────────────────────────────────────────
 .ruff_cache/
 .mypy_cache/
+
+# Local temp / deployment artifacts
+code.tar
+scp_upload*.txt
+scp_verbose.txt
+sync_log.txt
+$null

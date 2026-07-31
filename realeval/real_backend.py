@@ -188,6 +188,19 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
         torch.nn.Linear(hidden_size, 2, dtype=torch.float32),
     ).to(dev)
 
+    # ── Teacher projection head (exp10 heterogeneous teachers only) ──
+    # Homologous (same-architecture) distillation reuses `head` for both teacher and
+    # student logits. When the teacher's hidden size differs (exp10 1.5B/3B/7B), build a
+    # separate trainable teacher head so KL can be computed on 2-class logits.
+    teacher_head = None
+    t_hidden = teacher.config.hidden_size
+    if t_hidden != hidden_size:
+        teacher_head = torch.nn.Sequential(
+            torch.nn.Dropout(dropout),
+            torch.nn.Linear(t_hidden, 2, dtype=torch.float32),
+        ).to(dev)
+
+
     # ── Optimiser: student backbone + head ──
     backbone_lr = float(config.get("training", {}).get("learning_rate", 2e-5))
     head_lr = float(config.get("distillation", {}).get("task_weight", 1e-3))
@@ -197,10 +210,13 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
     T = float(config.get("distillation", {}).get("temperature", 2.0))
     alpha_kl = float(config.get("distillation", {}).get("alpha_kl", 0.5))
 
-    optimizer = torch.optim.AdamW([
+    _opt_params = [
         {"params": student.parameters(), "lr": backbone_lr},
         {"params": head.parameters(), "lr": head_lr},
-    ], weight_decay=0.05)
+    ]
+    if teacher_head is not None:
+        _opt_params.append({"params": teacher_head.parameters(), "lr": head_lr})
+    optimizer = torch.optim.AdamW(_opt_params, weight_decay=0.05)
 
     # ── Class weighting for imbalanced corpora (fraud is the minority class) ──
     class_weight = None
@@ -255,6 +271,9 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
                 s_out = student(**enc, output_hidden_states=True).hidden_states[-1]
             s_last = s_out[torch.arange(len(batch_texts), device=dev), lens].float()
 
+            # Align hidden dims for teacher/student when teacher ≠ student (exp10 hetero).
+            n_common = min(t_last.size(-1), s_last.size(-1))
+
             # Classification logits via head
             logits = head(s_last)  # (batch, 2)
             ce_loss = F.cross_entropy(logits, labels_t, weight=class_weight)
@@ -266,7 +285,8 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
             if loss_fn in ("kl", "kl_mse"):
                 # KL divergence: temperature-scaled between teacher and student head logits
                 with torch.inference_mode():
-                    t_logits_head = head(t_last)
+                    t_logits_head = (teacher_head(t_last) if teacher_head is not None
+                                     else head(t_last))
                 kl_loss = F.kl_div(
                     F.log_softmax(logits / T, dim=-1),
                     F.softmax(t_logits_head / T, dim=-1),
@@ -277,27 +297,25 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
                 mse_loss = F.mse_loss(s_last, t_last)
 
             # Quantization SNR: signal = teacher power, noise = (student - teacher)²
+            # Compare on the aligned common dims (hetero teachers have different widths).
             with torch.inference_mode():
-                signal_power = t_last.pow(2).mean()
-                noise_power = (s_last.detach() - t_last).pow(2).mean()
+                signal_power = t_last[..., :n_common].pow(2).mean()
+                noise_power = (s_last.detach()[..., :n_common] - t_last[..., :n_common]).pow(2).mean()
                 snr_db = float(10 * torch.log10(signal_power / (noise_power + 1e-12)))
             snr_values.append(snr_db)
 
             # OV-Freeze: variance matching on output dimensions (staged activation)
             # Window parameter controls the strength of variance rescaling (rho sweep).
+            # Align hidden dims for variance/OV-freeze when teacher ≠ student (exp10 hetero).
             ovf_loss = torch.tensor(0.0, device=dev)
+            t_var = t_last[..., :n_common].var(dim=0)
+            s_var = s_last[..., :n_common].var(dim=0)
             if ovf_active and freeze_frac > 0:
-                t_var = t_last.var(dim=0)
-                s_var = s_last.var(dim=0)
-                k = max(1, int(t_var.numel() * freeze_frac))
+                k = max(1, min(int(t_var.numel() * freeze_frac), n_common))
                 # Window-weighted rescaling: stronger window → more aggressive matching
                 scale = (t_var[:k] / (s_var[:k] + 1e-9)).sqrt()
                 ovf_loss = F.mse_loss(s_var[:k] * (1 + window * (scale - 1)), t_var[:k])
-            else:
-                with torch.inference_mode():
-                    t_var = t_last.var(dim=0)
-                    s_var = s_last.var(dim=0)
-            # Drift computed once after if/else (deduplicated)
+            # Drift computed once after if/else on aligned dims (deduplicated)
             drift_val = float(
                 (s_var - t_var).abs().mean() / (t_var.abs().mean() + 1e-9) * 100)
 
@@ -319,7 +337,8 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
 
             # Diagnostic KL measurement — reuse teacher head logits when available
             with torch.inference_mode():
-                t_head = t_logits_head if loss_fn in ("kl", "kl_mse") else head(t_last)
+                t_head = t_logits_head if loss_fn in ("kl", "kl_mse") else (
+                    teacher_head(t_last) if teacher_head is not None else head(t_last))
                 s_head = logits.detach()  # reuse from training forward pass (line 249)
                 diag_kl = float(F.kl_div(
                     F.log_softmax(s_head / T, dim=-1),

@@ -81,6 +81,20 @@
 			],
 			"group": "build",
 			"problemMatcher": []
+		},
+		{
+			"label": "monitor-runpod",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"${workspaceFolder}/monitor_runpod.sh"
+			],
+			"problemMatcher": [],
+			"presentation": {
+				"panel": "dedicated",
+				"reveal": "always",
+				"clear": true
+			}
 		}
 	]
 }
