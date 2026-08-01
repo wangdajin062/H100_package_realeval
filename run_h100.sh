@@ -17,6 +17,16 @@ for a in "$@"; do
   [ "$a" = "--distributed" ] && DISTRIBUTED=1
 done
 
+# Python 解析：优先使用 /workspace/venv（RunPod 持久化环境，容器重启后系统 pip 包会丢失）
+if [ -x /workspace/venv/bin/python ]; then
+  PY=/workspace/venv/bin/python
+else
+  PY=python
+fi
+
+# 配置：默认 runpod_h100.yaml（单卡 RunPod）；可用 CONFIG=/path 覆盖（如 config/h100.yaml 多卡）
+CONFIG="${CONFIG:-config/runpod_h100.yaml}"
+
 # Auto-clean previous results before each fresh run
 rm -rf outputs/results/* outputs/metrics/* outputs/predictions/* 2>/dev/null
 echo "=== Cleaned previous outputs ==="
@@ -28,13 +38,13 @@ export TRANSFORMERS_NO_ADVISORY_WARNINGS="${TRANSFORMERS_NO_ADVISORY_WARNINGS:-1
 export TOKENIZERS_PARALLELISM="${TOKENIZERS_PARALLELISM:-false}"
 export NCCL_DEBUG="${NCCL_DEBUG:-WARN}"
 
-echo "=== H100 paper-validation pipeline ($MODE) ==="
+echo "=== H100 paper-validation pipeline ($MODE) — PY=$PY CONFIG=$CONFIG ==="
 if [ "$DISTRIBUTED" = "1" ]; then
-  NGPU="$(python -c 'import torch;print(torch.cuda.device_count())' 2>/dev/null || echo 1)"
+  NGPU="$("$PY" -c 'import torch;print(torch.cuda.device_count())' 2>/dev/null || echo 1)"
   echo "=== torchrun --nproc_per_node=$NGPU (NCCL) ==="
-  torchrun --nproc_per_node="$NGPU" -m experiments.paper_pipeline "$MODE" --config config/h100.yaml
+  torchrun --nproc_per_node="$NGPU" -m experiments.paper_pipeline "$MODE" --config "$CONFIG"
 else
-  python -m experiments.paper_pipeline "$MODE" --config config/h100.yaml
+  "$PY" -m experiments.paper_pipeline "$MODE" --config "$CONFIG"
 fi
 echo "=== Deliverables in outputs/ ==="
 ls -1 outputs/ 2>/dev/null || true

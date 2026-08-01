@@ -15,6 +15,7 @@
 7. [配置参数字典](#7-配置参数字典)
 8. [字段对齐说明](#8-字段对齐说明)
 9. [常见问题](#9-常见问题)
+10. [TAF-28k 数据修复链（音频转录 → 特征 → 重跑）](#10-taf-28k-数据修复链音频转录--特征--重跑)
 
 ---
 
@@ -286,3 +287,56 @@ A：图像脚本读取 `outputs/results/` 中的 JSON 文件，不是直接调�
 
 **Q：多次运行会积累很多 JSON 文件吗？**  
 A：不会。每次运行前归档功能会清理旧文件，保留归档 Markdown。若手动运行 `--no-archive`，则需要自行清理或使用 `python scripts/archive_and_clear.py`。
+
+---
+
+## 10. TAF-28k 数据修复链（音频转录 → 特征 → 重跑）
+
+> **背景**：TAF-28k 是**音频分类数据集**——其 `taf28k.jsonl` 中每条的 `text` 是同一段音频分析指令模板，真实的 fraud/normal 信号在音频文件里。若直接用该文本做分类，模型学不到任何区分（去重后仅 1 个唯一文本，结果坍缩为单类预测）。`whisper-tiny` 虽在模型清单中，但代码从未调用——这是数据引用逻辑缺口。
+
+### 10.1 修复链路
+
+```
+音频（audio/*.mp3，13,711 条，48kHz/~60s）
+   │ ① transcribe_taf28k.py（whisper 转录）
+   ▼
+taf28k.jsonl（13,388 条真实转写文本 + 标签，去重 13,333）
+   │ ② build_taf28k_npz.py（whisper 编码器特征）
+   ▼
+taf28k.npz（13,388 × 384 声学嵌入 + labels + speaker_labels）
+   │ ③ 重跑 exp5 / exp10 / exp13
+   ▼
+真实论文数值
+```
+
+### 10.2 脚本用法
+
+```bash
+# ① 转录音频 → 重建 taf28k.jsonl（text=whisper 转写, label=fraud/normal）
+python data/scripts/transcribe_taf28k.py --limit 100   # 试跑
+python data/scripts/transcribe_taf28k.py               # 全量（H100 约 55 分钟）
+python data/scripts/transcribe_taf28k.py --resume      # 断点续传
+
+# ② 生成声学特征 → taf28k.npz（exp13 融合的真实声学部分）
+python data/scripts/build_taf28k_npz.py --limit 100
+python data/scripts/build_taf28k_npz.py
+
+# ③ 重跑受影响实验
+python -m experiments.runner --exp 5,10,13 --paper --no-archive --config config/runpod_h100.yaml
+```
+
+### 10.3 关键事实
+
+| 项 | 值 |
+|----|----|
+| 音频规模 | 13,711 个 mp3（48kHz，50-74 秒/条，共 ~12 GB） |
+| 转录样本 | 13,388 条（fraud 7,177 / normal 6,211） |
+| 去重文本数 | 13,333（修复前为 1） |
+| 声学特征 | `taf28k.npz`（13,388 × 384，whisper 编码器 last_hidden_state 均值池化） |
+| 修复效果 | exp10 教师规模从坍缩（0/0.667）变为真实 F1（0.56-0.92）；exp13 late_fusion 达 F1=0.928 |
+
+### 10.4 RunPod 环境要点
+
+- **持久化 venv**：`/workspace/venv`（`python3 -m venv --system-site-packages /workspace/venv`）。RunPod 容器重启会清空系统 pip 包，venv 装在持久卷 `/workspace` 上可避免重复安装。
+- **运行命令**：`bash run_h100.sh`（已配置自动检测 `/workspace/venv/bin/python`）。
+- **数据/模型位置**：`/workspace/data`、`/workspace/models`、`/workspace/hf_cache`（均为持久卷）。

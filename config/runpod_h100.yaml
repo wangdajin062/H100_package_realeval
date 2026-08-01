@@ -9,7 +9,7 @@ hardware:
 runtime:
   bf16: true
   tf32: true
-  torch_compile: true
+  torch_compile: false   # 关闭：compile 在 H100 首次编译极慢且与 LoRA adapter 不兼容（见 realeval/models.py）
   flash_attention: true
   quantization: int4          # 0.5B can actually run BF16 full precision; INT4 used to align with paper quantization path
   omp_threads: 8              # = vCPU, single card no sharing

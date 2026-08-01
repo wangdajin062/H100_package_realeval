@@ -1,5 +1,6 @@
 {
   "task.showReuseMessage": false,
   "task.reuseTerminals": false,
-  "terminal.integrated.enablePersistentSessions": false
+  "terminal.integrated.enablePersistentSessions": false,
+  "sixth.telegram.enabled": true
 }

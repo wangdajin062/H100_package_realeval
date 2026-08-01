@@ -73,4 +73,6 @@ code.tar
 scp_upload*.txt
 scp_verbose.txt
 sync_log.txt
+ssh_probe_output.txt
+sync_output.txt
 $null

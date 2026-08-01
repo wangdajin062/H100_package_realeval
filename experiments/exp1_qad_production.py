@@ -38,6 +38,7 @@ def run(config: dict) -> dict:
             split.test_labels,
             quantize=quantize,
             apply_ov_rescaling=apply_ov,
+            save_name="exp1_qad",
         )
         return {
             "experiment": "exp1",

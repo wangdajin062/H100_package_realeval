@@ -135,7 +135,7 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
                             test_texts: list[str], test_labels: list[int], *,
                             quantize: str = "int4", apply_ov_rescaling: bool = True,
                             freeze_frac: float = 1.0, window: float = 1.0,
-                            loss_fn: str = "kl", teacher_model: str = None) -> dict:
+                            loss_fn: str = "kl", teacher_model: str = None, save_name: str = None) -> dict:
     """QAD (Quantization-Aware Distillation): teacher→student KL divergence training.
 
     Paper pipeline (exp1/exp2/exp3/exp10): freezes a BF16 teacher, quantises the student
@@ -391,13 +391,14 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
 
     # ── Save QAD-trained model ──
     from pathlib import Path
-    save_dir = Path(__file__).resolve().parent.parent / "outputs" / "models" / "exp1_qad"
-    save_dir.mkdir(parents=True, exist_ok=True)
-    student.save_pretrained(str(save_dir))
-    tok.save_pretrained(str(save_dir))
-    torch.save({"head": head.state_dict(), "hidden_size": hidden_size, "dropout": dropout},
-               str(save_dir / "head.pt"))
-    logger.info("Saved QAD-trained model to %s", save_dir)
+    if save_name:
+        save_dir = Path(__file__).resolve().parent.parent / "outputs" / "models" / save_name
+        save_dir.mkdir(parents=True, exist_ok=True)
+        student.save_pretrained(str(save_dir))
+        tok.save_pretrained(str(save_dir))
+        torch.save({"head": head.state_dict(), "hidden_size": hidden_size, "dropout": dropout},
+                   str(save_dir / "head.pt"))
+        logger.info("Saved QAD-trained model to %s", save_dir)
 
     return {
         "trajectory": trajectory,
@@ -604,8 +605,8 @@ def real_llm_classify(config: dict, texts: list[str], labels: list[int], *, quan
         _DTYPE_MAP = {"fp32": torch.float32, "fp16": torch.float16, "bf16": torch.bfloat16,
                       "float32": torch.float32, "float16": torch.float16, "bfloat16": torch.bfloat16}
         use_bf16 = finetuned_dtype in ("bf16", "bfloat16")
-        model, tok = models.load_causal_lm(str(fp), quantize=None, bf16=use_bf16)
-        if not use_bf16:
+        model, tok = models.load_causal_lm(str(fp), quantize=quantize, bf16=use_bf16)
+        if not use_bf16 and quantize not in ("int4", "int8", "nf4"):
             model = model.to(_DTYPE_MAP.get(finetuned_dtype, torch.float32))
         _require(model is not None, "Fine-tuned model loading failed")
         dev = next(model.parameters()).device
