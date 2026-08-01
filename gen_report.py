@@ -6,7 +6,7 @@ import os
 
 RESULT = "outputs/results/all_experiments.json"
 OUT_DIR = "reports"
-EXPT_DATE = "2026-07-31"   # 实验完成日期
+EXPT_DATE = "2026-08-01"   # 实验完成日期
 SYNC_DATE = "2026-08-01"   # 同步到本地日期
 
 NAMES = {
