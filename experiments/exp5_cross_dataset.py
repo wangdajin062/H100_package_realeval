@@ -103,13 +103,15 @@ def run(config: dict) -> dict:
             out["cross_taf_on_chifraud"] = {"f1": cross_tc["f1"]}
             out["cross_chifraud_on_taf"] = {"f1": cross_ct["f1"]}
 
-        # Paper-reference values for Fig8/T8/T9 alignment
+        # NOTE: paper-claimed reference values (self-citation) — NOT measured by exp5.
+        # These must NOT be treated as independent experimental evidence.
         out["bf16_matched_advfraud"] = 0.882
         out["paper_reference"] = {
             "advfraud_curated_f1": 0.875,
             "advfraud_bf16_matched": 0.882,
             "ldp_eps_1_5_f1": 0.902,
             "ldp_eps_1_5_delta": -0.021,
+            "source": "paper-claimed (self-citation), NOT measured by exp5",
         }
 
         return out
@@ -193,12 +195,14 @@ def run(config: dict) -> dict:
         out["ldp_tradeoff"] = ldp
 
         # Paper-reference values for Fig8 alignment (smoke uses measured eps_1.5 if available)
+        # NOTE: paper-claimed values (self-citation) — NOT measured by exp5.
         out["bf16_matched_advfraud"] = 0.882
         out["paper_reference"] = {
             "advfraud_curated_f1": 0.875,
             "advfraud_bf16_matched": 0.882,
             "ldp_eps_1_5_f1": eps_1_5_f1 if eps_1_5_f1 is not None else 0.902,
             "ldp_eps_1_5_delta": -0.021,
+            "source": "paper-claimed (self-citation), NOT measured by exp5",
         }
 
         return out

@@ -26,18 +26,17 @@ def run(config: dict) -> dict:
     def run_paper(config):
         from realeval.specdec import diagnostic_B
         result = diagnostic_B(config, texts, gamma=5, n_samples=20)
-        # Always include domain key. When not directly measurable, forward the
-        # paper reference value so the figure-data bridge has an authoritative fallback.
-        measured = result.setdefault("h100_measured", {})
+        # Do NOT backfill paper alpha_tuned into the measured bucket: that would
+        # mislabel a self-cited number as an H100 measurement. Domain-tuned alpha
+        # is NOT measured (verdict = "NOT MEASURED"); paper_reference is cited-only.
         ref = result.get("paper_reference", {})
-        if measured.get("domain") is None:
-            measured["domain"] = ref.get("alpha_tuned")
         return {
             "experiment": "exp6",
             "computation": "h100_real_qwen",
             "diagnostic_B": result,
-            # Forward paper_reference for Fig7 — authoritative when measurement unavailable
+            # paper_reference forwarded as cited-only reference (NOT a measurement).
             "paper_reference": ref,
+            "note": "generic alpha measured on H100; domain-tuned alpha NOT measured — paper_reference.alpha_tuned is cited-only.",
         }
 
     def run_smoke(_: dict) -> dict:

@@ -40,11 +40,26 @@ def run(config: dict) -> dict:
         asv = privacy.asv_eer_open_set(emb, spk_labels, n_enroll_utt=3, seed=42)
         sid = privacy.speaker_identification(emb, spk_labels, seed=42)
         glo = privacy.glo_reconstruction_attack(emb, emb[:, :64] if emb.shape[1] >= 64 else emb, steps=50, seed=42)
+        # Measurement-coverage ledger: marks which paper privacy claims are backed by real
+        # measurements here vs. which require a separate audio-reconstruction pipeline.
+        # WER / PESQ / STOI / MOS need a full TTS+ASR rebuild (obfuscated audio → decode →
+        # score); they are NOT produced by this experiment, so the paper table must either
+        # run them separately or label them "not measured / planned".
+        coverage = {
+            "measured": ["pii_scan", "asv_eer", "speaker_id_acc", "glo_reconstruction_corr", "n_speakers"],
+            "not_measured": {
+                "wer_reconstruction": "requires obfuscate→decode→WER pipeline (TODO/planned)",
+                "pesq_reconstruction": "requires audio reconstruction scoring (TODO/planned)",
+                "stoi_reconstruction": "requires audio reconstruction scoring (TODO/planned)",
+                "mos_reconstruction": "requires subjective/neural MOS scoring (TODO/planned)",
+            },
+        }
         return {"experiment": "exp7", "computation": "h100_real_qwen", "embedding_source": "real_fv",
                 "pii_report": pii_report,
                 "asv_eer_pct": asv["asv_eer_pct"], "min_dcf": asv.get("min_dcf"),
                 "speaker_id_accuracy": sid["accuracy"], "glo_reconstruction_corr": glo["mean_reconstruction_corr"],
-                "n_speakers": sid["n_speakers"]}
+                "n_speakers": sid["n_speakers"],
+                "coverage": coverage}
 
 
     def run_smoke(_: dict) -> dict:

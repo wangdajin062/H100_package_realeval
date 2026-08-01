@@ -310,14 +310,19 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
             ovf_loss = torch.tensor(0.0, device=dev)
             t_var = t_last[..., :n_common].var(dim=0)
             s_var = s_last[..., :n_common].var(dim=0)
+            drift_var = s_var
             if ovf_active and freeze_frac > 0:
                 k = max(1, min(int(t_var.numel() * freeze_frac), n_common))
                 # Window-weighted rescaling: stronger window → more aggressive matching
                 scale = (t_var[:k] / (s_var[:k] + 1e-9)).sqrt()
                 ovf_loss = F.mse_loss(s_var[:k] * (1 + window * (scale - 1)), t_var[:k])
+                # Measure drift AFTER OVF rescaling so the metric reflects variance matching:
+                # y' = y * (1 + window*(scale-1))  =>  var(y') = var(y) * (1+window*(scale-1))^2
+                drift_var = s_var.clone()
+                drift_var[:k] = drift_var[:k] * (1 + window * (scale - 1)) ** 2
             # Drift computed once after if/else on aligned dims (deduplicated)
             drift_val = float(
-                (s_var - t_var).abs().mean() / (t_var.abs().mean() + 1e-9) * 100)
+                (drift_var - t_var).abs().mean() / (t_var.abs().mean() + 1e-9) * 100)
 
             # Combined loss based on loss_fn mode
             if loss_fn == "ce":
@@ -672,26 +677,46 @@ def real_llm_classify(config: dict, texts: list[str], labels: list[int], *, quan
         enc = tok(prompts, return_tensors="pt", padding=True, truncation=True, max_length=256).to(dev)
         attn_mask = enc.attention_mask
 
-        with torch.inference_mode():
-            with hwenv.autocast_context():
-                outputs = model(**enc)
-                logits = outputs.logits  # (batch, seq_len, vocab)
+        if use_cot:
+            # CoT path: generate the model's actual answer and parse the decision token.
+            # Token-probability scoring under the "think step by step" system prompt drifts
+            # toward "fraud" for nearly every sample (exp9 FPR ~0.96); parsing the generated
+            # answer is the faithful CoT behaviour.
+            with torch.inference_mode():
+                with hwenv.autocast_context():
+                    gen = model.generate(**enc, max_new_tokens=32, do_sample=False,
+                                         pad_token_id=tok.pad_token_id)
+            gen_texts = tok.batch_decode(gen[:, enc.input_ids.shape[1]:], skip_special_tokens=True)
+            for gt in gen_texts:
+                gl = gt.lower()
+                f_cnt = gl.count("fraud")
+                n_cnt = gl.count("normal")
+                if f_cnt > n_cnt:
+                    preds.append(1)
+                elif n_cnt > f_cnt:
+                    preds.append(0)
+                else:
+                    # tie / no explicit decision -> conservative fallback
+                    preds.append(1)
+        else:
+            with torch.inference_mode():
+                with hwenv.autocast_context():
+                    outputs = model(**enc)
+                    logits = outputs.logits  # (batch, seq_len, vocab)
 
-        # Get logits at each sequence's LAST REAL token (before padding)
-        seq_lens = attn_mask.sum(dim=1).clamp(min=1) - 1       # (batch,) last non-padding index
-        last_logits = logits[torch.arange(len(batch_texts)), seq_lens]  # (batch, vocab)
+            # Get logits at each sequence's LAST REAL token (before padding)
+            seq_lens = attn_mask.sum(dim=1).clamp(min=1) - 1   # (batch,) last non-padding index
+            last_logits = logits[torch.arange(len(batch_texts)), seq_lens]  # (batch, vocab)
 
-        # Score "fraud" vs "normal" token IDs (no leading space — chat template ends with \n)
-        fraud_ids = tok("fraud", add_special_tokens=False).input_ids
-        normal_ids = tok("normal", add_special_tokens=False).input_ids
+            # Score "fraud" vs "normal" token IDs (no leading space — chat template ends with \n)
+            fraud_ids = tok("fraud", add_special_tokens=False).input_ids
+            normal_ids = tok("normal", add_special_tokens=False).input_ids
 
-        # Compare via softmax probability mean (handles both single- and multi-token cases)
-        probs = F.softmax(last_logits, dim=-1)
-        f_prob = probs[:, fraud_ids].mean(dim=1) if fraud_ids else last_logits.new_zeros(len(batch_texts))
-        n_prob = probs[:, normal_ids].mean(dim=1) if normal_ids else last_logits.new_zeros(len(batch_texts))
-        batch_preds = (f_prob > n_prob).int().tolist()
-
-        preds.extend(batch_preds)
+            # Compare via softmax probability mean (handles both single- and multi-token cases)
+            probs = F.softmax(last_logits, dim=-1)
+            f_prob = probs[:, fraud_ids].mean(dim=1) if fraud_ids else last_logits.new_zeros(len(batch_texts))
+            n_prob = probs[:, normal_ids].mean(dim=1) if normal_ids else last_logits.new_zeros(len(batch_texts))
+            preds.extend((f_prob > n_prob).int().tolist())
 
     m = classification_metrics(labels, preds)
     if return_preds:

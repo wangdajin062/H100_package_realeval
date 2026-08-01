@@ -22,8 +22,12 @@ def run(config: dict) -> dict:
         # Each variant runs actual QAD training with a different loss function.
         # Use fewer epochs (3) to keep ablation tractable.
         import copy
+        import torch
+        import numpy as np
         abl_config = copy.deepcopy(config)
         abl_config.setdefault("training", {})["epochs"] = 3
+        # Real std requires multiple seeds. Default 3 (paper claimed 5, set via config if needed).
+        n_seeds = int(abl_config.get("reproducibility", {}).get("exp2_seeds", 3))
 
         variants = {}
         # Five loss variants: kl_only, mse_only, ce_only (= QAT), kl_mse_combined, kl_task
@@ -37,18 +41,26 @@ def run(config: dict) -> dict:
         for loss_name, loss_fn in loss_specs:
             # OV-Freeze disabled for pure baselines: kl_task (no reg), ce_only (QAT, no distillation)
             use_ovf = (loss_name not in ("kl_task", "ce_only"))
-            result = real_backend.real_qad_distill_train(
-                abl_config,
-                split.train_texts, split.train_labels,
-                split.test_texts, split.test_labels,
-                quantize="int4",
-                apply_ov_rescaling=use_ovf,
-                loss_fn=loss_fn,
-            )
+            f1s, kls = [], []
+            for s in range(n_seeds):
+                torch.manual_seed(1000 + s)
+                torch.cuda.manual_seed_all(1000 + s)
+                result = real_backend.real_qad_distill_train(
+                    abl_config,
+                    split.train_texts, split.train_labels,
+                    split.test_texts, split.test_labels,
+                    quantize="int4",
+                    apply_ov_rescaling=use_ovf,
+                    loss_fn=loss_fn,
+                )
+                f1s.append(float(result["f1"]))
+                kls.append(float(result["kl_final"]))
             variants[loss_name] = {
-                "f1": result["f1"],
-                "kl_final": result["kl_final"],
-                "std": 0.007,
+                "f1": round(float(np.mean(f1s)), 4),
+                "f1_list": [round(v, 4) for v in f1s],
+                "kl_final": round(float(np.mean(kls)), 5),
+                "std": round(float(np.std(f1s)), 4) if n_seeds > 1 else None,
+                "n_seeds": n_seeds,
             }
 
         return {
@@ -103,7 +115,7 @@ def run(config: dict) -> dict:
                 kl_final = float(
                     F.kl_div(F.log_softmax(student(Xt), -1), F.softmax(t_logits, -1), reduction="batchmean")
                 )
-            variants[loss_name] = {"f1": base_f1, "kl_final": round(kl_final, 5), "std": 0.007}
+            variants[loss_name] = {"f1": base_f1, "kl_final": round(kl_final, 5), "std": None, "n_seeds": 1}
 
         return {"experiment": "exp2", "computation": "smoke_sklearn", "variants": variants}
 

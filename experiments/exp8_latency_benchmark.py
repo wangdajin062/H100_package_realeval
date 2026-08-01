@@ -96,6 +96,25 @@ def run(config: dict) -> dict:
 
         latencies = {k: v["p50_ms"] for k, v in latency_detail.items()}
 
+        # Sanity diagnostics: flag when a quant scheme is anomalously slow vs bf16.
+        # 2026-08-01 run showed int8 P50=814.8ms vs bf16 28ms (≈29×) — consistent with a
+        # bitsandbytes fallback kernel (e.g. dequant-heavy int8 path) rather than a real
+        # H100 int8 kernel. We do NOT paper over the number, but we surface the flag so the
+        # paper table can either fix the quant path or drop int8 as "not production-grade".
+        _bf16_p50 = latencies.get("bf16")
+        latencies["int8_fallback_flagged"] = (
+            bool(_bf16_p50 and latencies.get("int8", 0) / max(1e-9, _bf16_p50) >= 10.0)
+        )
+
+        # fp16-vs-int4 sanity: higher precision should not UNDER-perform 4-bit quant.
+        # 2026-08-01: fp16=0.3125 < int4=0.4287 in exp11 — likely a quant/loading artifact.
+        # Latency itself is not a correctness signal, so this is informational only;
+        # the accuracy-side comparison lives in exp11.
+        _int4_p50 = latencies.get("int4")
+        latencies["fp16_slower_than_int4"] = (
+            bool(_int4_p50 and latencies.get("fp16", 1e9) > _int4_p50)
+        )
+
         # Batch-level efficiency benchmark (for Table 7)
         # Measures latency/throughput/memory at different batch sizes with int4 quant.
         batch_benchmark = {}
