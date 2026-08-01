@@ -121,7 +121,7 @@ def main():
             idx, name, ug, _um, mu, mt, pw, pl, temp, smc, memc = [x.strip() for x in g]
             u = float(ug)
             mur = float(mu)
-            mtr = float(mt)
+            mtr = float(mt) or 1.0   # 防护显存总量为 0 导致的除零
             p = float(pw)
             plr = float(pl) or 1.0
             t = float(temp)
@@ -134,8 +134,9 @@ def main():
 
         elapsed = int(time.time() - start)
 
-        # ---- 整体状态（取各指标最差者）----
-        worst = max(u / 100, mur / mtr, p / plr)
+        # ---- 整体状态（取各指标最差者；温度按 T_CRIT 等比例映射到 CRIT，保证
+        #      85°C 时状态恰为"危险"，与 temp_color 色阶一致）----
+        worst = max(u / 100, mur / mtr, p / plr, t / T_CRIT * CRIT)
         if worst >= CRIT:
             overall, ocolor = "危险", "bright_red"
         elif worst >= WARN:
@@ -154,10 +155,12 @@ def main():
         if p / plr >= CRIT:
             alerts.append("功率 %.0f/%.0f W" % (p, plr))
 
-        # ---- 状态头行 ----
+        # ---- 状态头行（GPU 名去 "NVIDIA " 前缀、POD 取 id 前缀，保证窄终端不换行）----
+        gpu_short = name.replace("NVIDIA ", "") or name
+        pod_id = POD.split("@")[0].split("-")[0]
         header = Text.from_markup(
-            "[bold]%s[/bold] GPU %s    POD: [cyan]%s[/cyan]    刷新 %.1fs    已运行 %d:%02d    状态: [%s]%s[/%s]"
-            % (name, idx, POD, REFRESH, elapsed // 60, elapsed % 60, ocolor, overall, ocolor)
+            "[bold]%s[/bold] GPU %s  POD [cyan]%s[/cyan]  刷新 %.1fs  运行 %d:%02d  状态 [%s]%s[/%s]"
+            % (gpu_short, idx, pod_id, REFRESH, elapsed // 60, elapsed % 60, ocolor, overall, ocolor)
         )
 
         # ---- GPU 面板 ----
@@ -168,22 +171,23 @@ def main():
         stats.add_row("Util", bar(u / 100, bar_w), "%5.1f %%" % u)
         stats.add_row("VRAM", bar(mur / mtr, bar_w), "%5.2f / %5.2f GB" % (mur / 1024, mtr / 1024))
         stats.add_row("Power", bar(p / plr, bar_w), "%6.1f / %5.0f W" % (p, plr))
-        stats.add_row("Temp", bar(t / 105.0, bar_w, temp_color), "%5.0f C" % t)
+        stats.add_row("Temp", bar(t / 100.0, bar_w, temp_color), "%5.0f C" % t)
         stats.add_row("Clock", "", "SM %s / Mem %s MHz" % (smc, memc))
         gpu_panel = Panel(stats, title="[bold]实时状态[/bold]",
                           subtitle=time.strftime("%Y-%m-%d %H:%M:%S"))
 
-        # ---- 历史趋势（每指标独立强调色）----
-        lines = []
-        for label, d, lo, hi, color in (
+        # ---- 历史趋势（每指标独立强调色；单 Text 多行保留各段样式）----
+        curve = Text()
+        for i, (label, d, lo, hi, color) in enumerate((
                 ("Util %", hu, 0, 100, "cyan"),
                 ("VRAM GB", hv, 0, mtr / 1024, "bright_blue"),
                 ("Power W", hp, 0, plr, "yellow"),
-                ("Temp C", ht, 20, 100, "bright_red")):
-            row = Text("[bold]%s[/bold] " % label, style=None)
-            row.append(spark(d, spark_w, lo, hi, color))
-            lines.append(row)
-        curve_panel = Panel("\n".join(str(x) for x in lines), title="历史趋势（最近 %d 帧）" % len(hu))
+                ("Temp C", ht, 20, 100, "bright_red"))):
+            if i:
+                curve.append("\n")
+            curve.append_text(Text.from_markup("[bold]%s[/bold] " % label))
+            curve.append_text(spark(d, spark_w, lo, hi, color))
+        curve_panel = Panel(curve, title="历史趋势（最近 %d 帧）" % len(hu))
 
         # ---- 计算进程表 ----
         pt = Table(title="GPU 计算进程", box=None, header_style="bold cyan")
