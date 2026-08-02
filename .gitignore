@@ -76,3 +76,10 @@ sync_log.txt
 ssh_probe_output.txt
 sync_output.txt
 $null
+
+# Large data artifacts — kept on RunPod persistent volume (/workspace/data) & local disk, NOT versioned.
+data/**/*.wav
+data/**/*.npz
+data/**/*.jsonl
+data/**/*.csv
+data/**/*.json
