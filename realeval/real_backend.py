@@ -684,20 +684,19 @@ def real_llm_classify(config: dict, texts: list[str], labels: list[int], *, quan
             # answer is the faithful CoT behaviour.
             with torch.inference_mode():
                 with hwenv.autocast_context():
-                    gen = model.generate(**enc, max_new_tokens=32, do_sample=False,
+                    gen = model.generate(**enc, max_new_tokens=64, do_sample=False,
                                          pad_token_id=tok.pad_token_id)
             gen_texts = tok.batch_decode(gen[:, enc.input_ids.shape[1]:], skip_special_tokens=True)
             for gt in gen_texts:
                 gl = gt.lower()
                 f_cnt = gl.count("fraud")
                 n_cnt = gl.count("normal")
+                # 明确多数词判定；tie/无决策词（思考被截断）判 normal——
+                # 与非 CoT 路径的 tie 语义一致，避免"近全判正"（旧 with_cot FPR ~0.98）
                 if f_cnt > n_cnt:
                     preds.append(1)
-                elif n_cnt > f_cnt:
-                    preds.append(0)
                 else:
-                    # tie / no explicit decision -> conservative fallback
-                    preds.append(1)
+                    preds.append(0)
         else:
             with torch.inference_mode():
                 with hwenv.autocast_context():
