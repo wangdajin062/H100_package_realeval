@@ -86,7 +86,15 @@ def load_causal_lm(path: str, *, quantize: str = None, bf16: bool = True,
                 load_in_4bit=(quantize in ("int4", "nf4")), load_in_8bit=(quantize == "int8"),
                 bnb_4bit_compute_dtype=dtype,
                 bnb_4bit_quant_type=("nf4" if quantize == "nf4" else "fp4"))
-            kwargs["device_map"] = "auto"
+            # Prefer device_map="auto" when accelerate is available. If accelerate
+            # is not installed, avoid device_map to prevent transformers complaining
+            # and instead load to CPU and .to(dev) later.
+            try:
+                import accelerate  # type: ignore
+                kwargs["device_map"] = "auto"
+            except Exception:
+                logger.warning("accelerate not available: skipping device_map='auto' and falling back to CPU/device transfer."
+                               " Install accelerate to enable device_map/TP planning for large models.")
         except Exception as e:
             logger.warning("bitsandbytes quantization unavailable (%s), falling back to full precision", e)
     elif quantize not in (None, "bf16", "fp32"):

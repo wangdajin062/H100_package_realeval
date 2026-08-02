@@ -22,4 +22,6 @@ python -m experiments.runner --storage-check || echo "  ⚠ Storage check incomp
 echo " Step 2/3: Hardware check..."
 python -m experiments.runner --check || true
 echo " Step 3/3: Full paper-grade run..."
-exec python -m experiments.runner --exp all --paper --resume --benchmark
+# 注意：不要加 --benchmark —— runner._handle_standalone_checks 会拦截该标志并提前退出，
+# 导致 --exp all --paper 的实验完全不运行（RunPod 部署断点，2026-08-02 修复）。
+exec python -m experiments.runner --exp all --paper --resume

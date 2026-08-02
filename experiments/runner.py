@@ -283,8 +283,10 @@ def main():
     if _handle_standalone_checks(args):
         return
 
-    # ── 运行前自动归档旧结果（除非显式传入 --no-archive）──────────────────
-    no_archive = getattr(args, "no_archive", False)
+    # ── 运行前自动归档旧结果（除非显式传入 --no-archive 或 --resume）────────
+    # --resume 依赖 outputs/results/ 中的旧结果判断跳过，归档会清空该目录
+    # 导致 resume 失效（每个实验都被重跑）。因此 resume 模式下跳过归档。
+    no_archive = getattr(args, "no_archive", False) or args.resume
     if not no_archive:
         try:
             import sys as _sys

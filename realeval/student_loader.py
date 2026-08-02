@@ -10,6 +10,8 @@ import os
 import warnings
 from pathlib import Path
 
+from realeval.real_backend import AssetsUnavailable
+
 # Adapter root resolution:
 #   1. REALEVAL_ADAPTER_ROOT environment variable
 #   2. /workspace/outputs/sft_checkpoints (RunPod default)
@@ -88,10 +90,10 @@ def attach_adapter(model, variant: str = "base", config: dict | None = None,
     adapter = resolve_adapter(variant, config, adapter_path)
     if adapter is None:
         if variant not in ("base", None, ""):
-            raise RuntimeError(
+            raise AssetsUnavailable(
                 f"student_variant='{variant}' requested but no LoRA adapter found under "
                 f"{ADAPTER_ROOT}. Train one (cluster/train_sft.py) or pass adapter_path. "
-                "Refusing to fall back to the base model.")
+                "Falling back to smoke when appropriate.")
         return model
 
     from peft import PeftModel

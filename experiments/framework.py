@@ -67,9 +67,17 @@ def load_first_nonempty(
 ) -> TextDataset:
     """按顺序尝试各 loader，返回第一个非空数据集；全部失败则使用合成数据。"""
     for loader in loaders:
-        ds = loader() or {}
-        texts = list(ds.get("texts", []))
-        labels = [int(x) for x in ds.get("labels", [])]
+        try:
+            ds = loader() or {}
+        except Exception as exc:
+            logger.warning("Loader failed, trying next source: %s", exc)
+            continue
+        try:
+            texts = list(ds.get("texts", []))
+            labels = [int(x) for x in ds.get("labels", [])]
+        except Exception as exc:
+            logger.warning("Loader returned invalid data, trying next source: %s", exc)
+            continue
         if texts:
             return TextDataset(texts=texts, labels=labels)
 

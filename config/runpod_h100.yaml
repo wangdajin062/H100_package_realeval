@@ -19,6 +19,8 @@ paper_run:
   spec_samples: 500
   latency_iters: 100
   batch_size: 64              # 0.5B@BF16 on 80GB can go larger; conservative 64 for stability
+reproducibility:
+  exp2_seeds: 5               # exp2 损失消融多 seed 数（论文声称 5，见 rerun_checklist Tab.5）
 data:
   source: taf28k             # Force real; errors out if missing
   root_hint: /workspace/data # RunPod persistent volume
