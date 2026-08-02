@@ -131,12 +131,55 @@ python -m experiments.runner --report
 cd docs/figure_scripts && python generate_all.py
 ```
 
-## 6. 相关文档
+## 6. 手机端 Snapdragon 8 Gen 3 实测流程
+
+本项目的边缘部署目标是生成 **0.5B Q4_K_M GGUF**，用于 Snapdragon 8 Gen 3 或其他 `llama.cpp` 兼容移动平台。
+
+### 6.1 导出 GGUF
+
+1. 训练完成后，使用导出脚本生成 GGUF：
+   ```bash
+   python scripts/export_to_gguf.py --source outputs/models/exp1_qad --output outputs/models/exp1_qad_q4km.gguf
+   ```
+2. 导出默认量化类型为 `q4_k_m`，这是 Snapdragon 8 Gen 3 上最推荐的 GGUF 格式。
+3. 如果目标机上仍需测试 `q4_0` / `q4_1`，可通过 `--quant-type q4_0` 或 `--quant-type q4_1` 指定。
+
+### 6.2 手机端测试准备
+
+1. 在手机端或安卓开发环境中准备 `llama.cpp`：
+   - 推荐使用 `llama.cpp` 的 Android / Snapdragon 8 Gen 3 构建；
+   - 确保支持 GGUF 模型加载与 `Q4_K_M` 量化格式。
+2. 将生成的 GGUF 文件传到设备，例如：
+   - `outputs/models/exp1_qad_q4km.gguf`
+   - 或通过 adb / scp 复制到手机存储。
+3. 确认设备上 `llama.cpp` 调用命令行可以加载模型：
+   ```bash
+   ./main -m /path/to/exp1_qad_q4km.gguf -p "测试一句话"
+   ```
+
+### 6.3 推荐测试流程
+
+1. 先做一次最小延迟验证：
+   - `batch_size=1`
+   - `threads=4` 或 `threads=6`（视 Snapdragon 8 Gen 3 CPU 核心而定）
+2. 运行标准 prompt，验证模型能成功加载并给出合理输出。
+3. 测量推理延迟：
+   - 记录 p50/p90/p99 结果；
+   - 重点观察首 token 和完整生成时间。
+4. 若需要移动端定量性能对比，可参考仓库中 `exp14_gguf_comparison.py` 的逻辑，比较 `BF16` 与 `Q4_K_M` 在相同任务上的行为差异。
+
+### 6.4 注意事项
+
+- Snapdragon 8 Gen 3 上的移动部署应优先使用 `q4_k_m`，因为它兼顾精度与推理效率。
+- 模型大小约为 `~240 MB`，请确认手机端存储空间和文件传输路径。
+- 若出现加载失败，可先检查 GGUF 文件是否完整、是否为 `llama.cpp` 最新版本、以及是否支持 `Q4_K_M`。
+
+## 7. 相关文档
 
 - [`docs/REPRODUCIBILITY.md`](docs/REPRODUCIBILITY.md) — 完整复现路径
 - [`docs/experiment_result_contract.md`](docs/experiment_result_contract.md) — 字段对齐契约
 - [`reports/2026-08-01_experiment_results.md`](reports/2026-08-01_experiment_results.md) — 实验数值结果
 
-## 许可证
+## 8. 许可证
 
 见 [LICENSE](LICENSE)。
