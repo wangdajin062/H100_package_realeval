@@ -30,15 +30,41 @@ def run(config: dict) -> dict:
 
     def run_paper(config):
         from realeval import real_backend, gguf_backend
+        import torch
+        import numpy as np
         models = {}
+        # 多 seed（reproducibility.exp14_seeds，默认 3）：每个运行时产出真实 f1 std。
+        n_seeds = int(config.get("reproducibility", {}).get("exp14_seeds", 3))
+
         # BF16 0.5B student via transformers (safetensors)
-        bf16 = real_backend.real_llm_classify(config, test_texts, test_labels, quantize="fp16")
-        models["bf16_0.5b_transformers"] = {"f1": bf16["f1"], "runtime": "transformers", "source": "ours"}
+        bf16_f1s = []
+        for s in range(n_seeds):
+            torch.manual_seed(1000 + s)
+            torch.cuda.manual_seed_all(1000 + s)
+            np.random.seed(1000 + s)
+            bf16 = real_backend.real_llm_classify(config, test_texts, test_labels, quantize="fp16")
+            bf16_f1s.append(bf16["f1"])
+        models["bf16_0.5b_transformers"] = {
+            "f1": round(float(np.mean(bf16_f1s)), 4),
+            "f1_std": round(float(np.std(bf16_f1s)), 4) if n_seeds > 1 else None,
+            "runtime": "transformers", "source": "ours", "n_seeds": n_seeds,
+        }
         # Q4_K_M 0.5B GGUF edge student via llama.cpp (same test split)
         try:
-            gg = gguf_backend.gguf_classify(config["models"]["student_gguf"], test_texts, test_labels)
-            models["q4km_0.5b_llama_cpp"] = {"f1": gg["f1"], "latency_ms_p50": gg.get("latency_ms_p50"),
-                                             "runtime": "llama_cpp", "source": "ours"}
+            gg_f1s = []
+            gg = None
+            for s in range(n_seeds):
+                torch.manual_seed(1000 + s)
+                torch.cuda.manual_seed_all(1000 + s)
+                np.random.seed(1000 + s)
+                gg = gguf_backend.gguf_classify(config["models"]["student_gguf"], test_texts, test_labels)
+                gg_f1s.append(gg["f1"])
+            models["q4km_0.5b_llama_cpp"] = {
+                "f1": round(float(np.mean(gg_f1s)), 4),
+                "f1_std": round(float(np.std(gg_f1s)), 4) if n_seeds > 1 else None,
+                "latency_ms_p50": gg.get("latency_ms_p50"),
+                "runtime": "llama_cpp", "source": "ours", "n_seeds": n_seeds,
+            }
         except gguf_backend.GGUFUnavailable as e:
             models["q4km_0.5b_llama_cpp"] = {"f1": None, "runtime": "llama_cpp", "source": "ours",
                                              "note": f"GGUF unavailable: {e}"}

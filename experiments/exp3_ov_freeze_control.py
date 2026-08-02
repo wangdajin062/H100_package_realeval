@@ -20,57 +20,63 @@ def run(config: dict) -> dict:
     def run_paper(config):
         from realeval import real_backend
         import math
+        import copy
+        import torch
+        import numpy as np
         # Use lightweight QAD training (fewer epochs) so each condition produces
         # genuinely different F1 and drift values via varying OV-Freeze parameters.
         qad_epochs = 3
-        import copy
         qad_config = copy.deepcopy(config)
         qad_config.setdefault("training", {})["epochs"] = qad_epochs
+        # 多 seed（reproducibility.exp3_seeds，默认 3）：每个训练点产出真实 std。
+        n_seeds = int(config.get("reproducibility", {}).get("exp3_seeds", 3))
+
+        def _train(**kw) -> tuple[float, float, float, float, float]:
+            """跑 n_seeds 次蒸馏，返回 (f1_mean, f1_std, drift_mean, drift_std, kl_mean)。"""
+            f1s, drifts, kls = [], [], []
+            for s in range(n_seeds):
+                torch.manual_seed(1000 + s)
+                torch.cuda.manual_seed_all(1000 + s)
+                np.random.seed(1000 + s)
+                r = real_backend.real_qad_distill_train(
+                    qad_config,
+                    split.train_texts, split.train_labels,
+                    split.test_texts, split.test_labels,
+                    quantize="int4", **kw,
+                )
+                f1s.append(r["f1"])
+                drifts.append(r["drift_pct_final"])
+                kls.append(r.get("kl_final", 0.0))
+            return (round(float(np.mean(f1s)), 4), round(float(np.std(f1s)), 4),
+                    round(float(np.mean(drifts)), 3), round(float(np.std(drifts)), 3),
+                    round(float(np.mean(kls)), 5))
 
         # Layer selection: vary freeze_frac to control fraction of variance-matched dims.
         layer_selection = {}
         for layer, frac in (("early", 0.25), ("mid", 0.5), ("late", 0.75), ("all", 1.0)):
-            result = real_backend.real_qad_distill_train(
-                qad_config,
-                split.train_texts, split.train_labels,
-                split.test_texts, split.test_labels,
-                quantize="int4", apply_ov_rescaling=True, freeze_frac=frac,
-            )
-            layer_selection[layer] = {
-                "f1": result["f1"],
-                "variance_drift_pct": result["drift_pct_final"],
-            }
+            f1m, f1s, dm, ds, _ = _train(apply_ov_rescaling=True, freeze_frac=frac)
+            layer_selection[layer] = {"f1": f1m, "f1_std": f1s,
+                                      "variance_drift_pct": dm, "variance_drift_pct_std": ds,
+                                      "n_seeds": n_seeds}
 
         # rho sweep: vary the activation window for OV-Freeze rescaling.
         rho_sweep = {}
+        PPL_KL_CLAMP = 10
         for rho in (0.0, 0.1, 0.2, 0.3, 0.4, 0.5):
-            result = real_backend.real_qad_distill_train(
-                qad_config,
-                split.train_texts, split.train_labels,
-                split.test_texts, split.test_labels,
-                quantize="int4", apply_ov_rescaling=(rho > 0), freeze_frac=1.0, window=rho,
-            )
-            PPL_KL_CLAMP = 10
-            rho_sweep[f"rho_{rho}"] = {
-                "f1": result["f1"],
-                "variance_drift_pct": result["drift_pct_final"],
-                "ppl": round(math.exp(min(result.get("kl_final", 0.0), PPL_KL_CLAMP)), 3),
-            }
+            f1m, f1s, dm, ds, klm = _train(apply_ov_rescaling=(rho > 0), freeze_frac=1.0, window=rho)
+            rho_sweep[f"rho_{rho}"] = {"f1": f1m, "f1_std": f1s,
+                                       "variance_drift_pct": dm, "variance_drift_pct_std": ds,
+                                       "ppl": round(math.exp(min(klm, PPL_KL_CLAMP)), 3),
+                                       "n_seeds": n_seeds}
 
         # Matched-regulariser control: compare no OV-Freeze vs different freeze strengths.
         conditions = {}
         for cond, fov, frac in (("no_reg", False, 0.0), ("ov_freeze_full", True, 1.0),
                                 ("ov_freeze_half", True, 0.5), ("ov_freeze_quarter", True, 0.25)):
-            result = real_backend.real_qad_distill_train(
-                qad_config,
-                split.train_texts, split.train_labels,
-                split.test_texts, split.test_labels,
-                quantize="int4", apply_ov_rescaling=fov, freeze_frac=max(frac, 0.01),
-            )
-            conditions[cond] = {
-                "f1": result["f1"],
-                "variance_drift_pct": result["drift_pct_final"],
-            }
+            f1m, f1s, dm, ds, _ = _train(apply_ov_rescaling=fov, freeze_frac=max(frac, 0.01))
+            conditions[cond] = {"f1": f1m, "f1_std": f1s,
+                                "variance_drift_pct": dm, "variance_drift_pct_std": ds,
+                                "n_seeds": n_seeds}
 
         return {
             "experiment": "exp3", "computation": "h100_real_qwen",

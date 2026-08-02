@@ -21,6 +21,10 @@ paper_run:
   batch_size: 64              # 0.5B@BF16 on 80GB can go larger; conservative 64 for stability
 reproducibility:
   exp2_seeds: 5               # exp2 损失消融多 seed 数（论文声称 5，见 rerun_checklist Tab.5）
+  exp1_seeds: 5               # 路径 B：exp1 QAD 蒸馏多 seed（产出真实 std）
+  exp3_seeds: 5               # 路径 B：exp3 OV-Freeze 各条件多 seed
+  exp11_seeds: 5              # 路径 B：exp11 各量化方案多 seed
+  exp14_seeds: 5              # 路径 B：exp14 各运行时多 seed
 data:
   source: taf28k             # Force real; errors out if missing
   root_hint: /workspace/data # RunPod persistent volume

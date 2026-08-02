@@ -25,21 +25,35 @@ def run(config: dict) -> dict:
     )
     split = leakage_safe_split(ds, test_ratio=0.2, seed=42)
 
-    # Paper path: QAD distillation — train quantised student via KL against frozen BF16 teacher
+    # Paper path: QAD distillation — train quantised student via KL against frozen BF16 teacher.
+    # Multi-seed (reproducibility.exp1_seeds, default 3): real std for the headline F1.
     def run_paper(config: dict) -> dict:
         from realeval import real_backend
+        import torch
+        import numpy as np
         quantize = config.get("training", {}).get("quantize", "int4")
         apply_ov = config.get("training", {}).get("apply_ov_rescaling", True)
-        result = real_backend.real_qad_distill_train(
-            config,
-            split.train_texts,
-            split.train_labels,
-            split.test_texts,
-            split.test_labels,
-            quantize=quantize,
-            apply_ov_rescaling=apply_ov,
-            save_name="exp1_qad",
-        )
+        n_seeds = int(config.get("reproducibility", {}).get("exp1_seeds", 3))
+
+        f1s: list[float] = []
+        result = None
+        for s in range(n_seeds):
+            torch.manual_seed(1000 + s)
+            torch.cuda.manual_seed_all(1000 + s)
+            np.random.seed(1000 + s)
+            result = real_backend.real_qad_distill_train(
+                config,
+                split.train_texts,
+                split.train_labels,
+                split.test_texts,
+                split.test_labels,
+                quantize=quantize,
+                apply_ov_rescaling=apply_ov,
+                # 仅第一个 seed 保存模型到 exp1_qad（避免 exp2/3/10 共用路径覆盖）
+                save_name="exp1_qad" if s == 0 else None,
+            )
+            f1s.append(result["f1"])
+
         return {
             "experiment": "exp1",
             "computation": "h100_real_qwen",
@@ -58,6 +72,8 @@ def run(config: dict) -> dict:
             "snr_max": result["snr_max"],
             "quantize": quantize,
             "is_synthetic": False,
+            "std": round(float(np.std(f1s)), 4) if n_seeds > 1 else None,
+            "n_seeds": n_seeds,
         }
 
     def run_smoke(_: dict) -> dict:
