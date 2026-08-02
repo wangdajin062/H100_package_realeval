@@ -47,6 +47,7 @@ def run(config: dict) -> dict:
         models["bf16_0.5b_transformers"] = {
             "f1": round(float(np.mean(bf16_f1s)), 4),
             "f1_std": round(float(np.std(bf16_f1s)), 4) if n_seeds > 1 else None,
+            "std": round(float(np.std(bf16_f1s)), 4) if n_seeds > 1 else None,
             "runtime": "transformers", "source": "ours", "n_seeds": n_seeds,
         }
         # Q4_K_M 0.5B GGUF edge student via llama.cpp (same test split)
@@ -62,6 +63,7 @@ def run(config: dict) -> dict:
             models["q4km_0.5b_llama_cpp"] = {
                 "f1": round(float(np.mean(gg_f1s)), 4),
                 "f1_std": round(float(np.std(gg_f1s)), 4) if n_seeds > 1 else None,
+                "std": round(float(np.std(gg_f1s)), 4) if n_seeds > 1 else None,
                 "latency_ms_p50": gg.get("latency_ms_p50"),
                 "runtime": "llama_cpp", "source": "ours", "n_seeds": n_seeds,
             }

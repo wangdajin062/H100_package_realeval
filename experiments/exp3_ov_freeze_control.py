@@ -55,7 +55,7 @@ def run(config: dict) -> dict:
         layer_selection = {}
         for layer, frac in (("early", 0.25), ("mid", 0.5), ("late", 0.75), ("all", 1.0)):
             f1m, f1s, dm, ds, _ = _train(apply_ov_rescaling=True, freeze_frac=frac)
-            layer_selection[layer] = {"f1": f1m, "f1_std": f1s,
+            layer_selection[layer] = {"f1": f1m, "f1_std": f1s, "std": f1s,
                                       "variance_drift_pct": dm, "variance_drift_pct_std": ds,
                                       "n_seeds": n_seeds}
 
@@ -64,7 +64,7 @@ def run(config: dict) -> dict:
         PPL_KL_CLAMP = 10
         for rho in (0.0, 0.1, 0.2, 0.3, 0.4, 0.5):
             f1m, f1s, dm, ds, klm = _train(apply_ov_rescaling=(rho > 0), freeze_frac=1.0, window=rho)
-            rho_sweep[f"rho_{rho}"] = {"f1": f1m, "f1_std": f1s,
+            rho_sweep[f"rho_{rho}"] = {"f1": f1m, "f1_std": f1s, "std": f1s,
                                        "variance_drift_pct": dm, "variance_drift_pct_std": ds,
                                        "ppl": round(math.exp(min(klm, PPL_KL_CLAMP)), 3),
                                        "n_seeds": n_seeds}
@@ -74,7 +74,7 @@ def run(config: dict) -> dict:
         for cond, fov, frac in (("no_reg", False, 0.0), ("ov_freeze_full", True, 1.0),
                                 ("ov_freeze_half", True, 0.5), ("ov_freeze_quarter", True, 0.25)):
             f1m, f1s, dm, ds, _ = _train(apply_ov_rescaling=fov, freeze_frac=max(frac, 0.01))
-            conditions[cond] = {"f1": f1m, "f1_std": f1s,
+            conditions[cond] = {"f1": f1m, "f1_std": f1s, "std": f1s,
                                 "variance_drift_pct": dm, "variance_drift_pct_std": ds,
                                 "n_seeds": n_seeds}
 

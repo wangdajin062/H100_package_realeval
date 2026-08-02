@@ -54,6 +54,7 @@ def run(config: dict) -> dict:
                 schemes[scheme_name] = {
                     "f1": round(float(np.mean(f1s)), 4),
                     "f1_std": round(float(np.std(f1s)), 4) if n_seeds > 1 else None,
+                    "std": round(float(np.std(f1s)), 4) if n_seeds > 1 else None,
                     "accuracy": round(float(np.mean(accs)), 4),
                     "n_seeds": n_seeds,
                 }
