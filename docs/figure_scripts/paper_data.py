@@ -136,11 +136,23 @@ _OVF_FULL_F1 = _r(PH_EXP3_OVF_FULL_F1)
 _ovf_f1   = _OVF_FULL_F1   # alias for Fig3 QAT_QAD_OVF compatibility
 _qat_f1 = PH_EXP11_INT4_F1
 
+# Error bars for the QAT/QAD rows: resolved from experiment outputs when a
+# multi-seed run provides a measured std. All experiments are currently
+# single-run (no measured std available), so the paper's estimated error bars
+# serve as fallbacks and are tracked in _MISSING_PLACEHOLDERS as NOT measured.
+PH_EXP1_ERR          = _from_result("exp1", "std", placeholder="PH_EXP1_ERR", fallback=0.007)
+PH_EXP3_OVF_FULL_ERR = _from_result("exp3", "conditions", "ov_freeze_full", "std",
+                                    placeholder="PH_EXP3_OVF_FULL_ERR", fallback=0.006)
+PH_EXP11_INT4_ERR    = _from_result("exp11", "schemes", "int4", "std",
+                                    placeholder="PH_EXP11_INT4_ERR", fallback=0.014)
+PH_EXP14_Q4KM_ERR    = _from_result("exp14", "models", "q4km_0.5b_llama_cpp", "std",
+                                    placeholder="PH_EXP14_Q4KM_ERR", fallback=0.007)
+
 QAT_QAD_OVF = [
-    {"name": "NVFP4 QAT (CE)",         "f1": _qat_f1, "f1_err": 0.014, "recovery": round(_qat_f1 / BF16_F1 * 100, 1)},
-    {"name": "NVFP4 QAD",              "f1": _qad_f1, "f1_err": 0.007, "recovery": round(_qad_f1 / BF16_F1 * 100, 1)},
-    {"name": "NVFP4 QAD + OV-Freeze",  "f1": _ovf_f1, "f1_err": 0.006, "recovery": round(_ovf_f1 / BF16_F1 * 100, 1)},
-    {"name": "Q4_K_M QAD + OV-Freeze", "f1": PH_EXP14_Q4KM_F1, "f1_err": 0.007,
+    {"name": "NVFP4 QAT (CE)",         "f1": _qat_f1, "f1_err": PH_EXP11_INT4_ERR, "recovery": round(_qat_f1 / BF16_F1 * 100, 1)},
+    {"name": "NVFP4 QAD",              "f1": _qad_f1, "f1_err": PH_EXP1_ERR, "recovery": round(_qad_f1 / BF16_F1 * 100, 1)},
+    {"name": "NVFP4 QAD + OV-Freeze",  "f1": _ovf_f1, "f1_err": PH_EXP3_OVF_FULL_ERR, "recovery": round(_ovf_f1 / BF16_F1 * 100, 1)},
+    {"name": "Q4_K_M QAD + OV-Freeze", "f1": PH_EXP14_Q4KM_F1, "f1_err": PH_EXP14_Q4KM_ERR,
      "recovery": round(PH_EXP14_Q4KM_F1 / BF16_F1 * 100, 1)},
 ]
 
