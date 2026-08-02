@@ -14,6 +14,7 @@ Usage on RunPod / H100:
 
 Usage for smoke verification (small models, no GPU weights needed):
     python scripts/rerun_and_validate_contract.py --smoke
+    python scripts/rerun_and_validate_contract.py            # 默认 --smoke（本地快速验证）
 
 Exit code:
     0  all targeted experiments produced contract-aligned results
@@ -60,8 +61,8 @@ def main() -> int:
     args = ap.parse_args()
 
     if not args.paper and not args.smoke:
-        logger.error("Specify one of --paper or --smoke")
-        return 1
+        logger.warning("未指定运行模式，默认 --smoke（本地快速验证；RunPod 真实运行请用 --paper）")
+        args.smoke = True
 
     from realeval.io import load_config
     config = load_config(args.config)

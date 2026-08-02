@@ -235,10 +235,6 @@ _CLEAR_DIRS = [
 
 
 def clear_outputs(dry_run: bool = False) -> list[str]:
-    """Delete experiment outputs. Returns list of deleted paths."""
-    deleted: list[str] = []
-
-def clear_outputs(dry_run: bool = False) -> list[str]:
     """删除实验输出文件。返回已删除路径列表。"""
     deleted: list[str] = []
 
