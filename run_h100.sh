@@ -30,12 +30,12 @@ fi
 CONFIG="${CONFIG:-config/runpod_h100.yaml}"
 
 # 清理旧结果：默认不自动清空（避免单实验重跑误清全部结果）。
-# 需清空时显式加 --clean，或先用 scripts/archive_and_clear.py 归档。
-if [ "$CLEAN" = "1" ]; then
+# 需清空时用 --clean 参数或 CLEAN=1 环境变量，或先 scripts/archive_and_clear.py 归档。
+if [ "${CLEAN:-0}" = "1" ]; then
   rm -rf outputs/results/* outputs/metrics/* outputs/predictions/* 2>/dev/null
-  echo "=== Cleaned previous outputs (--clean) ==="
+  echo "=== Cleaned previous outputs ==="
 else
-  echo "=== 保留旧结果（用 --clean 或 scripts/archive_and_clear.py 归档后清理）==="
+  echo "=== Skipping auto-clean（保留旧结果；用 --clean / CLEAN=1 / archive_and_clear.py 清理）==="
 fi
 
 # H100 multi-GPU: expose all 8 cards for NCCL/DDP (harmless if fewer/none present).
