@@ -21,8 +21,12 @@ def test_local_data_first(tmp_path: Path):
     taf_dir = tmp_path / "TAF28k"
     taf_dir.mkdir()
     test_file = taf_dir / "taf28k.jsonl"
+    # _load_jsonl 校验最少 10 条样本（防损坏文件），构造 10 条以满足校验。
     test_file.write_text(
-        json.dumps({"text": "Local test fraud msg", "label": 1}) + "\n",
+        "".join(
+            json.dumps({"text": f"Local test fraud msg {i}", "label": 1}) + "\n"
+            for i in range(10)
+        ),
         encoding="utf-8")
     # Patch DATA path temporarily
     import realeval.data as rdata
@@ -31,7 +35,7 @@ def test_local_data_first(tmp_path: Path):
         rdata.DATA = tmp_path
         from realeval.data import load_taf28k
         ds = load_taf28k(max_samples=10)
-        assert len(ds["texts"]) == 1 and ds["labels"] == [1], f"Unexpected: {ds}"
+        assert len(ds["texts"]) == 10 and set(ds["labels"]) == {1}, f"Unexpected: {ds}"
         print(f"[PASS] test_local_data_first: 本地文件优先 ({len(ds['texts'])} 条)")
     finally:
         rdata.DATA = original_data
