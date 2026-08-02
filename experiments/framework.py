@@ -142,16 +142,19 @@ def run_with_mode(
     run_paper: Callable[[dict[str, Any]], dict[str, Any]],
     run_smoke: Callable[[dict[str, Any]], dict[str, Any]],
 ) -> dict[str, Any]:
-    """优先运行 paper 路径，不可用时回退到 smoke 路径。
+    """按运行模式分派：smoke 直接走轻量验证路径；paper 走真实计算，资产不可用时才报错。
 
-    预检查确保 H100 安全性后再执行高代价计算。
+    预检查确保 H100 安全性后再执行高代价计算（smoke 跳过全部检查）。
     """
     from realeval.real_backend import run_paper_safe
 
     pre_run_validation(config, exp_id)
 
     try:
-        paper_result = run_paper_safe(bool(config.get("_smoke", False)), config, run_paper)
+        if bool(config.get("_smoke", False)):
+            # smoke 是轻量代码路径验证：不加载真实模型/资产，直接走 run_smoke。
+            return ensure_result_contract(exp_id, run_smoke(config))
+        paper_result = run_paper_safe(False, config, run_paper)
         if paper_result is not None:
             return ensure_result_contract(exp_id, paper_result)
         return ensure_result_contract(exp_id, run_smoke(config))
