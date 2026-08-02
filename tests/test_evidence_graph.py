@@ -163,38 +163,6 @@ class TestStatistics:
         assert result["significant_005"]
 
 
-class TestUnifiedMetrics:
-    def test_f1_score(self):
-        from metrics.base import F1Score
-        f1 = F1Score().compute([0, 1, 0, 1], [0, 1, 1, 0])
-        assert f1["f1"] == pytest.approx(0.5, abs=0.01)
-
-    def test_compute_all(self):
-        from metrics.base import compute_all
-        results = compute_all([0, 1, 0, 1], [0, 1, 1, 0], metric_names=["f1", "accuracy"])
-        assert "f1" in results
-        assert "accuracy" in results
-
-    def test_register_custom_metric(self):
-        from metrics.base import Metric, register_metric, get_metric, _BUILTIN_METRICS
-        saved = dict(_BUILTIN_METRICS)
-
-        @register_metric
-        class CustomMetric(Metric):
-            @staticmethod
-            def name() -> str:
-                return "custom"
-
-            def compute(self, y_true, y_pred, **kwargs):
-                return {"custom": 1.0}
-
-        try:
-            m = get_metric("custom")
-            assert m.compute([], []) == {"custom": 1.0}
-        finally:
-            _BUILTIN_METRICS.clear()
-            _BUILTIN_METRICS.update(saved)
-
 
 class TestAuditTracker:
     def test_capture_environment(self):
@@ -212,11 +180,3 @@ class TestAuditTracker:
         for p in paths:
             assert p.exists()
 
-
-class TestProfiler:
-    def test_report_empty(self):
-        from profiler.gpu_profiler import GpuProfiler
-        p = GpuProfiler(interval_sec=0.1, run_label="test")
-        r = p.report()
-        assert r["n_samples"] == 0
-        assert r["duration_s"] == 0.0

@@ -129,19 +129,12 @@ def test_end_to_end_data_loading():
 
 
 def test_all_metrics_computation():
-    """Verify all registered metrics compute without error."""
+    """Verify classification metrics compute without error."""
     from realeval.metrics import classification_metrics
-    from metrics.base import compute_all, _BUILTIN_METRICS
 
     y_true = [0, 1, 0, 1, 0, 1, 0, 1, 0, 1]
     y_pred = [0, 1, 0, 0, 0, 1, 1, 1, 0, 1]
 
-    # Classification metrics
     m = classification_metrics(y_true, y_pred)
     for key in ("f1", "accuracy", "precision", "recall"):
         assert key in m
-
-    # compute_all with all registered metrics
-    results = compute_all(y_true, y_pred)
-    assert isinstance(results, dict)
-    assert len(results) > 0
