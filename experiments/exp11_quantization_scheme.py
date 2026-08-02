@@ -90,6 +90,7 @@ def run(config: dict) -> dict:
             schemes[quant] = {"f1": m["f1"], "accuracy": m["accuracy"], "quant_note": info["note"]}
         if "int4" not in schemes:
             schemes["int4"] = dict(schemes["fp16"])
-        return {"experiment": "exp11", "computation": "smoke_sklearn", "schemes": schemes}
+        return {"experiment": "exp11", "computation": "smoke_sklearn", "schemes": schemes,
+                "model_source": "smoke_sklearn"}
 
     return run_with_mode("exp11", config, run_paper, run_smoke)

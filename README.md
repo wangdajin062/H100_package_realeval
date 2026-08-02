@@ -77,6 +77,21 @@ cd docs/figure_scripts && python generate_all.py    # 论文图像（只读脚�
 
 其他 CLI：`--exp 1,3,6`（指定实验）、`--resume`（跳过已完成）、`--no-archive`、`--check`（硬件检查）、`--report`（从已有结果生成表格/图像）。
 
+### 3.2 RunPod 部署先决条件
+
+| 项 | 要求 |
+|---|---|
+| **GPU** | NVIDIA H100 SXM 80GB（单卡；`--distributed` 需 ≥1 卡） |
+| **依赖** | `accelerate`（量化/`device_map` 必需；缺失时 `models.py` 自动回退 CPU/设备转移） |
+| **LoRA adapters** | 训练产物置于 `REALEVAL_ADAPTER_ROOT`（默认 `/workspace/outputs/sft_checkpoints`；本地可用该环境变量覆盖） |
+| **数据** | `/workspace/data`（TAF-28k/ChiFraud/AdvFraud-3k 等，持久卷） |
+| **模型** | `/workspace/models` + HF 缓存 `/workspace/hf_cache` |
+| **Python** | 持久 venv `/workspace/venv`（`--system-site-packages` 复用 torch 2.8） |
+| **exp2 多 seed** | `config/runpod_h100.yaml` 的 `reproducibility.exp2_seeds: 5`（论文声称 5） |
+
+> ⚠️ **`run_h100.sh` 清理行为**：该脚本用于全量论文级流水线。**默认不再自动清空** `outputs/results|metrics|predictions`；需显式加 `--clean` 才清空（或先 `scripts/archive_and_clear.py` 归档）。
+> **重跑单个实验**请用 `python -m experiments.runner --no-archive --config config/runpod_h100.yaml --exp N`（避免误清全部结果）。
+
 ## 4. 代码结构
 
 ```

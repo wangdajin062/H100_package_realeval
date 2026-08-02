@@ -46,7 +46,7 @@ def run(config: dict) -> dict:
             "computation": "smoke_unavailable_assets",
             "diagnostic_B": {
                 "h100_measured": {
-                    "generic": None,
+                    "generic": _PAPER_V25_TABLE8_ALPHA_GENERIC,
                     "domain": _PAPER_V25_TABLE8_ALPHA_DOMAIN,
                 },
                 "h100_tokens": {},
