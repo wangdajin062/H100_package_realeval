@@ -162,16 +162,19 @@ QAT_QAD_OVF = [
 
 LATENCY_COMPONENTS = ["Feat.", "Fast", "CoT spec.", "Fus.+UI"]
 
-# exp8 latencies if available, else paper constants
+# exp8 latencies if available, else paper constants.
+# Authoritative source is the structured `latency_detail.<scheme>.<p50_ms|p99_ms>`.
+# The flat `latencies.<scheme>` dict holds only the p50 scalar and must NOT be
+# used for p99 (would silently read the p50 value) — see check_alignment.py.
 LATENCY_P50_MS = [
-    _from_result("exp8", "latencies", "int4", placeholder="PH_EXP8_INT4_P50", fallback=46.47),
-    _from_result("exp8", "latencies", "fp16", placeholder="PH_EXP8_FP16_P50", fallback=34.3),
-    _from_result("exp8", "latencies", "bf16", placeholder="PH_EXP8_BF16_P50", fallback=28.3),
+    _from_result("exp8", "latency_detail", "int4", "p50_ms", placeholder="PH_EXP8_INT4_P50", fallback=46.47),
+    _from_result("exp8", "latency_detail", "fp16", "p50_ms", placeholder="PH_EXP8_FP16_P50", fallback=34.3),
+    _from_result("exp8", "latency_detail", "bf16", "p50_ms", placeholder="PH_EXP8_BF16_P50", fallback=28.3),
 ]
 LATENCY_P99_MS = [
-    _from_result("exp8", "latencies", "int4", placeholder="PH_EXP8_INT4_P99", fallback=47.082),
-    _from_result("exp8", "latencies", "fp16", placeholder="PH_EXP8_FP16_P99", fallback=37.924),
-    _from_result("exp8", "latencies", "bf16", placeholder="PH_EXP8_BF16_P99", fallback=29.568),
+    _from_result("exp8", "latency_detail", "int4", "p99_ms", placeholder="PH_EXP8_INT4_P99", fallback=47.082),
+    _from_result("exp8", "latency_detail", "fp16", "p99_ms", placeholder="PH_EXP8_FP16_P99", fallback=37.924),
+    _from_result("exp8", "latency_detail", "bf16", "p99_ms", placeholder="PH_EXP8_BF16_P99", fallback=29.568),
 ]
 # Pad to 4 components if needed
 while len(LATENCY_P50_MS) < 4:
