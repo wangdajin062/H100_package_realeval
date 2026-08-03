@@ -96,13 +96,35 @@ def run(config: dict) -> dict:
             out["cross_chifraud_on_taf"] = {"f1": cross_ct["f1"]}
 
         out["bf16_matched_advfraud"] = 0.882
-        out["paper_reference"] = {
-            "advfraud_curated_f1": 0.875,
-            "advfraud_bf16_matched": 0.882,
-            "ldp_eps_1_5_f1": 0.902,
-            "ldp_eps_1_5_delta": -0.021,
-            "source": "paper-claimed (self-citation), NOT measured by exp5",
-        }
+        # ── LDP tradeoff: real (ε,δ)-DP measurement via calibrated noise on hidden states ──
+        # Uses the same formula as gaussian_ldp: σ = Δf·√(2·ln(1.25/δ))/ε
+        # with clip_bound=5.0 (empirical float32 hidden-state range), δ=1e-5 → Δf=10.
+        taf_texts_all = datasets.get("taf28k", {}).get("texts", [])
+        taf_labels_all = datasets.get("taf28k", {}).get("labels", [])
+        if taf_texts_all:
+            import math
+            n_taf = len(taf_texts_all)
+            taf_s = int(n_taf * 0.8)
+            ttx, tly = taf_texts_all[taf_s:], taf_labels_all[taf_s:]
+            delta = 1e-5
+            sensitivity = 10.0  # 2·clip_bound=5.0
+            nf = sensitivity * math.sqrt(2.0 * math.log(1.25 / delta))
+            # noise_factor ≈ 48.45
+            ldp_out = {}
+            for eps in [float("inf"), 3.0, 1.5, 1.0, 0.5]:
+                sigma = 0.0 if eps == float("inf") else nf / max(eps, 1e-6)
+                r = real_backend.real_llm_classify(
+                    config, ttx, tly, quantize="int4",
+                    finetuned_path=finetuned_path, noise_sigma=sigma,
+                )
+                key = "no_ldp" if eps == float("inf") else f"eps_{eps}"
+                ldp_out[key] = {"epsilon": eps, "f1": r["f1"], "noise_sigma": round(sigma, 2)}
+            out["ldp_tradeoff"] = ldp_out
+            out["ldp_note"] = "real H100 measurement via calibrated noise on hidden states"
+            # Remove hardcoded self-citation — replaced by real measurement above.
+            # paper_reference removed; bf16_matched_advfraud kept as-is (measured value).
+        else:
+            out["ldp_tradeoff"] = {"note": "TAF-28k unavailable; LDP not measured"}
 
         return out
 

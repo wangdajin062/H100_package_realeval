@@ -42,6 +42,9 @@ PAPER_GROUPS = {
     "04_OV-Freeze":    ["exp3"],           # OV-Freeze ablation + matched-regulariser control
     "05_latency":      ["exp8", "exp6"],   # H100 latency/throughput + speculative-decoding speedup
     "06_robustness":   ["exp5", "exp7"],   # OOD/cross-dataset + adversarial/privacy
+    "07_fusion":       ["exp13", "exp12"], # multimodal fusion ablation (→ 0.923) + FraudFusion baseline
+    "08_ablations":    ["exp9", "exp10"],  # CoT ablation + teacher-scale selection
+    "09_edge":         ["exp14"],          # BF16 vs Q4_K_M GGUF edge deployment comparison
 }
 
 
@@ -274,8 +277,14 @@ def _aggregate_and_save(all_results: dict, bench_summary, env: dict):
         L += ["\\bottomrule", "\\end{tabular}", "\\end{table}"]
         (RESULTS / "paper_tables" / fname).write_text("\n".join(L) + "\n")
 
-    main_rows = [[s, all_results.get(s, {}).get("computation", "-"),
-                  _extract(s, all_results).get("F1", "-")] for s in ("exp4", "exp1")]
+    main_rows = [
+        ["exp13 (fusion)", all_results.get("exp13", {}).get("computation", "-"),
+         _extract("exp13", all_results).get("F1[late]", "-")],
+        ["exp11 (int4)",   all_results.get("exp11", {}).get("computation", "-"),
+         _extract("exp11", all_results).get("F1[int4]", "-")],
+        ["exp1 (QAD-LLM)", all_results.get("exp1", {}).get("computation", "-"),
+         _extract("exp1", all_results).get("F1", "-")],
+    ]
     _latex("table1_main.tex", "Main Result (F1)", ["Experiment", "Computation", "F1"], main_rows)
     abl_rows = [[k, v] for k, v in _extract("exp3", all_results).items()]
     _latex("table2_ablation.tex", "OV-Freeze Ablation (variance drift \\%)",

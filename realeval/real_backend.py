@@ -587,12 +587,14 @@ def real_speculative_alpha(config: dict, texts: list[str], *, gamma=5, n_samples
 # ─────────────────── Real LLM Classification (exp4) ───────────────────
 def real_llm_classify(config: dict, texts: list[str], labels: list[int], *, quantize="int4", use_cot=False,
                        return_preds=False, classify_batch_size: int = None, finetuned_path: str = None,
-                       finetuned_dtype: str = "bf16"):
+                       finetuned_dtype: str = "bf16", noise_sigma: float = 0.0):
     """Real Qwen binary classification — base model (token-scoring) or fine-tuned model (head).
 
     If finetuned_path is provided, loads a fine-tuned model + classification head
     saved by real_distill_train and uses head.predict() for stable, high-F1 results.
     finetuned_dtype: "bf16", "fp16", or "fp32" for loading the fine-tuned model.
+    noise_sigma: if >0, adds Gaussian noise N(0, noise_sigma²) to hidden states
+    before the classification head (for (ε,δ)-DP measurement via calibrated noise).
     Otherwise falls back to zero-shot token-probability comparison on base Qwen.
     """
     from realeval import models, hwenv
@@ -606,13 +608,27 @@ def real_llm_classify(config: dict, texts: list[str], labels: list[int], *, quan
     if finetuned_path:
         from pathlib import Path
         fp = Path(finetuned_path)
-        # Map short dtype names to torch dtypes ("fp32"→float32, "fp16"→float16, etc.)
-        _DTYPE_MAP = {"fp32": torch.float32, "fp16": torch.float16, "bf16": torch.bfloat16,
-                      "float32": torch.float32, "float16": torch.float16, "bfloat16": torch.bfloat16}
-        use_bf16 = finetuned_dtype in ("bf16", "bfloat16")
-        model, tok = models.load_causal_lm(str(fp), quantize=quantize, bf16=use_bf16)
-        if not use_bf16 and quantize not in ("int4", "int8", "nf4"):
-            model = model.to(_DTYPE_MAP.get(finetuned_dtype, torch.float32))
+        # Detect adapter-only save (PeftModel) vs full fine-tuned directory.
+        # QAD-trained models save as PeftModel (adapter-only, no config.json).
+        # Full fine-tuned models save complete weights with config.json.
+        import json as _json
+        adapter_conf = fp / "adapter_config.json"
+        if adapter_conf.is_file():
+            # PeftModel: load base model first, then attach adapter.
+            with open(adapter_conf) as _f:
+                _ac = _json.load(_f)
+            base_id = _ac.get("base_model_name_or_path", config["models"]["teacher"])
+            use_bf16 = finetuned_dtype in ("bf16", "bfloat16")
+            model, tok = models.load_causal_lm(base_id, quantize=quantize, bf16=use_bf16)
+            _require(model is not None, "Fine-tuned base model loading failed")
+            from realeval.student_loader import attach_adapter
+            model = attach_adapter(model, config.get("student_variant", "base"),
+                                   config, adapter_path=str(fp), merge=False,
+                                   quantize=quantize)
+        else:
+            # Full model directory: direct load via load_causal_lm.
+            use_bf16 = finetuned_dtype in ("bf16", "bfloat16")
+            model, tok = models.load_causal_lm(str(fp), quantize=quantize, bf16=use_bf16)
         _require(model is not None, "Fine-tuned model loading failed")
         dev = next(model.parameters()).device
         model.eval()
@@ -636,6 +652,10 @@ def real_llm_classify(config: dict, texts: list[str], labels: list[int], *, quan
             with torch.inference_mode():
                 hidden = model(**enc, output_hidden_states=True).hidden_states[-1]
             last = hidden[torch.arange(len(batch), device=dev), lens].float()
+            # Calibrated Gaussian noise injection for (ε,δ)-DP measurement.
+            # noise_sigma is the std of N(0, σ²) added to hidden states before head.
+            if noise_sigma > 0:
+                last = last + torch.randn_like(last) * noise_sigma
             preds.extend(head(last).argmax(1).tolist())
 
         m = classification_metrics(labels, preds)

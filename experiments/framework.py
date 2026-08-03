@@ -154,7 +154,7 @@ def run_with_mode(
 
     预检查确保 H100 安全性后再执行高代价计算（smoke 跳过全部检查）。
     """
-    from realeval.real_backend import run_paper_safe
+    from realeval.real_backend import run_paper_safe, AssetsUnavailable
 
     pre_run_validation(config, exp_id)
 
@@ -165,7 +165,16 @@ def run_with_mode(
         paper_result = run_paper_safe(False, config, run_paper)
         if paper_result is not None:
             return ensure_result_contract(exp_id, paper_result)
-        return ensure_result_contract(exp_id, run_smoke(config))
+        # In paper mode, silently falling back to smoke would write sklearn
+        # placeholder values into paper tables without warning (alignment/contract
+        # only checks field existence, not computation source).
+        # Ref: code_review_20260803 §2.1, revision_worklist Part 0.
+        raise AssetsUnavailable(
+            f"{exp_id}: real assets unavailable in --paper mode. "
+            f"Smoke fallback blocked to prevent placeholder values in paper tables. "
+            f"Verify models_root() and H100 mount point, or run --smoke explicitly.")
+    except AssetsUnavailable:
+        raise
     except Exception as exc:
         raise ExperimentRuntimeError(f"{exp_id} 运行失败：{exc}") from exc
 
