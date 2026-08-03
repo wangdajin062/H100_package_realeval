@@ -446,7 +446,8 @@ FIG8_LDP = {
     "labels": ["No LDP\n(main results)", "$\\epsilon$-LDP\n($\\epsilon$=1.5)"],
     "f1": [
         _OVF_FULL_F1,             # best QAD+OVF (no LDP)
-        (_get("exp5", "paper_reference", "ldp_eps_1_5_f1")
+        (_get("exp5", "ldp_tradeoff", "eps_1.5", "f1")
+         or _get("exp5", "paper_reference", "ldp_eps_1_5_f1")  # smoke backward compat
          or _FIG8_REF["ldp_eps_1_5_f1"]),
     ],
     "latency": [

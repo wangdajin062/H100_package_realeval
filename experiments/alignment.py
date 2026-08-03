@@ -65,7 +65,10 @@ EXPECTED_FIELDS: dict[str, list[tuple[str, ...]]] = {
         ("advfraud", "full_pool", "f1"),
         ("advfraud", "curated", "f1"),
         ("bf16_matched_advfraud",),
-        ("paper_reference", "ldp_eps_1_5_f1"),
+        ("ldp_tradeoff", "eps_1.5", "f1"),
+        ("ldp_tradeoff", "eps_3.0", "f1"),
+        ("cross_taf_on_chifraud", "f1"),
+        ("cross_chifraud_on_taf", "f1"),
     ],
     "exp6": [
         ("diagnostic_B", "h100_measured", "generic"),
