@@ -30,6 +30,10 @@ training:
   apply_ov_rescaling: true
   quantize: "int4"  # fp16, int8, int4, nf4
   balance_class_weight: true  # weight the classification-head CE by inverse class frequency (fraud is the minority class)
+  val_frac: 0.15               # fraction of training data held out for threshold calibration
+  head_hidden: 128             # hidden dim for two-layer classification head
+  label_smoothing: 0.1         # label smoothing for CE loss (reduces overconfidence on imbalanced data)
+  warmup_steps: 100            # linear LR warmup steps before cosine decay
 
 distillation:
   temperature: 2.0
@@ -41,6 +45,7 @@ distillation:
   window_default: 1.0
   total_steps: 2000              # concept-step space for Fig4 alignment (OVF schedule + SNR range)
   ovf_activation_ratio: 0.7      # activate OV-Freeze at 70% of total training steps
+  cot_max_new_tokens: 48         # max new tokens for CoT reasoning generation (exp9)
 
 hardware:
   use_flash_attn: true

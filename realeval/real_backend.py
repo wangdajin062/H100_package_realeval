@@ -47,6 +47,42 @@ def _cls_prompt(t):
     return _CLS_PFX + _CLS_SFX.format(text=t)
 
 
+# CoT variant: ask the model to reason briefly before deciding. Used only by the
+# fine-tuned head path's use_cot branch, so with-CoT and without-CoT differ ONLY by
+# the generated reasoning context (same model, same head).
+_COT_PFX = "请先分步分析发送者、意图与紧迫性等线索，再判断以下消息是否为欺诈信息（fraud）或正常信息（normal）。"
+_COT_SFX = chr(10) + "先简要推理，再给出结论。" + chr(10) + chr(10) + "消息：{text}" + chr(10) + "分析："
+
+
+def _cot_prompt(t):
+    return _COT_PFX + _COT_SFX.format(text=t)
+
+
+def _best_f1_threshold(probs, labels, grid=None):
+    """Pick the P(fraud) decision threshold that maximises binary F1 on (probs, labels).
+
+    Replaces the fixed argmax@0.5 operating point, which collapses minority-class recall on
+    imbalanced fraud corpora (the main cause of accuracy >> F1). Returns (threshold, f1)."""
+    import numpy as _np
+    p = _np.asarray(probs, dtype=float)
+    y = _np.asarray([int(v) for v in labels], dtype=int)
+    if p.size == 0 or y.sum() == 0 or y.sum() == y.size:
+        return 0.5, 0.0
+    grid = _np.linspace(0.05, 0.95, 19) if grid is None else _np.asarray(grid, dtype=float)
+    best_t, best_f1 = 0.5, -1.0
+    for t in grid:
+        pred = (p >= t).astype(int)
+        tp = int(((pred == 1) & (y == 1)).sum())
+        fp = int(((pred == 1) & (y == 0)).sum())
+        fn = int(((pred == 0) & (y == 1)).sum())
+        prec = tp / (tp + fp) if (tp + fp) else 0.0
+        rec = tp / (tp + fn) if (tp + fn) else 0.0
+        f1 = 2 * prec * rec / (prec + rec) if (prec + rec) else 0.0
+        if f1 > best_f1:
+            best_f1, best_t = f1, float(t)
+    return best_t, best_f1
+
+
 # ─────────────────── Real Distillation (exp1/exp2/exp3) ───────────────────
 def real_distillation_step_metrics(config: dict, texts: list[str], *, apply_ov_rescaling: bool,
                                    quantize="int4", max_batch=64, freeze_frac=1.0, window=1.0, loss_fn="kl"):
@@ -180,25 +216,59 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
 
     dev = next(student.parameters()).device
 
-    # ── Classification head ──
+    # ── Hold out a small val slice from TRAIN (never test) for threshold calibration ──
+    # The tuned threshold replaces argmax@0.5 at eval time — the single biggest lever on F1
+    # when accuracy >> F1 (class imbalance). Falls back to full train on tiny data.
+    _val_frac = float(config.get("training", {}).get("val_frac", 0.15))
+    _n_val = int(len(train_texts) * _val_frac) if len(train_texts) > 20 else 0
+    if _n_val:
+        val_texts, val_labels = train_texts[-_n_val:], train_labels[-_n_val:]
+        train_texts, train_labels = train_texts[:-_n_val], train_labels[:-_n_val]
+    else:
+        val_texts, val_labels = train_texts, train_labels
+
+    # ── Classification head (two-layer for non-linear decision boundary) ──
     hidden_size = student.config.hidden_size
-    dropout = float(config.get("training", {}).get("dropout", 0.5))
-    head = torch.nn.Sequential(
-        torch.nn.Dropout(dropout),
-        torch.nn.Linear(hidden_size, 2, dtype=torch.float32),
+    head_hidden = int(config.get("training", {}).get("head_hidden", 128))
+    dropout = float(config.get("training", {}).get("dropout", 0.1))
+    import torch.nn as _nn
+    head = _nn.Sequential(
+        _nn.Dropout(dropout),
+        _nn.Linear(hidden_size, head_hidden, dtype=torch.float32),
+        _nn.ReLU(),
+        _nn.Dropout(dropout * 0.5),
+        _nn.Linear(head_hidden, 2, dtype=torch.float32),
     ).to(dev)
+    # Kaiming init for better gradient flow on ReLU
+    for _m in head:
+        if isinstance(_m, _nn.Linear):
+            _nn.init.kaiming_uniform_(_m.weight, nonlinearity='relu')
+            if _m.bias is not None:
+                _nn.init.zeros_(_m.bias)
+    # Last layer: Xavier for sigmoid/softmax output
+    _nn.init.xavier_uniform_(head[-1].weight)
+    if head[-1].bias is not None:
+        _nn.init.zeros_(head[-1].bias)
 
     # ── Teacher projection head (exp10 heterogeneous teachers only) ──
     # Homologous (same-architecture) distillation reuses `head` for both teacher and
     # student logits. When the teacher's hidden size differs (exp10 1.5B/3B/7B), build a
-    # separate trainable teacher head so KL can be computed on 2-class logits.
+    # separate trainable two-layer teacher head so KL can be computed on 2-class logits.
     teacher_head = None
     t_hidden = teacher.config.hidden_size
     if t_hidden != hidden_size:
-        teacher_head = torch.nn.Sequential(
-            torch.nn.Dropout(dropout),
-            torch.nn.Linear(t_hidden, 2, dtype=torch.float32),
+        teacher_head = _nn.Sequential(
+            _nn.Dropout(dropout),
+            _nn.Linear(t_hidden, head_hidden, dtype=torch.float32),
+            _nn.ReLU(),
+            _nn.Dropout(dropout * 0.5),
+            _nn.Linear(head_hidden, 2, dtype=torch.float32),
         ).to(dev)
+        for _m in teacher_head:
+            if isinstance(_m, _nn.Linear):
+                _nn.init.kaiming_uniform_(_m.weight, nonlinearity='relu')
+                if _m.bias is not None:
+                    _nn.init.zeros_(_m.bias)
 
 
     # ── Optimiser: student backbone + head ──
@@ -218,9 +288,24 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
         _opt_params.append({"params": teacher_head.parameters(), "lr": head_lr})
     optimizer = torch.optim.AdamW(_opt_params, weight_decay=0.05)
 
+    # ── LR scheduler: cosine annealing with linear warmup (matches Fig4 LR trace) ──
+    warmup_steps = int(config.get("training", {}).get("warmup_steps", 100))
+    total_training_steps = actual_batches_per_epoch * epochs
+    warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
+        optimizer, start_factor=0.01, end_factor=1.0, total_iters=warmup_steps) if warmup_steps > 0 else None
+    cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=total_training_steps - warmup_steps)
+    # SequentialLR: warmup → cosine annealing
+    if warmup_scheduler:
+        lr_scheduler = torch.optim.lr_scheduler.SequentialLR(
+            optimizer, [warmup_scheduler, cosine_scheduler],
+            milestones=[warmup_steps])
+    else:
+        lr_scheduler = cosine_scheduler
+
     # ── Class weighting for imbalanced corpora (fraud is the minority class) ──
     class_weight = None
-    if bool(config.get("training", {}).get("balance_class_weight", False)):
+    if bool(config.get("training", {}).get("balance_class_weight", True)):
         import numpy as _np
         counts = _np.bincount([int(l) for l in train_labels], minlength=2).astype(float)
         counts[counts == 0] = 1.0
@@ -276,7 +361,9 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
 
             # Classification logits via head
             logits = head(s_last)  # (batch, 2)
-            ce_loss = F.cross_entropy(logits, labels_t, weight=class_weight)
+            label_smoothing = float(config.get("training", {}).get("label_smoothing", 0.1))
+            ce_loss = F.cross_entropy(logits, labels_t, weight=class_weight,
+                                      label_smoothing=label_smoothing)
 
             # Loss components depend on loss_fn mode
             kl_loss = torch.tensor(0.0, device=dev)
@@ -339,6 +426,7 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            lr_scheduler.step()  # cosine annealing with warmup
 
             # Diagnostic KL measurement — reuse teacher head logits when available
             with torch.inference_mode():
@@ -368,6 +456,21 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
     student.eval()
     head.eval()
     batch_size = int(config.get("training", {}).get("batch_size", 16))
+
+    # Calibrate decision threshold on val slice (held-out from TRAIN)
+    val_probs = []
+    for start in range(0, len(val_texts), batch_size):
+        batch_texts = val_texts[start:start + batch_size]
+        enc = tok([_cls_prompt(t) for t in batch_texts], return_tensors="pt",
+                  padding=True, truncation=True, max_length=max_seq).to(dev)
+        lens = enc.attention_mask.sum(1).clamp(min=1) - 1
+        with torch.inference_mode():
+            hidden = student(**enc, output_hidden_states=True).hidden_states[-1]
+        last = hidden[torch.arange(len(batch_texts), device=dev), lens].float()
+        val_probs.extend(torch.softmax(head(last), dim=-1)[:, 1].tolist())
+    decision_threshold, _ = _best_f1_threshold(val_probs, [int(v) for v in val_labels])
+
+    # Evaluate on test set with calibrated threshold
     preds = []
     for start in range(0, len(test_texts), batch_size):
         batch_texts = test_texts[start:start + batch_size]
@@ -377,7 +480,8 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
         with torch.inference_mode():
             hidden = student(**enc, output_hidden_states=True).hidden_states[-1]
         last = hidden[torch.arange(len(batch_texts), device=dev), lens].float()
-        preds.extend(head(last).argmax(1).tolist())
+        prob = torch.softmax(head(last), dim=-1)[:, 1]
+        preds.extend((prob >= decision_threshold).int().tolist())
 
     m = classification_metrics([int(v) for v in test_labels], preds)
 
@@ -401,9 +505,10 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
         save_dir.mkdir(parents=True, exist_ok=True)
         student.save_pretrained(str(save_dir))
         tok.save_pretrained(str(save_dir))
-        torch.save({"head": head.state_dict(), "hidden_size": hidden_size, "dropout": dropout},
+        torch.save({"head": head.state_dict(), "hidden_size": hidden_size, "dropout": dropout,
+                     "threshold": decision_threshold},
                    str(save_dir / "head.pt"))
-        logger.info("Saved QAD-trained model to %s", save_dir)
+        logger.info("Saved QAD-trained model to %s (thr=%.3f)", save_dir, decision_threshold)
 
     return {
         "trajectory": trajectory,
@@ -423,6 +528,7 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
         "loss_fn": loss_fn,
         "ov_rescaling": apply_ov_rescaling,
         "freeze_frac": freeze_frac,
+        "decision_threshold": decision_threshold,
     }
 
 
@@ -459,7 +565,7 @@ def real_distill_train(config: dict, train_texts: list[str], train_labels: list[
     epochs = int(config.get("training", {}).get("epochs", 1))
     max_batch = int(config.get("distillation", {}).get("max_batch", 16))
     max_seq = int(config.get("distillation", {}).get("max_seq_length", 256))
-    dropout = float(config.get("training", {}).get("dropout", 0.5))
+    dropout = float(config.get("training", {}).get("dropout", 0.1))
 
     head = torch.nn.Sequential(
         torch.nn.Dropout(dropout),
@@ -644,23 +750,54 @@ def real_llm_classify(config: dict, texts: list[str], labels: list[int], *, quan
         ).to(dev)
         head.load_state_dict(ckpt["head"])
         head.eval()
+        thr = float(ckpt.get("threshold", 0.5))  # tuned operating point; 0.5 fallback for legacy heads
 
         batch_size = classify_batch_size or config.get("training", {}).get("batch_size", 16)
         max_seq = int(config.get("distillation", {}).get("max_seq_length", 256))
+        cot_max_new = int(config.get("distillation", {}).get("cot_max_new_tokens", 48))
         preds = []
         for start in range(0, len(texts), batch_size):
             batch = texts[start:start + batch_size]
-            enc = tok([_cls_prompt(t) for t in batch], return_tensors="pt", padding=True,
-                      truncation=True, max_length=max_seq).to(dev)
-            lens = enc.attention_mask.sum(1).clamp(min=1) - 1
-            with torch.inference_mode():
-                hidden = model(**enc, output_hidden_states=True).hidden_states[-1]
-            last = hidden[torch.arange(len(batch), device=dev), lens].float()
-            # Calibrated Gaussian noise injection for (ε,δ)-DP measurement.
-            # noise_sigma is the std of N(0, σ²) added to hidden states before head.
-            if noise_sigma > 0:
-                last = last + torch.randn_like(last) * noise_sigma
-            preds.extend(head(last).argmax(1).tolist())
+            if use_cot:
+                # CoT-augmented HEAD scoring: SAME fine-tuned model + SAME head as the
+                # no-CoT branch, but the model first greedily generates a short reasoning
+                # trace; the head then reads the hidden state at the last real token of
+                # (prompt + reasoning). This isolates CoT as the ONLY variable, instead of
+                # comparing base-model generate+parse vs a fine-tuned head (the old confound).
+                # The head is trained on non-CoT context, so a null/negative CoT effect here
+                # is a faithful result, not an artefact.
+                _orig_side = getattr(tok, "padding_side", "right")
+                tok.padding_side = "left"  # left-pad for correct batched generation
+                enc = tok([_cot_prompt(t) for t in batch], return_tensors="pt", padding=True,
+                          truncation=True, max_length=max_seq).to(dev)
+                with torch.inference_mode():
+                    with hwenv.autocast_context():
+                        gen = model.generate(**enc, max_new_tokens=cot_max_new, do_sample=False,
+                                             pad_token_id=tok.pad_token_id)
+                tok.padding_side = _orig_side
+                full = tok.batch_decode(gen, skip_special_tokens=True)
+                enc2 = tok(full, return_tensors="pt", padding=True, truncation=True,
+                           max_length=max_seq + cot_max_new).to(dev)
+                lens = enc2.attention_mask.sum(1).clamp(min=1) - 1
+                with torch.inference_mode():
+                    hidden = model(**enc2, output_hidden_states=True).hidden_states[-1]
+                last = hidden[torch.arange(len(batch), device=dev), lens].float()
+                # Threshold-aware prediction using calibrated threshold
+                prob = torch.softmax(head(last), dim=-1)[:, 1]
+                preds.extend((prob >= thr).int().tolist())
+            else:
+                enc = tok([_cls_prompt(t) for t in batch], return_tensors="pt", padding=True,
+                          truncation=True, max_length=max_seq).to(dev)
+                lens = enc.attention_mask.sum(1).clamp(min=1) - 1
+                with torch.inference_mode():
+                    hidden = model(**enc, output_hidden_states=True).hidden_states[-1]
+                last = hidden[torch.arange(len(batch), device=dev), lens].float()
+                # Calibrated Gaussian noise injection for (ε,δ)-DP measurement.
+                # noise_sigma is the std of N(0, σ²) added to hidden states before head.
+                if noise_sigma > 0:
+                    last = last + torch.randn_like(last) * noise_sigma
+                prob = torch.softmax(head(last), dim=-1)[:, 1]
+                preds.extend((prob >= thr).int().tolist())
 
         m = classification_metrics(labels, preds)
         if return_preds:

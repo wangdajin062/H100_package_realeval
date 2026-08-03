@@ -1,7 +1,100 @@
-# 实验结果合约（供图像脚本消费）
+# 实验产出 → 论文图像脚本 字段对齐映射
 
-本文档定义 `docs/figure_scripts/paper_data.py` 所需的最小 JSON 字段集合。  
-实验脚本必须产出符合此合约的结果；`paper_data.py` **不得修改**，字段对齐由实验侧负责。
+> 本文档定义 `docs/figure_scripts/paper_data.py` 所需字段与实验脚本产出字段的完整对齐关系。
+> **硬性约束：`docs/figure_scripts/` 下所有文件不可修改，实验侧须主动适配。**
+
+## 一、映射总表
+
+### Figure 3 → Main Results (F1 + Recovery)
+| 图脚本变量 | paper_data 读取路径 | 实验产出字段 | 类型 | 备注 |
+|-----------|-------------------|------------|------|------|
+| EXP01_QUANT_QUALITY | exp1.f1, exp1.std | exp1 → f1, std | float×2 | QAD F1 |
+| QAT_QAD_OVF | exp11.schemes.int4.f1, .std | exp11 → schemes.int4.f1, .std | float×2 | QAT baseline |
+| BF16_F1 | exp11.schemes.bf16.f1 | exp11 → schemes.bf16.f1 | float | BF16 ceiling |
+
+### Figure 4 → Loss Convergence
+| 图脚本变量 | paper_data 读取路径 | 实验产出字段 | 类型 |
+|-----------|-------------------|------------|------|
+| LOSS_PLATEAU | exp1.kl_plateau | exp1 → kl_plateau | float |
+| LOSS_CONVERGED | exp1.kl_converged | exp1 → kl_converged | float |
+| OVF_ACTIVATION_STEP | exp1.ovf_activation_step | exp1 → ovf_activation_step | int |
+| TOTAL_STEPS | exp1.total_steps | exp1 → total_steps | int |
+| SNR_RANGE | exp1.snr_min, exp1.snr_max | exp1 → snr_min, snr_max | float×2 |
+
+### Figure 5 → Loss & Teacher Ablation
+| 图脚本变量 | paper_data 读取路径 | 实验产出字段 |
+|-----------|-------------------|------------|
+| EXP03_LOSS_ABLATION | exp2.variants.{kl,mse,ce,kl_mse}_only.{f1,kl_final,std} | exp2 → variants.{name}.{f1,kl_final,std} |
+| EXP09_TEACHER | exp10.scales.{teacher,teacher_1.5b,3b,7b}.{f1_fixed,f1_conv} | exp10 → scales.{key}.{f1_fixed,f1_conv} |
+
+### Figure 6 → OV-Freeze Ablation
+| 图脚本变量 | paper_data 读取路径 | 实验产出字段 |
+|-----------|-------------------|------------|
+| EXP04_OVF_LAYER_ABLATION | exp3.layer_selection.{early,mid,late,all}.{f1,variance_drift_pct} | exp3 → layer_selection.{name}.{f1,variance_drift_pct} |
+| EXP10_OVF_STEP_RATIO | exp3.rho_sweep.rho_{0.0..0.5}.{f1,ppl} | exp3 → rho_sweep.{key}.{f1,ppl} |
+
+### Figure 7 → Speculative Decoding
+| 图脚本变量 | paper_data 读取路径 | 实验产出字段 |
+|-----------|-------------------|------------|
+| EXP05_SPECULATIVE | exp6.diagnostic_B.h100_measured.generic | exp6 → diagnostic_B.h100_measured.generic |
+| SPEC_ALPHA_GENERIC | exp6.paper_reference.alpha_generic | exp6 → paper_reference.alpha_generic (cited) |
+| SPEC_ALPHA_TUNED | exp6.paper_reference.alpha_tuned | exp6 → paper_reference.alpha_tuned (cited) |
+| SPEC_GAMMA_DEPLOY | exp6.paper_reference.gamma_deploy | exp6 → paper_reference.gamma_deploy (cited) |
+
+### Figure 8 → Revision Ablations
+| 图脚本变量 | paper_data 读取路径 | 实验产出字段 |
+|-----------|-------------------|------------|
+| FIG8_QUANT | exp11.schemes.{int4,nf4}.f1 + exp11.schemes.bf16.f1 | exp11 → schemes.{int4,nf4,bf16}.f1 |
+| FIG8_ADVFRAUD | exp5.advfraud.{full_pool,curated}.f1 + exp5.bf16_matched_advfraud | exp5 → advfraud.{full_pool,curated}.f1 + bf16_matched_advfraud |
+| FIG8_LDP | exp5.ldp_tradeoff.eps_1.5.f1 | exp5 → ldp_tradeoff.eps_1.5.f1 |
+
+## 二、结果文件格式与命名规范
+
+| 类型 | 路径 | 命名格式 | 说明 |
+|------|------|---------|------|
+| 单次实验结果 | `outputs/results/` | `exp{N}_{YYYYMMDD_HHMMSS}.json` | 时间戳确保可追溯 |
+| 全量归并 | `outputs/results/all_experiments.json` | 固定名 | paper_data.py 候补来源 |
+| 归档快照 | `outputs/archive/` | `{YYYY-MM-DD_HHMMSS}_experiment_results.md` | 旧结果自动归档 |
+| 模型产物 | `outputs/models/exp1_qad/` | 固定名 | head.pt 包含 threshold |
+
+### JSON Schema（每个实验结果文件）
+```json
+{
+  "experiment": "exp1",           // str: 实验短ID（必填）
+  "computation": "h100_real_qwen", // str: 运行路径标记（必填）
+  // ... 实验特定字段（见映射表）
+}
+```
+
+## 三、旧字段兼容策略
+
+1. **`paper_data.py` 加载逻辑**：先按时间戳加载 `exp*_*.json`，再补充 `all_experiments.json`，后加载者不覆盖前加载者。
+2. **阈值兼容**：`head.pt` 无 `threshold` 键时，`real_llm_classify` 回退到 `thr=0.5`（硬 argmax）。
+3. **smoke 路径**：smoke 路径产出结构与 paper 路径完全一致，仅 `computation` 字段标记为 `"smoke_sklearn"` 而非 `"h100_real_qwen"`。
+4. **`decision_threshold`**：exp1 QAD 蒸馏新增字段；旧版结果文件不包含此字段不影响图像脚本（仅 paper 级训后才会使用）。
+
+## 四、验证命令
+
+```bash
+# 验证最新结果文件是否满足契约
+python -m experiments.runner --validate-contract
+
+# 查看 paper_data.py 自检报告
+python docs/figure_scripts/paper_data.py
+
+# 对齐检查器
+python docs/figure_scripts/check_alignment.py
+
+# 生成论文图像
+cd docs/figure_scripts && python generate_all.py
+```
+
+## 五、变更历史
+
+| 日期 | 变更内容 |
+|------|---------|
+| 2026-08-03 | 初始映射创建；新增 `decision_threshold` 字段 (exp1)；新增 `std` 字段 (exp2/exp11/exp14 variants/schemes/models)；`cot_max_new_tokens` 配置项；`val_frac` 校准集比例 |
+
 
 ---
 

@@ -22,12 +22,16 @@ EXPECTED_FIELDS: dict[str, list[tuple[str, ...]]] = {
     "exp2": [
         ("variants", "kl_only", "f1"),
         ("variants", "kl_only", "kl_final"),
+        ("variants", "kl_only", "std"),
         ("variants", "mse_only", "f1"),
         ("variants", "mse_only", "kl_final"),
+        ("variants", "mse_only", "std"),
         ("variants", "ce_only", "f1"),
         ("variants", "ce_only", "kl_final"),
+        ("variants", "ce_only", "std"),
         ("variants", "kl_mse_combined", "f1"),
         ("variants", "kl_mse_combined", "kl_final"),
+        ("variants", "kl_mse_combined", "std"),
     ],
     "exp3": [
         ("conditions", "no_reg", "f1"),
@@ -93,13 +97,19 @@ EXPECTED_FIELDS: dict[str, list[tuple[str, ...]]] = {
     ],
     "exp11": [
         ("schemes", "bf16", "f1"),
+        ("schemes", "bf16", "std"),
         ("schemes", "int4", "f1"),
+        ("schemes", "int4", "std"),
         ("schemes", "nf4", "f1"),
+        ("schemes", "nf4", "std"),
         ("schemes", "fp16", "f1"),
+        ("schemes", "fp16", "std"),
         ("schemes", "int8", "f1"),
+        ("schemes", "int8", "std"),
     ],
     "exp14": [
         ("models", "q4km_0.5b_llama_cpp", "f1"),
+        ("models", "q4km_0.5b_llama_cpp", "std"),
     ],
 }
 
