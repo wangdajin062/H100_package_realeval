@@ -29,6 +29,11 @@ def run(config: dict) -> dict:
             split.train_texts, split.train_labels,
             split.test_texts, split.test_labels,
             quantize="int4", apply_ov_rescaling=True,
+            # freeze_frac/window are FUNCTION PARAMS of real_qad_distill_train, NOT read
+            # from config. Must pass them as kwargs, otherwise every condition silently
+            # runs the default (1.0/1.0) and the OV-Freeze ablation collapses to identical
+            # results (regression introduced by the 307c679 refactor).
+            freeze_frac=frac, window=window,
         )
         drift = result.get("drift_pct_final", 0.0)
         ppl = math.exp(min(result.get("kl_final", 10.0), 10.0))
@@ -63,11 +68,13 @@ def run(config: dict) -> dict:
             f1s, drifts = [], []
             for s in range(n_seeds):
                 set_seed(1000 + s)
-                f1, drift, _ = _train(config, 1.0, 1.0, rho_val)
+                # rho sweeps the OV-Freeze activation WINDOW (freeze_frac stays 1.0).
+                # rho=0 disables OV-Freeze entirely (freeze_frac=0), matching v25 semantics.
+                f1, drift, _ = _train(config, 1.0 if rho_val > 0 else 0.0, rho_val, rho_val)
                 f1s.append(f1)
                 drifts.append(drift)
             # ppl from last seed only (diagnostic)
-            _, _, ppl = _train(config, 1.0, 1.0, rho_val)
+            _, _, ppl = _train(config, 1.0 if rho_val > 0 else 0.0, rho_val, rho_val)
             rho_sweep[f"rho_{rho_val}"] = {
                 "f1": round(float(np.mean(f1s)), 4),
                 "ppl": round(ppl, 3),
