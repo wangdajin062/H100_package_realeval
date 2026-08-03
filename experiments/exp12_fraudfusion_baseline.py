@@ -17,7 +17,14 @@ def run(config: dict) -> dict:
 
     def run_paper(config):
         from realeval import real_backend
-        qad = real_backend.real_llm_classify(config, split.test_texts, split.test_labels, quantize="int4", use_cot=True)
+        from experiments.common import resolve_qad_path
+
+        qad_path = resolve_qad_path()
+        finetuned_path = str(qad_path) if qad_path.exists() else None
+        qad = real_backend.real_llm_classify(
+            config, split.test_texts, split.test_labels, quantize="int4",
+            finetuned_path=finetuned_path,
+        )
         # Storage footprints measured from actual model files on disk.
         import os as _os_12
         def _model_size_mb(model_path_key):

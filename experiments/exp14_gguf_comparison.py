@@ -31,16 +31,21 @@ def run(config: dict) -> dict:
     def run_paper(config):
         from realeval import real_backend, gguf_backend
         import numpy as np
-        from experiments.common import multi_seed_std, n_seeds_from_config, set_seed
+        from experiments.common import multi_seed_std, n_seeds_from_config, set_seed, resolve_qad_path
 
         models = {}
         n_seeds = n_seeds_from_config(config, "exp14")
+        qad_path = resolve_qad_path()
+        finetuned_path = str(qad_path) if qad_path.exists() else None
 
         # BF16 0.5B student via transformers (safetensors)
         bf16_f1s = []
         for s in range(n_seeds):
             set_seed(1000 + s)
-            bf16 = real_backend.real_llm_classify(config, test_texts, test_labels, quantize="fp16")
+            bf16 = real_backend.real_llm_classify(
+                config, test_texts, test_labels, quantize="fp16",
+                finetuned_path=finetuned_path,
+            )
             bf16_f1s.append(bf16["f1"])
         models["bf16_0.5b_transformers"] = {
             "f1": round(float(np.mean(bf16_f1s)), 4),

@@ -91,6 +91,7 @@ EXPECTED_FIELDS: dict[str, list[tuple[str, ...]]] = {
         ("scales", "teacher_7b", "f1_conv"),
     ],
     "exp11": [
+        ("schemes", "bf16", "f1"),
         ("schemes", "int4", "f1"),
         ("schemes", "nf4", "f1"),
         ("schemes", "fp16", "f1"),

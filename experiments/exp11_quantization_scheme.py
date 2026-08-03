@@ -28,6 +28,7 @@ def run(config: dict) -> dict:
         n_seeds = n_seeds_from_config(config, "exp11")
         schemes = {}
         quant_schemes = [
+            ("bf16", "bf16"),
             ("fp16", "fp16"),
             ("int8", "int8"),
             ("int4", "int4"),
@@ -87,7 +88,8 @@ def run(config: dict) -> dict:
             return (q / levels) * (hi - lo) + lo
 
         quant_bitmap = {
-            "fp16": {"bits": 16, "note": "full precision"},
+            "bf16": {"bits": 16, "note": "native bf16 reference (no quantization)"},
+            "fp16": {"bits": 16, "note": "fp16 — note: bf16-trained model may degrade in fp16"},
             "int8": {"bits": 8, "note": "uniform 8-bit"},
             "int4": {"bits": 4, "note": "uniform 4-bit"},
             "nf4": {"bits": 4, "note": "APPROXIMATION -- NF4 is non-uniform; real hardware required"},
