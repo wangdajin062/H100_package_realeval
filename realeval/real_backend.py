@@ -606,6 +606,10 @@ def real_llm_classify(config: dict, texts: list[str], labels: list[int], *, quan
 
     # ── Fine-tuned path: load saved model + head ──
     if finetuned_path:
+        # Suppress per-layer bf16→fp16 warnings from bitsandbytes MatMul8bitLt
+        # (triggered on every attention head × every token; harmless but floods logs).
+        import warnings as _w
+        _w.filterwarnings("ignore", message="MatMul8bitLt: inputs will be cast")
         from pathlib import Path
         fp = Path(finetuned_path)
         # Detect adapter-only save (PeftModel) vs full fine-tuned directory.
