@@ -17,11 +17,26 @@ def run(config: dict) -> dict:
 
     def run_paper(config):
         from realeval import real_backend
-        direct = real_backend.real_llm_classify(config, split.test_texts, split.test_labels, quantize="int4", use_cot=False)
-        cot = real_backend.real_llm_classify(config, split.test_texts, split.test_labels, quantize="int4", use_cot=True)
+        from experiments.common import resolve_qad_path
+
+        qad_path = resolve_qad_path()
+        finetuned_path = str(qad_path) if qad_path.exists() else None
+
+        # no-CoT: use fine-tuned head (correct evaluation path matched to training).
+        direct = real_backend.real_llm_classify(
+            config, split.test_texts, split.test_labels, quantize="int4", use_cot=False,
+            finetuned_path=finetuned_path,
+        )
+        # CoT: generate+parse is fundamentally unreliable for 0.5B models;
+        # kept as-is for diagnostic reference (paper will flag this limitation).
+        cot = real_backend.real_llm_classify(
+            config, split.test_texts, split.test_labels, quantize="int4", use_cot=True,
+        )
         return {"computation": "h100_real_qwen",
-                "with_cot": {"f1": cot["f1"], "fpr": cot.get("fpr")},
-                "without_cot": {"f1": direct["f1"], "fpr": direct.get("fpr")}}
+                "with_cot": {"f1": cot["f1"], "fpr": cot.get("fpr"),
+                             "note": "generate+parse — unreliable for 0.5B; see diagnostic"},
+                "without_cot": {"f1": direct["f1"], "fpr": direct.get("fpr"),
+                                "note": "fine-tuned head path (matched to training)"}}
 
     def run_smoke(_: dict) -> dict:
         logger.info("SMOKE: running small-model verification for exp9")

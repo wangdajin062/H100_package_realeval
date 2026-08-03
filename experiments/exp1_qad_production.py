@@ -18,12 +18,14 @@ def run(config: dict) -> dict:
 
     def run_paper(config: dict) -> dict:
         from realeval import real_backend
+        import numpy as np
 
         quantize = config.get("training", {}).get("quantize", "int4")
         apply_ov = config.get("training", {}).get("apply_ov_rescaling", True)
         n_seeds = n_seeds_from_config(config, "exp1")
 
         f1s: list[float] = []
+        accs: list[float] = []
         result = None
         for s in range(n_seeds):
             set_seed(1000 + s)
@@ -36,12 +38,13 @@ def run(config: dict) -> dict:
                 save_name="exp1_qad" if s == 0 else None,
             )
             f1s.append(result["f1"])
+            accs.append(result["accuracy"])
 
         return {
             "computation": "h100_real_qwen",
             "trajectory": result["trajectory"],
-            "f1": result["f1"],
-            "accuracy": result["accuracy"],
+            "f1": round(float(np.mean(f1s)), 4),
+            "accuracy": round(float(np.mean(accs)), 4),
             "n_train": result["n_train"],
             "n_test": result["n_test"],
             "kl_final": result["kl_final"],
