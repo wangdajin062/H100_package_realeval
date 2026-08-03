@@ -77,6 +77,9 @@ ssh_probe_output.txt
 sync_output.txt
 $null
 
+# ── Large figure formats (generated, not source) ──────────
+*.tiff
+
 # Large data artifacts — kept on RunPod persistent volume (/workspace/data) & local disk, NOT versioned.
 data/**/*.wav
 data/**/*.npz
