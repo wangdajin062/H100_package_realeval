@@ -54,7 +54,7 @@ def run(config: dict) -> dict:
                 "mos_reconstruction": "requires subjective/neural MOS scoring (TODO/planned)",
             },
         }
-        return {"experiment": "exp7", "computation": "h100_real_qwen", "embedding_source": "real_fv",
+        return {"computation": "h100_real_qwen", "embedding_source": "real_fv",
                 "pii_report": pii_report,
                 "asv_eer_pct": asv["asv_eer_pct"], "min_dcf": asv.get("min_dcf"),
                 "speaker_id_accuracy": sid["accuracy"], "glo_reconstruction_corr": glo["mean_reconstruction_corr"],
@@ -77,7 +77,6 @@ def run(config: dict) -> dict:
         sid = privacy.speaker_identification(emb, spk_labels, seed=42)
         glo = privacy.glo_reconstruction_attack(emb, rng.randn(n_sp * per, 64), steps=50, seed=42)
         return {
-            "experiment": "exp7",
             "computation": "smoke_privacy",
             "embedding_source": "synthetic_speaker_structured",
             "pii_report": pii_report,

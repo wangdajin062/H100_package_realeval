@@ -1,6 +1,7 @@
 """exp4: Baseline Comparison — Compare QAD against standard baselines (LogReg, XGBoost, MLP)."""
 from __future__ import annotations
 import logging
+
 from experiments.framework import leakage_safe_split, load_first_nonempty, run_with_mode
 
 logger = logging.getLogger("exp4")
@@ -22,7 +23,6 @@ def run(config: dict) -> dict:
         from sklearn.ensemble import GradientBoostingClassifier
         from sklearn.feature_extraction.text import HashingVectorizer
         baselines = {}
-        # Classical baselines are genuinely different algorithms on real text features (not the LLM).
         vec = HashingVectorizer(n_features=512, alternate_sign=False, norm="l2")
         Xtr = vec.transform(split.train_texts); Xte = vec.transform(split.test_texts)
         algos = {"logreg": LogisticRegression(max_iter=1000),
@@ -34,7 +34,7 @@ def run(config: dict) -> dict:
             baselines[name] = {"f1": m["f1"], "accuracy": m["accuracy"]}
         q = real_backend.real_llm_classify(config, split.test_texts, split.test_labels, quantize="int4")
         baselines["qwen_base"] = {"f1": q["f1"], "accuracy": q["accuracy"]}
-        return {"experiment": "exp4", "computation": "h100_real_qwen", "classifiers": baselines}
+        return {"computation": "h100_real_qwen", "classifiers": baselines}
 
     def run_smoke(_: dict) -> dict:
         logger.info("SMOKE: running small-model verification for exp4")
@@ -52,13 +52,11 @@ def run(config: dict) -> dict:
             ("logreg", LogisticRegression(max_iter=1000, random_state=42)),
             ("xgb", GradientBoostingClassifier(n_estimators=50, random_state=42)),
             ("mlp", MLPClassifier(hidden_layer_sizes=(64,), max_iter=500, random_state=42)),
-            # Smoke uses a surrogate classifier for the LLM baseline so the output
-            # schema matches the paper path (qwen_base) and contract validation.
             ("qwen_base", LogisticRegression(max_iter=1000, random_state=42)),
         ]:
             clf.fit(Xtr, split.train_labels)
             m = classification_metrics(split.test_labels, clf.predict(Xte))
             baselines[bl_name] = {"f1": m["f1"], "accuracy": m["accuracy"]}
-        return {"experiment": "exp4", "computation": "smoke_sklearn", "classifiers": baselines}
+        return {"computation": "smoke_sklearn", "classifiers": baselines}
 
     return run_with_mode("exp4", config, run_paper, run_smoke)

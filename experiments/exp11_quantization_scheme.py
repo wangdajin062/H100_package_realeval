@@ -19,18 +19,14 @@ def run(config: dict) -> dict:
 
     def run_paper(config):
         from realeval import real_backend
-        from realeval import models
-        from pathlib import Path
-        import torch
         import numpy as np
+        from experiments.common import (
+            multi_seed_std, n_seeds_from_config, resolve_qad_path, set_seed,
+        )
+
+        qad_path = resolve_qad_path()
+        n_seeds = n_seeds_from_config(config, "exp11")
         schemes = {}
-
-        # Prefer QAD-trained model from exp1, otherwise fall back to base Qwen
-        qad_path = Path(__file__).resolve().parent.parent / "outputs" / "models" / "exp1_qad"
-
-        # Test each quantisation scheme by loading with real bitsandbytes quantisation.
-        # 多 seed（reproducibility.exp11_seeds，默认 3）：每个方案产出真实 f1 std。
-        n_seeds = int(config.get("reproducibility", {}).get("exp11_seeds", 3))
         quant_schemes = [
             ("fp16", "fp16"),
             ("int8", "int8"),
@@ -41,9 +37,7 @@ def run(config: dict) -> dict:
             try:
                 f1s, accs = [], []
                 for s in range(n_seeds):
-                    torch.manual_seed(1000 + s)
-                    torch.cuda.manual_seed_all(1000 + s)
-                    np.random.seed(1000 + s)
+                    set_seed(1000 + s)
                     result = real_backend.real_llm_classify(
                         config, split.test_texts, split.test_labels,
                         quantize=quant_arg,
@@ -53,20 +47,18 @@ def run(config: dict) -> dict:
                     accs.append(result["accuracy"])
                 schemes[scheme_name] = {
                     "f1": round(float(np.mean(f1s)), 4),
-                    "f1_std": round(float(np.std(f1s)), 4) if n_seeds > 1 else None,
-                    "std": round(float(np.std(f1s)), 4) if n_seeds > 1 else None,
+                    "std": multi_seed_std(f1s),
                     "accuracy": round(float(np.mean(accs)), 4),
                     "n_seeds": n_seeds,
                 }
             except Exception as e:
                 logger.warning("Quantisation scheme %s failed: %s", scheme_name, e)
-                schemes[scheme_name] = {"f1": None, "accuracy": None, "error": str(e)}
+                schemes[scheme_name] = {"f1": 0.0, "std": None, "error": str(e)}
 
         return {
-            "experiment": "exp11",
             "computation": "h100_real_qwen",
             "schemes": schemes,
-            "model_source": "exp1_qad" if qad_path.exists() else "base_qwen",
+            "model_source": str(qad_path) if qad_path.exists() else "not_found",
         }
 
     def run_smoke(_: dict) -> dict:
@@ -106,7 +98,7 @@ def run(config: dict) -> dict:
             schemes[quant] = {"f1": m["f1"], "accuracy": m["accuracy"], "quant_note": info["note"]}
         if "int4" not in schemes:
             schemes["int4"] = dict(schemes["fp16"])
-        return {"experiment": "exp11", "computation": "smoke_sklearn", "schemes": schemes,
+        return {"computation": "smoke_sklearn", "schemes": schemes,
                 "model_source": "smoke_sklearn"}
 
     return run_with_mode("exp11", config, run_paper, run_smoke)

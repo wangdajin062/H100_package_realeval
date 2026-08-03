@@ -29,11 +29,9 @@ def run(config: dict) -> dict:
             ("teacher_7b",     models_cfg.get("teacher_7b")),
         ]
 
-        import copy
-        fixed_config = copy.deepcopy(config)
-        fixed_config.setdefault("training", {})["epochs"] = 1
-        conv_config = copy.deepcopy(config)
-        conv_config.setdefault("training", {})["epochs"] = 5
+        from experiments.common import config_override
+        fixed_config = config_override(config, training={"epochs": 1})
+        conv_config = config_override(config, training={"epochs": 5})
 
         scales = {}
         for key, model_id in teacher_keys:
@@ -67,7 +65,6 @@ def run(config: dict) -> dict:
                 scales[key] = {"f1_fixed": None, "f1_conv": None, "error": str(e)}
 
         return {
-            "experiment": "exp10",
             "computation": "h100_real_qwen",
             "scales": scales,
         }
@@ -100,6 +97,6 @@ def run(config: dict) -> dict:
                 "f1_conv": m_conv["f1"],
                 "accuracy": m_conv["accuracy"],
             }
-        return {"experiment": "exp10", "computation": "smoke_sklearn", "scales": scales}
+        return {"computation": "smoke_sklearn", "scales": scales}
 
     return run_with_mode("exp10", config, run_paper, run_smoke)

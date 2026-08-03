@@ -73,18 +73,31 @@ def _r(v, ndigits=4):
 _MISSING_PLACEHOLDERS: list[tuple[str, str, tuple[str, ...], object]] = []
 
 
-def _from_result(exp_name: str, *keys: str, placeholder: str, fallback, cited: bool = False):
-    """Resolve a value from experiment outputs; fall back only when unavailable.
+class MissingExperimentData(Exception):
+    """实验数据缺失 — 严禁静默回退到论文硬编码值。"""
 
-    Non-cited placeholders are tracked when fallback is used, so callers can
-    detect values that are not coming from real experiment outputs.
+
+_SENTINEL = object()
+
+
+def _from_result(exp_name: str, *keys: str, placeholder: str, fallback=_SENTINEL, cited: bool = False):
+    """从实验结果抽取字段值。
+
+    cited=True: 该值本身来自外部引用（非本实验产出），fallback 是正常的。
+    cited=False: 该值应由本实验产出，缺失说明实验结果不完整 — raise MissingExperimentData。
     """
     value = _get(exp_name, *keys)
     if value is not None:
         return value
-    if not cited:
+    if cited:
         _MISSING_PLACEHOLDERS.append((placeholder, exp_name, keys, fallback))
-    return fallback
+        return fallback
+    if fallback is not _SENTINEL:
+        _MISSING_PLACEHOLDERS.append((placeholder, exp_name, keys, fallback))
+        return fallback
+    raise MissingExperimentData(
+        f"{placeholder}: 实验结果 {exp_name} 缺少字段 {'→'.join(keys)}"
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -217,8 +230,9 @@ def _loss_entry(vk, label, fallback_f1, fallback_kl):
     raw_kl = v.get("kl_final") if isinstance(v, dict) else None
     f1 = _r(raw_f1) if raw_f1 is not None else fallback_f1
     kl = _r(raw_kl, 4) if raw_kl is not None else fallback_kl
+    raw_std = v.get("std") if isinstance(v, dict) else None
     return {"loss": label, "f1": f1, "kl": kl,
-            "std": v.get("std") if isinstance(v, dict) else None}
+            "std": raw_std if raw_std is not None else float("nan")}
 
 EXP03_LOSS_ABLATION = [
     _loss_entry("kl_only",          "Pure KL\n(ours)",

@@ -19,7 +19,7 @@ def run(config: dict) -> dict:
         from realeval import real_backend
         direct = real_backend.real_llm_classify(config, split.test_texts, split.test_labels, quantize="int4", use_cot=False)
         cot = real_backend.real_llm_classify(config, split.test_texts, split.test_labels, quantize="int4", use_cot=True)
-        return {"experiment": "exp9", "computation": "h100_real_qwen",
+        return {"computation": "h100_real_qwen",
                 "with_cot": {"f1": cot["f1"], "fpr": cot.get("fpr")},
                 "without_cot": {"f1": direct["f1"], "fpr": direct.get("fpr")}}
 
@@ -38,7 +38,6 @@ def run(config: dict) -> dict:
         clf_c = GradientBoostingClassifier(n_estimators=100, random_state=42).fit(inter[:ntr], y[:ntr])
         m_cot = classification_metrics(y[ntr:], clf_c.predict(inter[ntr:]))
         return {
-            "experiment": "exp9",
             "computation": "smoke_sklearn",
             "with_cot": {"f1": m_cot["f1"], "fpr": m_cot["fpr"]},
             "without_cot": {"f1": m_direct["f1"], "fpr": m_direct["fpr"]},

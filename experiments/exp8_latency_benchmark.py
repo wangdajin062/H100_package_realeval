@@ -157,7 +157,6 @@ def run(config: dict) -> dict:
             logger.warning("Batch-level benchmark unavailable: %s", e)
 
         return {
-            "experiment": "exp8",
             "computation": "h100_real_qwen",
             "latencies": latencies,
             "latency_detail": latency_detail,
@@ -209,7 +208,6 @@ def run(config: dict) -> dict:
             for bs in (1, 8, 32, 64)
         }
         return {
-            "experiment": "exp8",
             "computation": "smoke_cpu",
             "latencies": latencies,
             "latency_detail": latency_detail,

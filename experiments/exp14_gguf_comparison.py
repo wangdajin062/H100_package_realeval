@@ -30,24 +30,22 @@ def run(config: dict) -> dict:
 
     def run_paper(config):
         from realeval import real_backend, gguf_backend
-        import torch
         import numpy as np
+        from experiments.common import multi_seed_std, n_seeds_from_config, set_seed
+
         models = {}
-        # 多 seed（reproducibility.exp14_seeds，默认 3）：每个运行时产出真实 f1 std。
-        n_seeds = int(config.get("reproducibility", {}).get("exp14_seeds", 3))
+        n_seeds = n_seeds_from_config(config, "exp14")
 
         # BF16 0.5B student via transformers (safetensors)
         bf16_f1s = []
         for s in range(n_seeds):
-            torch.manual_seed(1000 + s)
-            torch.cuda.manual_seed_all(1000 + s)
-            np.random.seed(1000 + s)
+            set_seed(1000 + s)
             bf16 = real_backend.real_llm_classify(config, test_texts, test_labels, quantize="fp16")
             bf16_f1s.append(bf16["f1"])
         models["bf16_0.5b_transformers"] = {
             "f1": round(float(np.mean(bf16_f1s)), 4),
-            "f1_std": round(float(np.std(bf16_f1s)), 4) if n_seeds > 1 else None,
-            "std": round(float(np.std(bf16_f1s)), 4) if n_seeds > 1 else None,
+            "f1_std": multi_seed_std(bf16_f1s),
+            "std": multi_seed_std(bf16_f1s),
             "runtime": "transformers", "source": "ours", "n_seeds": n_seeds,
         }
         # Q4_K_M 0.5B GGUF edge student via llama.cpp (same test split)
@@ -55,22 +53,20 @@ def run(config: dict) -> dict:
             gg_f1s = []
             gg = None
             for s in range(n_seeds):
-                torch.manual_seed(1000 + s)
-                torch.cuda.manual_seed_all(1000 + s)
-                np.random.seed(1000 + s)
+                set_seed(1000 + s)
                 gg = gguf_backend.gguf_classify(config["models"]["student_gguf"], test_texts, test_labels)
                 gg_f1s.append(gg["f1"])
             models["q4km_0.5b_llama_cpp"] = {
                 "f1": round(float(np.mean(gg_f1s)), 4),
-                "f1_std": round(float(np.std(gg_f1s)), 4) if n_seeds > 1 else None,
-                "std": round(float(np.std(gg_f1s)), 4) if n_seeds > 1 else None,
+                "f1_std": multi_seed_std(gg_f1s),
+                "std": multi_seed_std(gg_f1s),
                 "latency_ms_p50": gg.get("latency_ms_p50"),
                 "runtime": "llama_cpp", "source": "ours", "n_seeds": n_seeds,
             }
         except gguf_backend.GGUFUnavailable as e:
             models["q4km_0.5b_llama_cpp"] = {"f1": None, "runtime": "llama_cpp", "source": "ours",
                                              "note": f"GGUF unavailable: {e}"}
-        return {"experiment": "exp14", "computation": "h100_real_qwen", "models": models,
+        return {"computation": "h100_real_qwen", "models": models,
                 "cite_only": {"SAFE_QAQ_7B": {"source": "cited", "note": "reported by source paper; not run here"}}}
 
 
@@ -80,22 +76,15 @@ def run(config: dict) -> dict:
         from sklearn.ensemble import GradientBoostingClassifier
         from realeval.metrics import classification_metrics
         from realeval.data import verification_features
+        from experiments.smoke import quantize_proxy
 
         X, y = verification_features(labels)
         ntr = split
         clf = GradientBoostingClassifier(n_estimators=100, random_state=42).fit(X[:ntr], y[:ntr])
 
-        def _quantize(arr, bits):
-            lo, hi = float(arr.min()), float(arr.max())
-            if hi <= lo:
-                return arr
-            levels = (1 << bits) - 1
-            return (np.round((arr - lo) / (hi - lo) * levels) / levels) * (hi - lo) + lo
-
         bf16_f1 = classification_metrics(y[ntr:], clf.predict(X[ntr:]))["f1"]
-        q4_f1 = classification_metrics(y[ntr:], clf.predict(_quantize(X[ntr:], 4)))["f1"]
+        q4_f1 = classification_metrics(y[ntr:], clf.predict(quantize_proxy(X[ntr:], 4)))["f1"]
         return {
-            "experiment": "exp14",
             "computation": "smoke_sklearn",
             "models": {
                 "bf16_0.5b_transformers": {"f1": bf16_f1, "runtime": "transformers", "source": "ours"},

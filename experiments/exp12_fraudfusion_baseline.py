@@ -54,7 +54,7 @@ def run(config: dict) -> dict:
         quant_x = round(bf16_05 / q4_05, 1) if (bf16_05 and q4_05) else None
         param_x = round(bf16_7b / bf16_05, 1) if (bf16_7b and bf16_05) else None
         total_x = round(quant_x * param_x, 1) if (quant_x and param_x) else None
-        return {"experiment": "exp12", "computation": "h100_real_qwen",
+        return {"computation": "h100_real_qwen",
                 "competitor_comparison_real": {
                     "QAD_MultiGuard_INT4": {"f1": qad["f1"], "source": "ours"},
                     # FraudFusion has no released weights; marked as cite-only (no F1 compared).
@@ -79,7 +79,6 @@ def run(config: dict) -> dict:
         clf = GradientBoostingClassifier(n_estimators=100, random_state=42).fit(X[:ntr], y[:ntr])
         f1 = classification_metrics(y[ntr:], clf.predict(X[ntr:]))["f1"]
         return {
-            "experiment": "exp12",
             "computation": "smoke_sklearn",
             "competitor_comparison_real": {
                 "QAD_MultiGuard_INT4": {"f1": f1, "source": "ours"},

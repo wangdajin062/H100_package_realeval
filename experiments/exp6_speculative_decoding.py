@@ -31,7 +31,6 @@ def run(config: dict) -> dict:
         # is NOT measured (verdict = "NOT MEASURED"); paper_reference is cited-only.
         ref = result.get("paper_reference", {})
         return {
-            "experiment": "exp6",
             "computation": "h100_real_qwen",
             "diagnostic_B": result,
             # paper_reference forwarded as cited-only reference (NOT a measurement).
@@ -42,7 +41,6 @@ def run(config: dict) -> dict:
     def run_smoke(_: dict) -> dict:
         from realeval.specdec import _PAPER_V25_TABLE8_ALPHA_GENERIC, _PAPER_V25_TABLE8_ALPHA_DOMAIN, _PAPER_SPECULATIVE_SPEEDUPS
         return {
-            "experiment": "exp6",
             "computation": "smoke_unavailable_assets",
             "diagnostic_B": {
                 "h100_measured": {

@@ -49,7 +49,7 @@ def run(config: dict) -> dict:
             strategies[sname] = {"f1": result["f1"], "accuracy": result["accuracy"],
                                  "params": _param_map[sname],
                                  "latency_ms": round(lat_ms, 4)}
-        return {"experiment": "exp13", "computation": "h100_real_qwen", "strategies": strategies}
+        return {"computation": "h100_real_qwen", "strategies": strategies}
 
     def run_smoke(_: dict) -> dict:
         logger.info("SMOKE: running small-model verification for exp13")
@@ -114,6 +114,6 @@ def run(config: dict) -> dict:
             "latency_ms": round(hyb_lat, 4),
         }
 
-        return {"experiment": "exp13", "computation": "smoke_sklearn", "strategies": strategies}
+        return {"computation": "smoke_sklearn", "strategies": strategies}
 
     return run_with_mode("exp13", config, run_paper, run_smoke)

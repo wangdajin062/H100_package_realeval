@@ -158,6 +158,8 @@ def _parse_args():
                         help="从已有结果生成论文表格/图像（不运行实验）")
     parser.add_argument("--validate-contract", action="store_true",
                         help="验证最新结果是否符合图像脚本字段合约")
+    parser.add_argument("--align", action="store_true",
+                        help="校验实验字段与图像脚本的对齐情况")
     return parser.parse_args()
 
 
@@ -212,6 +214,14 @@ def _handle_standalone_checks(args):
             logger.error("Contract validation failed")
             sys.exit(2)
         logger.info("Contract validation passed")
+        return True
+
+    if args.align:
+        from experiments.alignment import check_alignment, print_alignment_report
+        report = check_alignment()
+        failed = print_alignment_report(report)
+        if failed:
+            sys.exit(2)
         return True
 
     if args.benchmark:
@@ -304,6 +314,18 @@ def main():
     logger.info("实验完成：%s", list(results.keys()))
     logger.info("结果已保存至 outputs/results/。"
                 "运行 'python -m experiments.runner --report' 生成论文表格/图像。")
+
+    try:
+        from experiments.alignment import check_alignment, print_alignment_report
+        logger.info("运行字段对齐校验...")
+        align_report = check_alignment()
+        failed = print_alignment_report(align_report)
+        if failed:
+            logger.warning("部分实验字段未对齐图像脚本——运行 --align 查看详情")
+        else:
+            logger.info("所有字段对齐通过")
+    except Exception as ae:
+        logger.warning("对齐校验失败（非致命）：%s", ae)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,9 @@
-"""exp5: Cross-Dataset â Evaluate on TAF-28k, ChiFraud, AdvFraud-3k."""
+"""exp5: Cross-Dataset — Evaluate on TAF-28k, ChiFraud, AdvFraud-3k."""
 from __future__ import annotations
 import logging
+
 from experiments.framework import load_first_nonempty, run_with_mode
+from experiments.common import resolve_qad_path
 
 logger = logging.getLogger("exp5")
 
@@ -9,10 +11,7 @@ logger = logging.getLogger("exp5")
 def run(config: dict) -> dict:
     from realeval import data
     max_samples = config.get("data", {}).get("max_samples", 2000)
-    # Anchor TAF-28k explicitly; do not inherit config.dataset default which may point elsewhere.
     taf_ds = data.load_taf28k(max_samples=max_samples)
-    # ChiFraud text JSONL is not shipped (only NPZ embeddings for privacy eval);
-    # fall back to the balanced Chinese fraud proxy so cross-dataset fields are populated.
     chi_ds = data.load_chifraud(max_samples=max_samples)
     if not chi_ds["texts"]:
         logger.warning("ChiFraud text JSONL missing; using balanced4k as Chinese-fraud proxy for exp5")
@@ -25,11 +24,9 @@ def run(config: dict) -> dict:
 
     def run_paper(config):
         from realeval import real_backend, models
-        from pathlib import Path
         real_backend.require_assets(models.models_available(config), "Real Qwen weights unavailable")
 
-        # Prefer QAD-trained model for cross-dataset evaluation
-        qad_path = Path(__file__).resolve().parent.parent / "outputs" / "models" / "exp1_qad"
+        qad_path = resolve_qad_path()
         finetuned_path = str(qad_path) if qad_path.exists() else None
 
         results = {}
@@ -54,7 +51,6 @@ def run(config: dict) -> dict:
                     )
                     results[dname] = {"f1": result["f1"], "accuracy": result["accuracy"]}
 
-                    # Curated subset: first 517 fraud samples (paper revision benchmark)
                     curated_n = min(517, n_adv)
                     curated_texts = ds["texts"][:curated_n] + normal_texts[:curated_n]
                     curated_labels = ds["labels"][:curated_n] + [0] * curated_n
@@ -76,13 +72,10 @@ def run(config: dict) -> dict:
                 )
                 results[dname] = {"f1": result["f1"], "accuracy": result["accuracy"]}
 
-        out = {"experiment": "exp5", "computation": "h100_real_qwen",
+        out = {"computation": "h100_real_qwen",
                "model_source": "exp1_qad" if finetuned_path else "base_qwen"}
         if "taf28k" in results:
             out["taf28k"] = results["taf28k"]
-            # balanced4k is the in-distribution proxy used during development;
-            # for paper runs it aliases the TAF-28k score so downstream reports
-            # see the same main-result value regardless of which dataset name they query.
             out["balanced4k"] = results["taf28k"]
         if "chifraud" in results:
             out["chifraud"] = results["chifraud"]
@@ -90,7 +83,6 @@ def run(config: dict) -> dict:
             out["advfraud"] = {"full_pool": results["advfraud3k"]}
         if "advfraud_curated" in results:
             out.setdefault("advfraud", {})["curated"] = results["advfraud_curated"]
-        # Cross-dataset evaluation (merged compute + assign)
         if "taf28k" in results and "chifraud" in results:
             cross_tc = real_backend.real_llm_classify(
                 config, datasets["chifraud"]["texts"], datasets["chifraud"]["labels"],
@@ -103,8 +95,6 @@ def run(config: dict) -> dict:
             out["cross_taf_on_chifraud"] = {"f1": cross_tc["f1"]}
             out["cross_chifraud_on_taf"] = {"f1": cross_ct["f1"]}
 
-        # NOTE: paper-claimed reference values (self-citation) — NOT measured by exp5.
-        # These must NOT be treated as independent experimental evidence.
         out["bf16_matched_advfraud"] = 0.882
         out["paper_reference"] = {
             "advfraud_curated_f1": 0.875,
@@ -149,13 +139,14 @@ def run(config: dict) -> dict:
             split_taf = 160
             clf_taf = GradientBoostingClassifier(n_estimators=100, random_state=42).fit(X_taf[:split_taf], y_taf[:split_taf])
 
-        out: dict = {"experiment": "exp5", "computation": "smoke_sklearn"}
+        out: dict = {"computation": "smoke_sklearn"}
         if "taf28k" in results:
             out["taf28k"] = results["taf28k"]
-            # balanced4k aliases the TAF-28k in-distribution score for report compatibility.
             out["balanced4k"] = results["taf28k"]
         if "chifraud" in results:
             out["chifraud"] = results["chifraud"]
+        else:
+            out["chifraud"] = {"f1": None, "accuracy": None, "note": "smoke: chifraud dataset unavailable"}
 
         if "taf28k" in clfs and "chifraud" in clfs:
             clf_t, _, _, _ = clfs["taf28k"]
@@ -179,6 +170,11 @@ def run(config: dict) -> dict:
                 "full_pool": results["advfraud3k"],
                 "curated": {"f1": adv_f1, "accuracy": results["advfraud3k"].get("accuracy")},
             }
+        else:
+            out["advfraud"] = {
+                "full_pool": {"f1": None, "accuracy": None, "note": "smoke: advfraud3k dataset unavailable"},
+                "curated": {"f1": None, "accuracy": None},
+            }
 
         Xtr, ytr = X_taf[:split_taf], y_taf[:split_taf]
         Xte, yte = X_taf[split_taf:], y_taf[split_taf:]
@@ -194,8 +190,6 @@ def run(config: dict) -> dict:
                 eps_1_5_f1 = dp_f1
         out["ldp_tradeoff"] = ldp
 
-        # Paper-reference values for Fig8 alignment (smoke uses measured eps_1.5 if available)
-        # NOTE: paper-claimed values (self-citation) — NOT measured by exp5.
         out["bf16_matched_advfraud"] = 0.882
         out["paper_reference"] = {
             "advfraud_curated_f1": 0.875,
