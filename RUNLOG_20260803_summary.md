@@ -18,8 +18,12 @@
 | 14:27 | exp10 落盘（1.5B/3B/7B 教师训练 ~1.1h） |
 | **14:32** | **pipeline 完成**：exp9/exp14 落盘 + all_experiments.json + metrics/表格 |
 | ~14:35 | 全部 14 实验结果回拉本地（sha256 校验通过） |
+| 15:01–15:20 | **重跑 exp1+exp9**（F1 调优 + CoT 重做代码）：exp1 F1 **0.7974**（旧 0.5121）、exp9 without_cot **0.8047** |
+| 15:28–15:40 | **OVF 快速检查**：no_reg drift 52.45 vs ov_freeze_full 0.00（exp3 修复验证成功） |
+| 15:40 | 提交 rho/gguf 改动（`e53baeb`），容器 pull 对齐 |
+| 15:45 | 启动 exp14 重跑（验证 q4km，PID 125903） |
 
-## 修复记录（均已提交 GitHub，远端 main=`cc0459c`）
+## 修复记录（均已提交 GitHub，远端 main=`e53baeb`）
 
 | commit | 内容 |
 |---|---|
@@ -29,6 +33,8 @@
 | `1549499` | **F1 调优 + exp9 CoT 重做**：双层分类头(128)+Kaiming/Xavier、label smoothing 0.1、cosine LR warmup、阈值校准（val_frac 0.15 + `_best_f1_threshold` + ckpt 存阈值）；exp9 with/without CoT 双分支都用微调模型+头；real_backend 微调头路径 `use_cot` 分支（先推理后打分）；config 新键 |
 | `7bf093d` | 修复 NameError：LR scheduler 移到 `actual_batches_per_epoch` 定义之后 |
 | `cc0459c` | 修复 head 加载：`real_llm_classify` 按 state_dict 检测双层/单层头，兼容旧 ckpt |
+| `cec086a` | 修复 exp3 OV-Freeze 消融失效：`freeze_frac/window` 未作 kwargs 传入（307c679 回归）→ 补传 + rho_sweep 映射 window |
+| `e53baeb` | `rho` 缩放 OVF loss（`loss += rho*ovf_loss`）+ gguf_backend 支持 `.f16/.q4km` 扩展名 + `scripts/ovf_quick_check.py` 验证脚本 |
 
 **其他**：容器清理（删 6 个 8/2 旧日志 ~7MB + `.ipynb_checkpoints/`；保留 experiments.log/GGUF/权重）。
 
@@ -51,18 +57,47 @@
 | exp13 (融合策略) | late_fusion **0.9275** / early 0.7164 / hybrid 0.6939 | late 最优 |
 | exp14 (GGUF) | bf16 **0.1609** / q4km **0.0014** | ⚠️ 严重回退（RUNLOG 8/2 曾 0.59/0.70） |
 
-## ⚠️ 异常与待处理
+## ✅ 验证结果（15:01–15:50 重跑：F1 调优 + CoT 重做 + OVF 修复）
 
-1. **exp3 OVF 消融失效**：所有条件 drift=0.0、F1 相同——OVF 响应未测出，需排查（Fig.7a 依赖此结果）。
-2. **exp14 严重回退**：bf16 0.16 / q4km 0.0014 vs 8/2 的 0.59/0.70——需查 head.pt/评估路径是否被 F1 调优改动破坏（本轮用旧代码跑的，但 exp1_qad 模型可能被覆盖）。
-3. **exp12 QAD_MultiGuard 0.06**：异常低，需查。
-4. **exp6 未测**：H100 实测 alpha 与 paper 参考不一致。
-5. **exp9 with_cot 假象**：0.035 仍是 base-generate（本轮加载旧代码）；**CoT 重做需容器 pull 后重跑**才有真实数字。
-6. **F1 调优未验证**：阈值校准/双层头改动从未在 GPU 跑过——需容器 `git pull` 后重跑 exp1，验证 F1 是否从 0.51 提升。
-7. **exp10 0.5B 教师 (0.91) vs QAD 学生 (0.51)**：架构同源却差 0.4，方法学上需说明或排查。
+### exp1（F1 调优）— 巨大提升
+| 指标 | 旧（无调优 08:38） | 新（调优 15:18） |
+|---|---|---|
+| **F1** | 0.5121 | **0.7974（+0.285）** |
+| accuracy | 0.6996 | **0.9456** |
+| std | 0.1826 | **0.0133** |
 
-## 容器状态（14:32 后）
+> 双层头(128) + label smoothing 0.1 + cosine LR warmup + 阈值校准；n_train=10880（12800×0.85，15% val 用于 `_best_f1_threshold` 校准），n_test=3200，int4。
 
-- 训练进程 PID 4537 已结束，全部交付物（results/metrics/tables/CSV）落盘。
-- 容器 git HEAD=5362b59（落后 GitHub `cc0459c`），**待训练结束后 `git pull` 对齐**。
+### exp9（CoT 重做）— 真实数字
+| 路径 | f1 | fpr |
+|---|---|---|
+| without_cot | **0.8047** | 0.0165 |
+| with_cot | **0.3131** | 0.2608 |
+
+> 双分支都用微调模型+头（仅 CoT 不同）。结论：**CoT 推理对微调头分类有害**（0.80→0.31），是可信方法学发现，不再是 base-generate 的 0.035 假象。
+
+### exp3（OVF 修复）— drift 恢复响应
+| 条件 | drift | f1 |
+|---|---|---|
+| no_reg | **52.45** | 0.8047 |
+| ov_freeze_full | **0.00** | 0.8047 |
+
+> 修复前所有条件 drift=0；修复后 no_reg（无 OVF）drift 高、full（全匹配）归零。完整 exp3（14 配置×5 seed，3-4h）待跑。
+
+## ⚠️ 异常与待处理（按当前状态更新）
+
+1. **exp3 OVF 消融**：✅ 已修复（`cec086a`）+ 快速验证（no_reg drift 52.45 / full 0.00）；**完整 exp3（14 配置×5 seed，3-4h）待跑**。
+2. **exp14**：⏳ 重跑验证中（q4km 解析/官方 GGUF 待确认）；bf16 应随新 exp1_qad 从 0.16 提升。
+3. **exp12**：与 exp14 bf16 同根因（跨域 TAF-28k 泛化）——新 exp1_qad 下应提升，待复测。
+4. **exp6 未测**：H100 实测 alpha 0.468 ≠ paper 参考 0.78，verdict NOT MEASURED——需查。
+5. **exp9 CoT**：✅ 已修复（CoT 重做）——真实数字 with_cot 0.3131 / without_cot 0.8047，**CoT 对微调头分类有害**，论文需改写"CoT 有效"结论。
+6. **F1 调优**：✅ 已验证——exp1 F1 0.5121→**0.7974**、acc→0.9456、std→0.0133。
+7. **exp10 0.5B 教师 (0.91) vs QAD 学生 (0.51)**：架构同源却差 0.4，方法学上需说明或排查（可能与评估阈值/头未对齐有关）。
+8. **q4km 领域 GGUF**：`exp1_qad_q4km.gguf.f16` 是调优前导出的 f16（非 q4_k_m）；若作手机端交付物，需从新 exp1_qad **重新导出**并回测。
+
+## 容器状态（15:45 后）
+
+- 全量 pipeline（PID 4537）已结束，交付物落盘；重跑（exp1+exp9）已完成。
+- 容器 git HEAD=`e53baeb`（= GitHub，含 F1 调优 + CoT + rho/gguf 改动）。
+- **exp14 重跑进行中**（PID 125903），后续接完整 exp3（3-4h）。
 - 保留文件：`experiments.log`、audit.log、export_gguf*.log、`exp1_qad_q4km.gguf.f16`(949M)、26G 模型权重。
