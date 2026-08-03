@@ -28,8 +28,6 @@ EXPECTED_FIELDS: dict[str, list[tuple[str, ...]]] = {
         ("variants", "ce_only", "kl_final"),
         ("variants", "kl_mse_combined", "f1"),
         ("variants", "kl_mse_combined", "kl_final"),
-        ("variants", "kl_task", "f1"),
-        ("variants", "kl_task", "kl_final"),
     ],
     "exp3": [
         ("conditions", "no_reg", "f1"),

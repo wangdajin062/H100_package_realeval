@@ -67,10 +67,10 @@ def n_seeds_from_config(config: dict[str, Any], exp_id: str) -> int:
 
 
 def multi_seed_std(values: list[float]) -> float | None:
-    """多 seed 的标准差。单 seed 返回 None。"""
+    """多 seed 的样本标准差（ddof=1）。单 seed 返回 None。"""
     if len(values) <= 1:
         return None
-    return round(float(np.std(values)), 4)
+    return round(float(np.std(values, ddof=1)), 4)
 
 
 def config_override(config: dict[str, Any], **overrides: Any) -> dict[str, Any]:

@@ -42,7 +42,8 @@ def gguf_classify(model_ref: str, texts, labels, *, n_ctx: int = 2048,
                   n_gpu_layers: int = -1, max_tokens: int = 4) -> dict:
     """Classify fraud/normal texts with a GGUF model via llama.cpp; return real metrics.
 
-    Uses a minimal instruction prompt and reads the model's first-token decision. Returns a dict with
+    Uses the same Chinese prompt template as real_backend._cls_prompt for fair comparison
+    across BF16 (transformers) and GGUF (llama.cpp) runtimes. Returns a dict with
     f1/accuracy, the per-sample latency, and runtime="llama_cpp". Raises GGUFUnavailable if the
     llama_cpp package or the model file is missing (caller decides how to handle).
     """
@@ -56,23 +57,30 @@ def gguf_classify(model_ref: str, texts, labels, *, n_ctx: int = 2048,
     llm = Llama(model_path=str(gguf_path), n_ctx=n_ctx, n_gpu_layers=n_gpu_layers, verbose=False)
 
     from realeval.metrics import classification_metrics
+    # Prompt aligned with real_backend._cls_prompt for fair comparison
+    # across BF16 (transformers) and GGUF (llama.cpp) runtimes.
+    _CLS_PROMPT = ("请判断以下消息是否为欺诈信息（fraud）或正常信息（normal）。"
+                   "\n仅输出一个词：fraud 或 normal。"
+                   "\n\n消息：{text}\n分类：")
     preds, lat = [], []
     for txt in texts:
-        prompt = ("You are a fraud detector. Answer with a single digit: 1 if the message is fraud, "
-                  "0 if normal.\nMessage: " + str(txt)[:1000] + "\nAnswer:")
+        prompt = _CLS_PROMPT.format(text=str(txt)[:1000])
         t0 = time.perf_counter()
         out = llm(prompt, max_tokens=max_tokens, temperature=0.0)
         lat.append((time.perf_counter() - t0) * 1000)
         ans = out["choices"][0]["text"].strip()
-        # Robust regex-based extraction: match digit or fraud/normal keywords.
-        # Handles "1", "0", "1.", "fraud", "Fraud", "normal", "answer: 1", etc.
+        # Parse: priority "fraud"/"normal" (prompt asks for these words),
+        # fallback to "1"/"0" for legacy GGUF models.
         import re
-        m = re.search(r"\b(1|0)\b", ans) or re.search(r"\b(fraud|normal)\b", ans, re.IGNORECASE)
+        m = re.search(r"\b(fraud|normal)\b", ans, re.IGNORECASE)
         if m:
-            token = m.group(1).lower()
-            preds.append(1 if token in ("1", "fraud") else 0)
+            preds.append(1 if m.group(1).lower() == "fraud" else 0)
         else:
-            preds.append(0)  # fallback: default to non-fraud
+            m = re.search(r"\b(1|0)\b", ans)
+            if m:
+                preds.append(1 if m.group(1) == "1" else 0)
+            else:
+                preds.append(0)  # fallback: default to non-fraud
 
     import numpy as np
     m = classification_metrics(np.asarray(labels), np.asarray(preds))

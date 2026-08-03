@@ -43,8 +43,8 @@ def run(config: dict) -> dict:
         for s in range(n_seeds):
             set_seed(1000 + s)
             bf16 = real_backend.real_llm_classify(
-                config, test_texts, test_labels, quantize="fp16",
-                finetuned_path=finetuned_path,
+                config, test_texts, test_labels, quantize=None,
+                finetuned_path=finetuned_path, finetuned_dtype="bf16",
             )
             bf16_f1s.append(bf16["f1"])
         models["bf16_0.5b_transformers"] = {

@@ -60,11 +60,19 @@ def run(config: dict) -> dict:
 
         rho_sweep: dict[str, dict] = {}
         for rho_val in [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]:
-            set_seed(42)
-            f1, drift, ppl = _train(config, 1.0, 1.0, rho_val)
+            f1s, drifts = [], []
+            for s in range(n_seeds):
+                set_seed(1000 + s)
+                f1, drift, _ = _train(config, 1.0, 1.0, rho_val)
+                f1s.append(f1)
+                drifts.append(drift)
+            # ppl from last seed only (diagnostic)
+            _, _, ppl = _train(config, 1.0, 1.0, rho_val)
             rho_sweep[f"rho_{rho_val}"] = {
-                "f1": f1, "ppl": round(ppl, 3),
-                "variance_drift_pct": round(drift, 1),
+                "f1": round(float(np.mean(f1s)), 4),
+                "ppl": round(ppl, 3),
+                "variance_drift_pct": round(float(np.mean(drifts)), 1),
+                "std": multi_seed_std(f1s),
             }
 
         cond_specs = [
@@ -113,7 +121,7 @@ def run(config: dict) -> dict:
             for name in ["early", "mid", "late", "all"]
         }
         rho_sweep = {
-            f"rho_{v}": {"f1": base_f1, "ppl": 1.5, "variance_drift_pct": 61.5}
+            f"rho_{v}": {"f1": base_f1, "ppl": 1.5, "variance_drift_pct": 61.5, "std": None}
             for v in [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
         }
         conditions = {

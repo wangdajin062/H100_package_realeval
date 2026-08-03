@@ -22,21 +22,28 @@ def run(config: dict) -> dict:
         qad_path = resolve_qad_path()
         finetuned_path = str(qad_path) if qad_path.exists() else None
 
-        # no-CoT: use fine-tuned head (correct evaluation path matched to training).
+        # no-CoT: uses fine-tuned head (head(last_hidden).argmax(1)).
+        # real_backend.real_llm_classify with finetuned_path returns at :644 via head path,
+        # BEFORE reaching the token-probability scoring code at :700-718.
         direct = real_backend.real_llm_classify(
             config, split.test_texts, split.test_labels, quantize="int4", use_cot=False,
             finetuned_path=finetuned_path,
         )
-        # CoT: generate+parse is fundamentally unreliable for 0.5B models;
-        # kept as-is for diagnostic reference (paper will flag this limitation).
+        # CoT: generate+parse on base Qwen (no finetuned_path).
+        # finetuned_path CANNOT be added here — it would trigger the head-only return
+        # at :644, bypassing generate entirely. CoT inherently requires generate(+parse),
+        # which is fundamentally unreliable for 0.5B models (F1≈0.035).
+        # This branch is kept as a diagnostic reference only.
         cot = real_backend.real_llm_classify(
             config, split.test_texts, split.test_labels, quantize="int4", use_cot=True,
         )
         return {"computation": "h100_real_qwen",
                 "with_cot": {"f1": cot["f1"], "fpr": cot.get("fpr"),
-                             "note": "generate+parse — unreliable for 0.5B; see diagnostic"},
+                             "note": "base Qwen generate+parse — unreliable for 0.5B; "
+                                     "finetuned_path NOT applicable (would bypass generate)"},
                 "without_cot": {"f1": direct["f1"], "fpr": direct.get("fpr"),
-                                "note": "fine-tuned head path (matched to training)"}}
+                                "note": "fine-tuned head path — head(last_hidden).argmax(1), "
+                                        "matched to training paradigm"}}
 
     def run_smoke(_: dict) -> dict:
         logger.info("SMOKE: running small-model verification for exp9")

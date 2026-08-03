@@ -16,7 +16,11 @@ def run(config: dict) -> dict:
 
     def run_paper(config):
         from realeval import real_backend
+        import numpy as np
+        from experiments.common import config_override, multi_seed_std, n_seeds_from_config, set_seed
         models_cfg = config.get("models", {})
+
+        n_seeds = n_seeds_from_config(config, "exp10")
 
         # Teacher-scale ablation: each teacher trains the same student.
         # Two scenarios per teacher:
@@ -29,7 +33,6 @@ def run(config: dict) -> dict:
             ("teacher_7b",     models_cfg.get("teacher_7b")),
         ]
 
-        from experiments.common import config_override
         fixed_config = config_override(config, training={"epochs": 1})
         conv_config = config_override(config, training={"epochs": 5})
 
@@ -38,26 +41,34 @@ def run(config: dict) -> dict:
             if not model_id:
                 continue
             try:
-                # Fixed token budget (1 epoch)
-                fixed_result = real_backend.real_qad_distill_train(
-                    fixed_config,
-                    split.train_texts, split.train_labels,
-                    split.test_texts, split.test_labels,
-                    quantize="int4",
-                    teacher_model=model_id,
-                )
-                # To convergence (5 epochs)
-                conv_result = real_backend.real_qad_distill_train(
-                    conv_config,
-                    split.train_texts, split.train_labels,
-                    split.test_texts, split.test_labels,
-                    quantize="int4",
-                    teacher_model=model_id,
-                )
+                fixed_f1s, conv_f1s, conv_accs = [], [], []
+                for s in range(n_seeds):
+                    set_seed(1000 + s)
+                    # Fixed token budget (1 epoch)
+                    fixed_result = real_backend.real_qad_distill_train(
+                        fixed_config,
+                        split.train_texts, split.train_labels,
+                        split.test_texts, split.test_labels,
+                        quantize="int4",
+                        teacher_model=model_id,
+                    )
+                    fixed_f1s.append(fixed_result["f1"])
+                    # To convergence (5 epochs)
+                    conv_result = real_backend.real_qad_distill_train(
+                        conv_config,
+                        split.train_texts, split.train_labels,
+                        split.test_texts, split.test_labels,
+                        quantize="int4",
+                        teacher_model=model_id,
+                    )
+                    conv_f1s.append(conv_result["f1"])
+                    conv_accs.append(conv_result["accuracy"])
                 scales[key] = {
-                    "f1_fixed": fixed_result["f1"],
-                    "f1_conv": conv_result["f1"],
-                    "accuracy": conv_result["accuracy"],
+                    "f1_fixed": round(float(np.mean(fixed_f1s)), 4),
+                    "f1_conv": round(float(np.mean(conv_f1s)), 4),
+                    "accuracy": round(float(np.mean(conv_accs)), 4),
+                    "std": multi_seed_std(conv_f1s),
+                    "n_seeds": n_seeds,
                     "teacher_model": model_id,
                 }
             except Exception as e:
@@ -96,6 +107,9 @@ def run(config: dict) -> dict:
                 "f1_fixed": m_fixed["f1"],
                 "f1_conv": m_conv["f1"],
                 "accuracy": m_conv["accuracy"],
+                "std": None,
+                "n_seeds": 1,
+                "teacher_model": f"synthetic_{teacher}",
             }
         return {"computation": "smoke_sklearn", "scales": scales}
 

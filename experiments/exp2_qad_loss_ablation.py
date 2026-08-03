@@ -29,11 +29,14 @@ def run(config: dict) -> dict:
             ("mse_only", "mse"),
             ("ce_only", "ce"),
             ("kl_mse_combined", "kl_mse"),
-            ("kl_task", "kl"),
+            # kl_task removed: was identical to kl_only except for OVF toggle,
+            # which confounded loss ablation with OVF ablation (§1.1 code_review_20260803).
         ]
         variants: dict[str, dict] = {}
         for loss_name, loss_fn in loss_specs:
-            use_ovf = (loss_name not in ("kl_task", "ce_only"))
+            # All variants use consistent OVF setting (off) — OVF is tested separately
+            # in exp3; mixing it here confounds loss-function comparison.
+            use_ovf = False
             f1s, kls = [], []
             for s in range(n_seeds):
                 set_seed(1000 + s)
@@ -80,7 +83,6 @@ def run(config: dict) -> dict:
             ("mse_only", lambda kl, mse, ce: mse),
             ("ce_only", lambda kl, mse, ce: ce),
             ("kl_mse_combined", lambda kl, mse, ce: kl + mse),
-            ("kl_task", lambda kl, mse, ce: kl),
         ]
         variants: dict[str, dict] = {}
         for loss_name, loss_fn in loss_specs:

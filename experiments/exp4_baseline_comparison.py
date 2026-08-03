@@ -34,7 +34,9 @@ def run(config: dict) -> dict:
             baselines[name] = {"f1": m["f1"], "accuracy": m["accuracy"]}
         q = real_backend.real_llm_classify(config, split.test_texts, split.test_labels, quantize="int4")
         baselines["qwen_base"] = {"f1": q["f1"], "accuracy": q["accuracy"]}
-        return {"computation": "h100_real_qwen", "classifiers": baselines}
+        return {"computation": "h100_real_qwen", "classifiers": baselines,
+                "dataset": "ChiFraud (load_chifraud_balanced); NOT TAF-28k. "
+                           "Do not compare directly with Tab.3 TAF-28k numbers."}
 
     def run_smoke(_: dict) -> dict:
         logger.info("SMOKE: running small-model verification for exp4")

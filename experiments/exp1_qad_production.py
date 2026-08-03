@@ -26,7 +26,11 @@ def run(config: dict) -> dict:
 
         f1s: list[float] = []
         accs: list[float] = []
-        result = None
+        kls: list[float] = []
+        drifts: list[float] = []
+        snr_mins: list[float] = []
+        snr_maxs: list[float] = []
+        trajectory = None
         for s in range(n_seeds):
             set_seed(1000 + s)
             result = real_backend.real_qad_distill_train(
@@ -39,26 +43,37 @@ def run(config: dict) -> dict:
             )
             f1s.append(result["f1"])
             accs.append(result["accuracy"])
+            kls.append(result["kl_final"])
+            drifts.append(result["drift_pct_final"])
+            snr_mins.append(result["snr_min"])
+            snr_maxs.append(result["snr_max"])
+            # trajectory: keep last seed's (per-step sequence not averaged)
+            trajectory = result["trajectory"]
 
         return {
             "computation": "h100_real_qwen",
-            "trajectory": result["trajectory"],
+            "trajectory": trajectory,
+            "trajectory_note": "single-seed (last of n_seeds); cross-seed avg not meaningful for per-step curves",
             "f1": round(float(np.mean(f1s)), 4),
             "accuracy": round(float(np.mean(accs)), 4),
             "n_train": result["n_train"],
             "n_test": result["n_test"],
-            "kl_final": result["kl_final"],
-            "drift_pct_final": result["drift_pct_final"],
+            "kl_final": round(float(np.mean(kls)), 5),
+            "kl_final_list": [round(v, 5) for v in kls],
+            "drift_pct_final": round(float(np.mean(drifts)), 1),
+            "drift_pct_list": [round(v, 1) for v in drifts],
             "kl_plateau": result["kl_plateau"],
             "kl_converged": result["kl_converged"],
             "total_steps": result["total_steps"],
             "ovf_activation_step": result["ovf_activation_step"],
-            "snr_min": result["snr_min"],
-            "snr_max": result["snr_max"],
+            "snr_min": round(float(np.mean(snr_mins)), 2),
+            "snr_max": round(float(np.mean(snr_maxs)), 2),
+            "snr_note": "cross-seed mean; single-seed listed in *_list fields",
             "quantize": quantize,
             "is_synthetic": False,
             "std": multi_seed_std(f1s),
             "n_seeds": n_seeds,
+            "save_note": "seed-0 checkpoint saved (save_name='exp1_qad'); downstream loads this single weight" if n_seeds > 1 else None,
         }
 
     def run_smoke(_: dict) -> dict:
