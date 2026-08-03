@@ -745,10 +745,24 @@ def real_llm_classify(config: dict, texts: list[str], labels: list[int], *, quan
         model.eval()
 
         ckpt = torch.load(str(fp / "head.pt"), map_location=dev)
-        head = torch.nn.Sequential(
-            torch.nn.Dropout(ckpt["dropout"]),
-            torch.nn.Linear(ckpt["hidden_size"], 2, dtype=torch.float32),
-        ).to(dev)
+        # Two-layer head (F1 tuning): Sequential(Dropout, Linear, ReLU, Dropout, Linear)
+        # has a "4.weight" key (last Linear). Legacy 1-layer heads only have "1.weight".
+        # Detect which layout was saved so load_state_dict doesn't crash on shape mismatch.
+        sd = ckpt["head"]
+        if "4.weight" in sd:
+            _head_hidden = sd["4.weight"].shape[1]
+            head = torch.nn.Sequential(
+                torch.nn.Dropout(ckpt["dropout"]),
+                torch.nn.Linear(ckpt["hidden_size"], _head_hidden, dtype=torch.float32),
+                torch.nn.ReLU(),
+                torch.nn.Dropout(ckpt["dropout"] * 0.5),
+                torch.nn.Linear(_head_hidden, 2, dtype=torch.float32),
+            ).to(dev)
+        else:
+            head = torch.nn.Sequential(
+                torch.nn.Dropout(ckpt["dropout"]),
+                torch.nn.Linear(ckpt["hidden_size"], 2, dtype=torch.float32),
+            ).to(dev)
         head.load_state_dict(ckpt["head"])
         head.eval()
         thr = float(ckpt.get("threshold", 0.5))  # tuned operating point; 0.5 fallback for legacy heads
