@@ -288,21 +288,6 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
         _opt_params.append({"params": teacher_head.parameters(), "lr": head_lr})
     optimizer = torch.optim.AdamW(_opt_params, weight_decay=0.05)
 
-    # ── LR scheduler: cosine annealing with linear warmup (matches Fig4 LR trace) ──
-    warmup_steps = int(config.get("training", {}).get("warmup_steps", 100))
-    total_training_steps = actual_batches_per_epoch * epochs
-    warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
-        optimizer, start_factor=0.01, end_factor=1.0, total_iters=warmup_steps) if warmup_steps > 0 else None
-    cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=total_training_steps - warmup_steps)
-    # SequentialLR: warmup → cosine annealing
-    if warmup_scheduler:
-        lr_scheduler = torch.optim.lr_scheduler.SequentialLR(
-            optimizer, [warmup_scheduler, cosine_scheduler],
-            milestones=[warmup_steps])
-    else:
-        lr_scheduler = cosine_scheduler
-
     # ── Class weighting for imbalanced corpora (fraud is the minority class) ──
     class_weight = None
     if bool(config.get("training", {}).get("balance_class_weight", True)):
@@ -322,6 +307,22 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
     ovf_activation_step = int(concept_total_steps * ovf_activation_ratio)
     actual_batches_per_epoch = max(1, (len(train_texts) + max_batch - 1) // max_batch)
     actual_total_batches = epochs * actual_batches_per_epoch
+
+    # ── LR scheduler: cosine annealing with linear warmup (matches Fig4 LR trace) ──
+    # actual_batches_per_epoch must be defined first (computed above).
+    warmup_steps = int(config.get("training", {}).get("warmup_steps", 100))
+    total_training_steps = actual_batches_per_epoch * epochs
+    warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
+        optimizer, start_factor=0.01, end_factor=1.0, total_iters=warmup_steps) if warmup_steps > 0 else None
+    cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=total_training_steps - warmup_steps)
+    # SequentialLR: warmup → cosine annealing
+    if warmup_scheduler:
+        lr_scheduler = torch.optim.lr_scheduler.SequentialLR(
+            optimizer, [warmup_scheduler, cosine_scheduler],
+            milestones=[warmup_steps])
+    else:
+        lr_scheduler = cosine_scheduler
 
     # ── Training loop with staged OV-Freeze activation ──
     trajectory = []
