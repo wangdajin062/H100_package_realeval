@@ -25,17 +25,18 @@ def _find_gguf(model_ref: str) -> Path:
     """Resolve a GGUF file from a model reference (local dir, file, or staged models root)."""
     from realeval.paths import resolve_model
     p = Path(resolve_model(model_ref))
-    if p.is_file() and p.suffix == ".gguf":
+    _gguf_exts = {".gguf", ".f16", ".f32", ".q4km", ".q8_0"}
+    if p.is_file() and p.suffix in _gguf_exts:
         return p
     if p.is_dir():
-        ggufs = sorted(p.glob("*.gguf"))
+        ggufs = sorted([g for g in p.iterdir() if g.suffix in _gguf_exts])
         # Prefer a merged single-file GGUF over shards.
         merged = [g for g in ggufs if "-of-" not in g.name]
         if merged:
             return merged[0]
         if ggufs:
             return ggufs[0]
-    raise GGUFUnavailable(f"No .gguf file found for {model_ref!r} (looked at {p})")
+    raise GGUFUnavailable(f"No GGUF file found for {model_ref!r} (looked at {p})")
 
 
 def gguf_classify(model_ref: str, texts, labels, *, n_ctx: int = 2048,

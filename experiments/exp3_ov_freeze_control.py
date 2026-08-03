@@ -33,7 +33,7 @@ def run(config: dict) -> dict:
             # from config. Must pass them as kwargs, otherwise every condition silently
             # runs the default (1.0/1.0) and the OV-Freeze ablation collapses to identical
             # results (regression introduced by the 307c679 refactor).
-            freeze_frac=frac, window=window,
+            freeze_frac=frac, window=window, rho=rho,
         )
         drift = result.get("drift_pct_final", 0.0)
         ppl = math.exp(min(result.get("kl_final", 10.0), 10.0))

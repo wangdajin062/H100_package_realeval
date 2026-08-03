@@ -170,7 +170,7 @@ def real_distillation_step_metrics(config: dict, texts: list[str], *, apply_ov_r
 def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: list[int],
                             test_texts: list[str], test_labels: list[int], *,
                             quantize: str = "int4", apply_ov_rescaling: bool = True,
-                            freeze_frac: float = 1.0, window: float = 1.0,
+                            freeze_frac: float = 1.0, window: float = 1.0, rho: float = 1.0,
                             loss_fn: str = "kl", teacher_model: str = None, save_name: str = None) -> dict:
     """QAD (Quantization-Aware Distillation): teacher→student KL divergence training.
 
@@ -422,7 +422,7 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
             else:  # "kl" (default)
                 loss = ce_loss + alpha_kl * kl_loss   # KL distillation
 
-            loss = loss + ovf_loss
+            loss = loss + rho * ovf_loss
 
             optimizer.zero_grad()
             loss.backward()
