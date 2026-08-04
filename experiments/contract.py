@@ -23,8 +23,12 @@ def _latest_result(exp_short: str) -> dict[str, Any] | None:
     return json.loads(candidates[-1].read_text(encoding="utf-8"))
 
 
-def validate_latest_results(targets: list[str] | None = None) -> dict[str, list[str]]:
-    """Return missing-path diagnostics grouped by experiment short name."""
+def validate_latest_results(targets: list[str] | None = None, strict: bool = False) -> dict[str, list[str]]:
+    """Return missing-path diagnostics grouped by experiment short name.
+
+    When strict=True, also flags results whose `computation` is NOT a real H100 run
+    (i.e. a silent smoke/sklearn/proxy fallback), which alignment/presence checks miss.
+    """
     exp_list = targets or sorted(REQUIRED_PATHS)
     report: dict[str, list[str]] = {}
     for exp in exp_list:
@@ -33,6 +37,10 @@ def validate_latest_results(targets: list[str] | None = None) -> dict[str, list[
         if data is None:
             report[exp] = ["missing result file"]
             continue
+        if strict:
+            comp = str(data.get("computation", ""))
+            if not comp.startswith("h100"):
+                missing.append(f"NON_H100_COMPUTATION:{comp}")
         for path in REQUIRED_PATHS.get(exp, []):
             if _dig(data, path) is _NOT_FOUND:
                 missing.append(".".join(path))
@@ -45,7 +53,9 @@ def validate_latest_results(targets: list[str] | None = None) -> dict[str, list[
 
 
 def main() -> int:
-    report = validate_latest_results()
+    import sys
+    strict = "--strict" in sys.argv
+    report = validate_latest_results(strict=strict)
     has_error = False
     for exp, missing in report.items():
         if missing:

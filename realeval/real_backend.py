@@ -365,6 +365,16 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
             label_smoothing = float(config.get("training", {}).get("label_smoothing", 0.1))
             ce_loss = F.cross_entropy(logits, labels_t, weight=class_weight,
                                       label_smoothing=label_smoothing)
+            # Focal loss: down-weight easy examples to focus on hard positives.
+            # Config-gated (default gamma=0 → standard CE). Set focal_gamma=2.0 to activate.
+            focal_gamma = float(config.get("training", {}).get("focal_gamma", 0.0))
+            if focal_gamma > 0.0:
+                ce_probs = F.softmax(logits, dim=-1)
+                ce_probs_t = ce_probs.gather(1, labels_t.unsqueeze(1)).squeeze(1)
+                focal_weight = (1.0 - ce_probs_t) ** focal_gamma
+                ce_loss = (focal_weight * F.cross_entropy(logits, labels_t,
+                            weight=class_weight, label_smoothing=label_smoothing,
+                            reduction='none')).mean()
 
             # Loss components depend on loss_fn mode
             kl_loss = torch.tensor(0.0, device=dev)
@@ -469,7 +479,13 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
             hidden = student(**enc, output_hidden_states=True).hidden_states[-1]
         last = hidden[torch.arange(len(batch_texts), device=dev), lens].float()
         val_probs.extend(torch.softmax(head(last), dim=-1)[:, 1].tolist())
-    decision_threshold, _ = _best_f1_threshold(val_probs, [int(v) for v in val_labels])
+    threshold_grid_steps = int(config.get("training", {}).get("threshold_grid_steps", 19))
+    threshold_grid = None if threshold_grid_steps == 19 else None  # 19 uses _best_f1_threshold default
+    # Build custom grid if steps != 19
+    if threshold_grid_steps != 19:
+        import numpy as _np_thr
+        threshold_grid = _np_thr.linspace(0.01, 0.99, threshold_grid_steps)
+    decision_threshold, _ = _best_f1_threshold(val_probs, [int(v) for v in val_labels], grid=threshold_grid)
 
     # Evaluate on test set with calibrated threshold
     preds = []

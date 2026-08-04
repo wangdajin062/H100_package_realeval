@@ -34,6 +34,8 @@ training:
   head_hidden: 128             # hidden dim for two-layer classification head
   label_smoothing: 0.1         # label smoothing for CE loss (reduces overconfidence on imbalanced data)
   warmup_steps: 100            # linear LR warmup steps before cosine decay
+  focal_gamma: 0.0              # focal loss gamma (0=standard CE; >0 e.g. 2.0 focuses on hard positives)
+  threshold_grid_steps: 19      # grid resolution for _best_f1_threshold (19=0.05 bins; 91=0.01 bins)
 
 distillation:
   temperature: 2.0

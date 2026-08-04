@@ -356,6 +356,16 @@ def main():
     all_results = _run_experiments(config, smoke)
     bench_summary = _device_benchmark(config, has_cuda) if args.paper else None
     _aggregate_and_save(all_results, bench_summary, env)
+    # Consistency audit: flag SMOKE/CITED/DRIFT before paper tables go out.
+    if args.paper:
+        try:
+            from experiments.consistency_check import audit, print_report
+            report = audit()
+            has_p0 = print_report(report)
+            if has_p0:
+                logger.warning("P0 DRIFT/SMOKE issues detected — update paper numbers before publication")
+        except Exception as _ce:
+            logger.warning("consistency_check skipped: %s", _ce)
     return 0
 
 
