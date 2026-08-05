@@ -77,8 +77,13 @@ ssh_probe_output.txt
 sync_output.txt
 $null
 
-# ── Large figure formats (generated, not source) ──────────
+# ── Generated figures (not source) ────────────────────────
+docs/figure/*.png
+docs/figure/*.pdf
 *.tiff
+
+# ── IDE user settings ─────────────────────────────────────
+.vscode/settings.json
 
 # Large data artifacts — kept on RunPod persistent volume (/workspace/data) & local disk, NOT versioned.
 data/**/*.wav

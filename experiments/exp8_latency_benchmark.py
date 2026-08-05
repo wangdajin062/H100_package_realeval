@@ -19,7 +19,7 @@ def run(config: dict) -> dict:
     )
     texts = ds.texts
 
-    def run_paper(config):
+    def run_paper(config: dict) -> dict:
         from realeval import real_backend, models, hwenv
         import torch
         import time

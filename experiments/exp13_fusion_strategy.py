@@ -24,7 +24,7 @@ def run(config: dict) -> dict:
     train_labels, test_labels = labels[:split], labels[split:]
     test_texts = texts[split:]
 
-    def run_paper(config):
+    def run_paper(config: dict) -> dict:
         from realeval import real_backend
         import time
         # Real multimodal fusion on H100: Qwen (text) + pre-extracted acoustic embeddings.
@@ -69,7 +69,7 @@ def run(config: dict) -> dict:
         y = (signal > np.median(signal)).astype(int)
         mods = {"acoustic": ac, "text": tx, "metadata": md}
 
-        def _fit_eval(Xtr, ytr, Xte, yte):
+        def _fit_eval(Xtr: np.ndarray, ytr: np.ndarray, Xte: np.ndarray, yte: np.ndarray) -> tuple[float, float, float]:
             clf = GradientBoostingClassifier(n_estimators=60, random_state=42).fit(Xtr, ytr)
             t0 = time.perf_counter()
             pred = clf.predict(Xte)

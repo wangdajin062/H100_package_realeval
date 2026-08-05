@@ -57,6 +57,11 @@ def run(config: dict) -> dict:
                 "n_seeds": n_seeds,
             }
 
+        # Backward-compatible alias: fig5 still references "kl_task" historically.
+        # It is identical to kl_only in this ablation (OVF is varied separately in exp3).
+        if "kl_only" in variants and "kl_task" not in variants:
+            variants["kl_task"] = dict(variants["kl_only"])
+
         return {"computation": "h100_real_qwen", "variants": variants}
 
     def run_smoke(_: dict) -> dict:
@@ -103,6 +108,10 @@ def run(config: dict) -> dict:
                     F.log_softmax(student(Xt), -1), F.softmax(t_logits, -1), reduction="batchmean"
                 ))
             variants[loss_name] = {"f1": base_f1, "kl_final": round(kl_final, 5), "std": None, "n_seeds": 1}
+
+        # Backward-compatible alias for figure-script contract.
+        if "kl_only" in variants and "kl_task" not in variants:
+            variants["kl_task"] = dict(variants["kl_only"])
 
         return {"computation": "smoke_sklearn", "variants": variants}
 

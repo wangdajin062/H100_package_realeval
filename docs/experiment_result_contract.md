@@ -72,6 +72,8 @@
 2. **阈值兼容**：`head.pt` 无 `threshold` 键时，`real_llm_classify` 回退到 `thr=0.5`（硬 argmax）。
 3. **smoke 路径**：smoke 路径产出结构与 paper 路径完全一致，仅 `computation` 字段标记为 `"smoke_sklearn"` 而非 `"h100_real_qwen"`。
 4. **`decision_threshold`**：exp1 QAD 蒸馏新增字段；旧版结果文件不包含此字段不影响图像脚本（仅 paper 级训后才会使用）。
+5. **`exp2.variants.kl_task` 兼容别名**：exp2 的 loss ablation 在科学上已将 `kl_task` 合并到 `kl_only`（OVF 在 exp3 中单独消融），但 `paper_data.py` 的 `EXP03_LOSS_ABLATION` 仍保留 `kl_task` 标签。实验脚本在 paper 与 smoke 路径中均自动将 `kl_only` 复制为 `kl_task`，保证图像脚本无需修改即可读取。
+6. **`std` 字段补齐**：exp3 的 `conditions.*` / `layer_selection.*` 以及 exp11 的 `schemes.*` 在 smoke 路径中统一附加 `std: None`，与 paper 路径多 seed 聚合结构一致；`None` 表示单 seed 无测量标准差。
 
 ## 四、验证命令
 
@@ -94,6 +96,7 @@ cd docs/figure_scripts && python generate_all.py
 | 日期 | 变更内容 |
 |------|---------|
 | 2026-08-03 | 初始映射创建；新增 `decision_threshold` 字段 (exp1)；新增 `std` 字段 (exp2/exp11/exp14 variants/schemes/models)；`cot_max_new_tokens` 配置项；`val_frac` 校准集比例 |
+| 2026-08-05 | 重构后对齐修复：exp2 增加 `kl_task` 兼容别名；exp3 smoke 补齐 `conditions` / `layer_selection` 的 `std`；exp11 smoke 补齐 `schemes` 的 `std` / `n_seeds`；新增 `metrics/`、`runner/`、`config/`、`realeval/io/` 子包 |
 
 
 ---

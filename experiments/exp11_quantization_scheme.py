@@ -17,7 +17,7 @@ def run(config: dict) -> dict:
     )
     split = leakage_safe_split(ds, test_ratio=0.2, seed=42)
 
-    def run_paper(config):
+    def run_paper(config: dict) -> dict:
         from realeval import real_backend
         import numpy as np
         from experiments.common import (
@@ -97,7 +97,13 @@ def run(config: dict) -> dict:
         schemes = {}
         for quant, info in quant_bitmap.items():
             m = classification_metrics(yte, clf.predict(_quantize(Xte, int(info["bits"]))))
-            schemes[quant] = {"f1": m["f1"], "accuracy": m["accuracy"], "quant_note": info["note"]}
+            schemes[quant] = {
+                "f1": m["f1"],
+                "accuracy": m["accuracy"],
+                "std": None,
+                "n_seeds": 1,
+                "quant_note": info["note"],
+            }
         if "int4" not in schemes:
             schemes["int4"] = dict(schemes["fp16"])
         return {"computation": "smoke_sklearn", "schemes": schemes,

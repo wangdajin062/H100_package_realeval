@@ -1,170 +1,46 @@
-"""experiments/runner.py — Unified Experiment Orchestrator
+"""experiments/runner.py — CLI 入口与兼容层。
 
-Usage:
-    python -m experiments.runner --smoke          # Quick verification (small model path)
-    python -m experiments.runner --paper          # Paper-grade (real Qwen + H100)
-    python -m experiments.runner --exp 1,3,6      # Specific experiments
-    python -m experiments.runner --check          # Hardware check
-    python -m experiments.runner --storage-check  # Storage mount check
-    python -m experiments.runner --benchmark      # Benchmark only
-    python -m experiments.runner --resume         # Skip completed experiments
+实际编排逻辑已迁移至 ``runner/orchestrator.py``；本文件保留为命令行入口，
+并继续暴露 ``EXPERIMENTS`` / ``_SHORT_TO_FULL`` 等旧符号以兼容既有导入。
 """
 from __future__ import annotations
-import argparse
+
 import logging
 import sys
 from pathlib import Path
 from typing import Any
 
-from experiments.framework import configure_logging
-
 ROOT = Path(__file__).resolve().parent.parent
-# Allow `from realeval.xxx import ...` without installing the package.
-# Preferred workflow is `pip install -e .`, but this supports quick runs.
-sys.path.insert(0, str(ROOT))
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from cli.parser import build_runner_parser
+from config import load_config
+from runner.orchestrator import run_all, run_selected
+from runner.registry import EXPERIMENTS, SHORT_TO_FULL
+from utils.logging import configure_logging, get_logger
 
 configure_logging()
-logger = logging.getLogger("runner")
+logger = get_logger("experiments.runner")
 
-# Experiment registry: (module_name, short_name, description)
-#
-# Convention: every experiment exports a run(config) → dict function.
-# The dict MUST include {"experiment": str, "computation": str}.
-# Additional keys are experiment-specific (e.g. "classifiers", "variants", "schemes",
-# "conditions", "strategies", "scales") and consumed by paper_pipeline._extract().
-#
-# Each experiment follows the same dual-path pattern:
-#   paper_result = run_paper_safe(smoke, config, run_paper)
-#   if paper_result is not None: return paper_result
-#   # else fall through to smoke path
-# This pattern is intentionally verbose (not a decorator) so each experiment's
-# paper/smoke boundary is explicit and independently auditable.
-EXPERIMENTS = [
-    ("exp1_qad_production", "exp1", "QAD Production (teacher->student KL distillation with OV-Freeze)"),
-    ("exp2_qad_loss_ablation", "exp2", "Loss Ablation (pure-KL / three-term / logits-MSE)"),
-    ("exp3_ov_freeze_control", "exp3", "OV-Freeze Control (4-condition + rho sweep)"),
-    ("exp4_baseline_comparison", "exp4", "Baseline Comparison (GBM / MLP / Logistic Regression)"),
-    ("exp5_cross_dataset", "exp5", "Cross-Dataset (TAF-28k / ChiFraud / AdvFraud-3k / LDP)"),
-    ("exp6_speculative_decoding", "exp6", "Speculative Decoding (alpha + diagnostic B)"),
-    ("exp7_privacy_verification", "exp7", "Privacy Verification (ASV-EER + GLO attack)"),
-    ("exp8_latency_benchmark", "exp8", "Latency Benchmark (end-to-end wall-clock)"),
-    ("exp9_cot_ablation", "exp9", "CoT Ablation (chain-of-thought vs direct)"),
-    ("exp10_teacher_scale", "exp10", "Teacher Scale (0.5B/1.5B/7B)"),
-    ("exp11_quantization_scheme", "exp11", "Quantization Scheme (fp16 / int8 / int4 / nf4)"),
-    ("exp12_fraudfusion_baseline", "exp12", "FraudFusion Baseline (quantized competitor + storage decomposition)"),
-    ("exp13_fusion_strategy", "exp13", "Fusion Strategy (multimodal fusion ablation)"),
-    ("exp14_gguf_comparison", "exp14", "Multi-model same-data comparison (BF16 transformers vs Q4_K_M GGUF llama.cpp)"),
-]
-
-# Map short names to full module names (for backward compatibility and validation)
-_SHORT_TO_FULL = {short: mod for mod, short, _ in EXPERIMENTS}
+# 兼容旧导入：外部可能引用 experiments.runner.EXPERIMENTS / _SHORT_TO_FULL / run_all
+_SHORT_TO_FULL = SHORT_TO_FULL
 
 
-def _import_exp(modname: str):
-    """Import an experiment module by name."""
-    import importlib
-    return importlib.import_module(f"experiments.{modname}")
+def _import_exp(modname: str) -> Any:
+    """按模块名导入实验模块（兼容旧 paper_pipeline 导入）。"""
+    from runner.experiment_runner import import_experiment
+    return import_experiment(modname)
 
 
 def run_experiment(modname: str, short: str, config: dict[str, Any]) -> dict[str, Any]:
-    """Run a single experiment, save result, return result dict.
-    
-    Cleans up GPU memory before and after execution to prevent OOM cascade.
-    """
-    import torch
-    from realeval.io import save_results
-    from realeval.runlog import log_experiment_start, log_experiment_end
-    
-    # Pre-experiment cleanup
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-        torch.cuda.reset_peak_memory_stats()
-    
-    log_experiment_start(short, config)
-    mod = _import_exp(modname)
-    result = mod.run(config)
-    save_results(short, result)
-    log_experiment_end(short, result)
-    
-    # Post-experiment cleanup (critical for multi-experiment batches)
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-        logger.info("%s: GPU memory cleaned up (peak: %.1fGB)",
-                   short, torch.cuda.max_memory_allocated() / 1e9)
-    
-    return result
+    """运行单个实验（兼容旧接口）。"""
+    from runner.experiment_runner import run_experiment as _run
+    return _run(modname, short, config)
 
 
-def run_all(config: dict[str, Any], selected: list[str] | None = None, resume: bool = False) -> dict[str, Any]:
-    """运行全部（或指定）实验，返回 {exp_short: result} 字典。
-    完成后自动写入 all_experiments.json。
-    """
-    from realeval.io import load_config, RESULTS, save_all_results
-    import json
-
-    cfg = load_config() if config is None else config
-    results: dict[str, Any] = {}
-    for modname, short, desc in EXPERIMENTS:
-        if selected and short not in selected:
-            continue
-        if resume:
-            existing = list(RESULTS.glob(f"{short}_*.json"))
-            if existing:
-                results[short] = json.loads(max(existing).read_text(encoding="utf-8"))
-                logger.info("跳过 %s（已有结果）", short)
-                continue
-        logger.info("运行 %s：%s", short, desc)
-        try:
-            r = run_experiment(modname, short, cfg)
-            results[short] = r
-        except Exception as e:
-            logger.error("实验 %s 失败：%s", short, e)
-            results[short] = {"experiment": short, "error": str(e), "computation": "failed"}
-
-    # 写入全量归并文件，供 paper_data.py 候补读取
-    if results:
-        save_all_results(results)
-
-    return results
-
-
-def _parse_args():
-    """解析命令行参数。"""
-    parser = argparse.ArgumentParser(
-        description="QAD-MultiGuard 实验运行器",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-示例：
-  python -m experiments.runner --smoke          # 快速验证（小模型路径）
-  python -m experiments.runner --paper          # 论文级运行（真实 Qwen + H100）
-  python -m experiments.runner --exp 1,3,6      # 指定实验
-  python -m experiments.runner --no-archive     # 跳过运行前归档
-  python -m experiments.runner --check          # 硬件检查
-  python -m experiments.runner --validate-contract  # 验证字段合约
-        """,
-    )
-    parser.add_argument("experiments", nargs="?", default=None,
-                        help="逗号分隔的实验名（如 exp1,exp4）或 'all'")
-    parser.add_argument("--smoke",             action="store_true", help="快速验证（小模型路径）")
-    parser.add_argument("--paper",             action="store_true", help="论文级运行（真实 Qwen + H100）")
-    parser.add_argument("--exp",               type=str, default=None, help="逗号分隔的实验编号（如 1,3,6）")
-    parser.add_argument("--config",            type=str, default=None, help="配置 YAML 路径")
-    parser.add_argument("--check",             action="store_true", help="硬件检查")
-    parser.add_argument("--storage-check",     action="store_true", help="存储挂载检查")
-    parser.add_argument("--benchmark",         action="store_true", help="仅运行基准测试")
-    parser.add_argument("--resume",            action="store_true", help="跳过已完成的实验")
-    parser.add_argument("--no-archive",        action="store_true", help="跳过运行前的自动归档步骤")
-    parser.add_argument("--report",            action="store_true",
-                        help="从已有结果生成论文表格/图像（不运行实验）")
-    parser.add_argument("--validate-contract", action="store_true",
-                        help="验证最新结果是否符合图像脚本字段合约")
-    parser.add_argument("--align", action="store_true",
-                        help="校验实验字段与图像脚本的对齐情况")
-    return parser.parse_args()
-
-
-def _handle_standalone_checks(args):
-    """Handle --check, --storage-check, --report, --benchmark. Returns True if main() should exit."""
+def _handle_standalone_checks(args) -> bool:
+    """处理不需要运行实验的独立子命令。"""
     if args.check:
         from realeval.hwenv import check
         ok, issues = check(strict=True)
@@ -177,7 +53,7 @@ def _handle_standalone_checks(args):
         return True
 
     if args.storage_check:
-        from realeval.paths import storage_report, list_local_models
+        from realeval.paths import list_local_models, storage_report
         rep = storage_report()
         print("Storage Report:")
         for k, v in rep.items():
@@ -198,8 +74,7 @@ def _handle_standalone_checks(args):
         return True
 
     if args.validate_contract:
-        from experiments.contract import validate_latest_results
-
+        from metrics.contract import validate_latest_results
         report = validate_latest_results()
         failed = False
         for exp, missing in report.items():
@@ -217,7 +92,7 @@ def _handle_standalone_checks(args):
         return True
 
     if args.align:
-        from experiments.alignment import check_alignment, print_alignment_report
+        from metrics.contract import check_alignment, print_alignment_report
         report = check_alignment()
         failed = print_alignment_report(report)
         if failed:
@@ -237,10 +112,10 @@ def _handle_standalone_checks(args):
     return False
 
 
-def _load_and_validate_config(args):
-    """Load config, apply smoke/paper flags, validate, write env report. Returns config dict."""
-    from realeval import io as io_mod, validation, envreport
-    config = io_mod.load_config(args.config)
+def _load_and_validate_config(args) -> dict[str, Any]:
+    """加载配置、应用 smoke/paper 标记、写环境报告。"""
+    from realeval import envreport, validation
+    config = load_config(args.config, validate=False)
     if args.smoke:
         config["_smoke"] = True
         logger.info("SMOKE MODE: using small model verification path")
@@ -260,8 +135,8 @@ def _load_and_validate_config(args):
     return config
 
 
-def _resolve_experiment_selection(args):
-    """Resolve which experiments to run from CLI args. Returns list of short names."""
+def _resolve_experiment_selection(args) -> list[str]:
+    """根据 CLI 参数解析要运行的实验列表。"""
     if args.exp is not None:
         raw = args.exp
     elif args.experiments is not None:
@@ -270,10 +145,10 @@ def _resolve_experiment_selection(args):
         raw = "all"
 
     if raw == "all":
-        return [short for _, short, _ in EXPERIMENTS]
+        return [e.short for e in EXPERIMENTS]
 
     parts = [p.strip() for p in raw.split(",") if p.strip()]
-    digits = []
+    digits: list[str] = []
     for p in parts:
         if p.isdigit():
             digits.append(p)
@@ -285,48 +160,35 @@ def _resolve_experiment_selection(args):
     from realeval.validation import validate_experiment_selection
     return validate_experiment_selection(
         ",".join(digits),
-        [(short, desc) for _, short, desc in EXPERIMENTS])
+        [(e.short, e.description) for e in EXPERIMENTS]
+    )
 
 
-def main():
-    args = _parse_args()
+def main() -> int:
+    parser = build_runner_parser()
+    args = parser.parse_args()
+
     if _handle_standalone_checks(args):
-        return
-
-    # ── 运行前自动归档旧结果（除非显式传入 --no-archive 或 --resume）────────
-    # --resume 依赖 outputs/results/ 中的旧结果判断跳过，归档会清空该目录
-    # 导致 resume 失效（每个实验都被重跑）。因此 resume 模式下跳过归档。
-    no_archive = getattr(args, "no_archive", False) or args.resume
-    if not no_archive:
-        try:
-            import sys as _sys
-            _sys.path.insert(0, str(ROOT / "scripts"))
-            from archive_and_clear import archive_if_needed
-            archived = archive_if_needed()
-            if archived:
-                logger.info("旧实验结果已归档至：%s", archived)
-        except Exception as _ae:
-            logger.warning("归档步骤失败（继续运行）：%s", _ae)
+        return 0
 
     config = _load_and_validate_config(args)
     selected = _resolve_experiment_selection(args)
-    results = run_all(config, selected, resume=args.resume)
+
+    # --resume 模式下避免归档，否则 resume 会失效
+    no_archive = getattr(args, "no_archive", False) or args.resume
+    results = run_selected(
+        config,
+        selected,
+        resume=args.resume,
+        no_archive=no_archive,
+        aggregate=True,
+    )
+
     logger.info("实验完成：%s", list(results.keys()))
     logger.info("结果已保存至 outputs/results/。"
                 "运行 'python -m experiments.runner --report' 生成论文表格/图像。")
-
-    try:
-        from experiments.alignment import check_alignment, print_alignment_report
-        logger.info("运行字段对齐校验...")
-        align_report = check_alignment()
-        failed = print_alignment_report(align_report)
-        if failed:
-            logger.warning("部分实验字段未对齐图像脚本——运行 --align 查看详情")
-        else:
-            logger.info("所有字段对齐通过")
-    except Exception as ae:
-        logger.warning("对齐校验失败（非致命）：%s", ae)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

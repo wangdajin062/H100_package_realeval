@@ -15,7 +15,7 @@ def run(config: dict) -> dict:
     )
     split = leakage_safe_split(ds, test_ratio=0.2, seed=42)
 
-    def run_paper(config):
+    def run_paper(config: dict) -> dict:
         from realeval import real_backend
         from experiments.common import resolve_qad_path
 
@@ -27,7 +27,7 @@ def run(config: dict) -> dict:
         )
         # Storage footprints measured from actual model files on disk.
         import os as _os_12
-        def _model_size_mb(model_path_key):
+        def _model_size_mb(model_path_key: str) -> float | None:
             """Measure actual model file size from disk. Returns None if not found."""
             path = config.get("models", {}).get(model_path_key, "")
             if not path:

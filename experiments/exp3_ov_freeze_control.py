@@ -17,7 +17,7 @@ logger = logging.getLogger("exp3")
 def run(config: dict) -> dict:
     split = load_and_split_dataset(config, default_dataset="balanced4k")
 
-    def _train(cfg, frac, window, rho):
+    def _train(cfg: dict, frac: float, window: float, rho: float) -> tuple[float, float, float]:
         from realeval import real_backend
         import math
 
@@ -124,7 +124,7 @@ def run(config: dict) -> dict:
         kl_result = toy_kl_distill(X, y, ntr)
 
         layer_selection = {
-            name: {"f1": base_f1, "variance_drift_pct": 61.5}
+            name: {"f1": base_f1, "variance_drift_pct": 61.5, "std": None}
             for name in ["early", "mid", "late", "all"]
         }
         rho_sweep = {
@@ -132,7 +132,7 @@ def run(config: dict) -> dict:
             for v in [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
         }
         conditions = {
-            name: {"f1": base_f1, "variance_drift_pct": 61.5}
+            name: {"f1": base_f1, "variance_drift_pct": 61.5, "std": None}
             for name in ["no_reg", "ov_freeze_quarter", "ov_freeze_half", "ov_freeze_full"]
         }
 

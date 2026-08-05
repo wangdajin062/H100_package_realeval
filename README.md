@@ -100,15 +100,42 @@ cd docs/figure_scripts && python generate_all.py    # 论文图像（只读脚�
 │   ├── models.py              #   Qwen 加载 + 量化（BF16/FP16/INT4/INT8/NF4）
 │   ├── data.py                #   数据集：TAF-28k · ChiFraud · AdvFraud-3k
 │   ├── specdec.py / privacy.py / metrics.py / benchmark.py
-│   └── runlog.py              #   溯源：git SHA · config hash · seed
-├── experiments/               # 14 个实验（§2.1）+ 编排层
-│   ├── framework.py           #   模式分发 · 数据回退 · 防泄漏分割 · schema 检查
-│   ├── runner.py              #   CLI 编排器
+│   ├── runlog.py              #   溯源：git SHA · config hash · seed
+│   └── io/                    #   IO 子包（序列化 · 路径 · 归档）
+│       ├── paths.py
+│       ├── serialization.py
+│       └── archive.py
+├── experiments/               # 14 个实验（§2.1）+ 兼容层
+│   ├── framework.py           #   模式分发 · 数据回退 · 防泄漏分割
+│   ├── runner.py              #   CLI 包装器
 │   ├── paper_pipeline.py      #   一键 H100 流水线
-│   └── contract.py            #   图像脚本字段合约验证
-├── config/                    # experiments.yaml · h100.yaml · runpod_h100.yaml
+│   ├── common.py              #   公共训练/评估 helper
+│   ├── alignment.py           #   兼容 re-export
+│   ├── contract.py            #   兼容 re-export
+│   └── exp*_*.py              #   各实验实现
+├── config/                    # 统一配置管理
+│   ├── __init__.py            #   暴露 load_config / validate_config
+│   ├── defaults.py            #   默认配置
+│   ├── loader.py              #   加载 / 合并 / 环境变量覆盖
+│   └── schema.py              #   schema 与校验
+├── runner/                    # 实验编排
+│   ├── registry.py            #   14 个实验注册表
+│   ├── experiment_runner.py   #   单实验运行封装
+│   └── orchestrator.py        #   多实验调度 + 归档 + 归并
+├── metrics/                   # 指标计算与字段合约
+│   ├── contract.py            #   图像脚本字段合约
+│   ├── extraction.py          #   headline 指标提取
+│   └── aggregation.py         #   多 seed 聚合
+├── cli/                       # 命令入口
+│   └── parser.py              #   统一 argparse
+├── utils/                     # 通用工具
+│   ├── logging.py             #   统一日志工厂
+│   ├── exceptions.py          #   结构化异常
+│   └── typing.py              #   公共类型别名
 ├── data/scripts/              # TAF-28k 数据链：下载 · 转录 · 特征构建
 ├── docs/figure_scripts/       # 论文图像脚本（只读）
+├── docs/REFACTORING.md        # 重构说明
+├── docs/experiment_result_contract.md  # 字段对齐契约
 ├── claims/ + audit/           # 论文声称 + 证据图谱
 ├── reports/                   # 实验结果报告
 └── outputs/                   # results / archive / logs / metrics / figures

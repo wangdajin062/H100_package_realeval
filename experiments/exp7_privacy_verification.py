@@ -15,7 +15,7 @@ def run(config: dict) -> dict:
     ds = {"texts": dataset.texts, "labels": dataset.labels}
     texts = dataset.texts
 
-    def run_paper(config):
+    def run_paper(config: dict) -> dict:
         from realeval import privacy, real_backend
         import numpy as np
         pii_report = privacy.scan_texts(texts)

@@ -28,7 +28,7 @@ def run(config: dict) -> dict:
     split = int(len(texts) * 0.8)
     test_texts, test_labels = texts[split:], labels[split:]
 
-    def run_paper(config):
+    def run_paper(config: dict) -> dict:
         from realeval import real_backend, gguf_backend
         import numpy as np
         from experiments.common import multi_seed_std, n_seeds_from_config, set_seed, resolve_qad_path

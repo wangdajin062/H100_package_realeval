@@ -1,17 +1,21 @@
-"""experiments/alignment.py — 实验 → 图像脚本字段对齐校验器。
+"""metrics/contract.py — 实验结果 → 图像脚本字段合约校验。
 
-在每次 runner 运行后自动校验，确保 paper_data.py 的 _from_result()
-调用都能在实验产出 JSON 中找到对应字段。
+本模块定义 ``docs/figure_scripts/paper_data.py`` 消费的所有字段路径，
+并提供 ``validate_result`` / ``check_alignment`` / ``validate_latest_results``
+等工具函数。
 """
 from __future__ import annotations
 
-from pathlib import Path
 import json
+from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 RESULTS_DIR = ROOT / "outputs" / "results"
 
+_NOT_FOUND = object()
+
+# 各实验必须提供的字段路径（与 docs/experiment_result_contract.md 对齐）
 EXPECTED_FIELDS: dict[str, list[tuple[str, ...]]] = {
     "exp1": [
         ("f1",), ("std",), ("trajectory",),
@@ -114,11 +118,8 @@ EXPECTED_FIELDS: dict[str, list[tuple[str, ...]]] = {
 }
 
 
-_NOT_FOUND = object()
-
-
 def _dig(obj: dict[str, Any], path: tuple[str, ...]) -> Any:
-    """沿路径钻取嵌套 dict。键缺失返回 _NOT_FOUND，值为 None 则正常返回 None。"""
+    """沿路径钻取嵌套 dict。键缺失返回 ``_NOT_FOUND``，值为 None 则正常返回 None。"""
     cur: Any = obj
     for key in path:
         if not isinstance(cur, dict):
@@ -129,6 +130,19 @@ def _dig(obj: dict[str, Any], path: tuple[str, ...]) -> Any:
     return cur
 
 
+def validate_result(result: dict[str, Any], exp_id: str) -> list[str]:
+    """校验单个实验结果是否满足字段合约。
+
+    Returns:
+        缺失字段路径列表；空列表表示通过。
+    """
+    missing: list[str] = []
+    for path in EXPECTED_FIELDS.get(exp_id, []):
+        if _dig(result, path) is _NOT_FOUND:
+            missing.append(".".join(path))
+    return missing
+
+
 def _latest_result(exp_short: str) -> dict[str, Any] | None:
     candidates = sorted(RESULTS_DIR.glob(f"{exp_short}_*.json"))
     if not candidates:
@@ -137,7 +151,7 @@ def _latest_result(exp_short: str) -> dict[str, Any] | None:
 
 
 def check_alignment(targets: list[str] | None = None) -> dict[str, list[str]]:
-    """返回 {exp_short: [missing_paths]} 诊断报告。"""
+    """返回 ``{exp_short: [missing_paths]}`` 诊断报告。"""
     exp_list = targets or sorted(EXPECTED_FIELDS)
     report: dict[str, list[str]] = {}
     for exp in exp_list:
@@ -145,11 +159,7 @@ def check_alignment(targets: list[str] | None = None) -> dict[str, list[str]]:
         if data is None:
             report[exp] = ["NO_RESULT_FILE"]
             continue
-        missing: list[str] = []
-        for path in EXPECTED_FIELDS.get(exp, []):
-            if _dig(data, path) is _NOT_FOUND:
-                missing.append(".".join(path))
-        report[exp] = missing
+        report[exp] = validate_result(data, exp)
     return report
 
 
@@ -165,3 +175,31 @@ def print_alignment_report(report: dict[str, list[str]]) -> bool:
         else:
             print(f"[PASS] {exp}")
     return failed
+
+
+def validate_latest_results(targets: list[str] | None = None, strict: bool = False) -> dict[str, list[str]]:
+    """按实验返回最新结果文件的缺失字段诊断。
+
+    Args:
+        targets: 指定实验列表；None 表示校验所有已知实验。
+        strict: True 时额外标记 computation 不是 ``h100*`` 的结果。
+    """
+    exp_list = targets or sorted(EXPECTED_FIELDS)
+    report: dict[str, list[str]] = {}
+    for exp in exp_list:
+        missing: list[str] = []
+        data = _latest_result(exp)
+        if data is None:
+            report[exp] = ["missing result file"]
+            continue
+        if strict:
+            comp = str(data.get("computation", ""))
+            if not comp.startswith("h100"):
+                missing.append(f"NON_H100_COMPUTATION:{comp}")
+        missing.extend(validate_result(data, exp))
+        if exp == "exp8":
+            if (_dig(data, ("latencies", "int8")) is _NOT_FOUND
+                    and _dig(data, ("latencies", "bf16")) is _NOT_FOUND):
+                missing.append("latencies.int8|latencies.bf16")
+        report[exp] = missing
+    return report

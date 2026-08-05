@@ -22,7 +22,7 @@ def run(config: dict) -> dict:
         "advfraud3k": data.load_advfraud3k(max_samples=max_samples),
     }
 
-    def run_paper(config):
+    def run_paper(config: dict) -> dict:
         from realeval import real_backend, models
         real_backend.require_assets(models.models_available(config), "Real Qwen weights unavailable")
 

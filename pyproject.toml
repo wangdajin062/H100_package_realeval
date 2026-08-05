@@ -58,7 +58,7 @@ Documentation = "https://github.com/wangdajin062/H100_package_realeval"
 realeval-run = "experiments.runner:main"
 
 [tool.setuptools.packages.find]
-include = ["realeval*", "experiments*", "metrics*", "audit*", "statlib*", "runner*", "profiler*"]
+include = ["realeval*", "experiments*", "metrics*", "audit*", "statlib*", "runner*", "profiler*", "config*", "utils*", "cli*"]
 exclude = ["__pycache__", "*.pyc", "*.pyo"]
 
 [tool.pytest.ini_options]

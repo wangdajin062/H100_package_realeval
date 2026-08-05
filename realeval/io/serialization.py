@@ -1,9 +1,13 @@
-"""realeval/io.py — 配置加载与实验结果保存
+"""realeval/io/serialization.py — 配置加载与实验结果序列化。
 
-配置加载：基于 YAML 文件，支持 REALEVAL_DATA__KEY__SUBKEY 环境变量覆盖。
-结果保存：
-  - 单次实验 → outputs/results/{exp_short}_{timestamp}.json
-  - 全量归并 → outputs/results/all_experiments.json（供 paper_data.py 消费）
+配置加载：
+  - 基础配置始终为 ``config/experiments.yaml``；
+  - 通过 ``--config`` 传入的 YAML 作为覆盖层深度合并；
+  - 支持 ``REALEVAL_SECTION__KEY`` 形式的环境变量覆盖。
+
+结果序列化：
+  - 单次实验 → ``outputs/results/expN_YYYYMMDD_HHMMSS.json``；
+  - 全量归并 → ``outputs/results/all_experiments.json``（paper_data.py 候补来源）。
 """
 from __future__ import annotations
 
@@ -16,26 +20,23 @@ from typing import Any
 
 import yaml
 
-logger = logging.getLogger(__name__)
+from realeval.io.paths import (
+    ALL_EXPERIMENTS_FILE,
+    PREDICTIONS,
+    RESULTS,
+    get_results_dir,
+)
 
-ROOT = Path(__file__).resolve().parent.parent
-RESULTS = ROOT / "outputs" / "results"
+logger = logging.getLogger("realeval.io.serialization")
 
-# all_experiments.json 是 paper_data.py 的候补加载路径
-ALL_EXPERIMENTS_FILE = RESULTS / "all_experiments.json"
-
-
-def _ensure_results_dir() -> Path:
-    """按需创建 results 目录。"""
-    RESULTS.mkdir(parents=True, exist_ok=True)
-    return RESULTS
+DEFAULT_CONFIG_PATH: Path = Path(__file__).resolve().parent.parent.parent / "config" / "experiments.yaml"
 
 
 def _resolve_env_overrides(config: dict[str, Any], prefix: str = "REALEVAL_") -> dict[str, Any]:
-    """将 REALEVAL_ 前缀的环境变量应用为配置覆盖（RealEval-v2 合约）。
-    值通过 yaml.safe_load 解析以实现正确的类型推断。
-    警告：yaml.safe_load 会把 "yes"/"no"/"on"/"off" 解析为布尔值，
-    如需保留字面字符串，请在环境变量中加引号。
+    """将 ``REALEVAL_`` 前缀的环境变量应用为配置覆盖。
+
+    值通过 ``yaml.safe_load`` 解析以实现正确的类型推断。如需保留字面字符串，
+    请在环境变量值外加引号。
     """
     for env_key, env_val in os.environ.items():
         if not env_key.startswith(prefix):
@@ -52,7 +53,7 @@ def _resolve_env_overrides(config: dict[str, Any], prefix: str = "REALEVAL_") ->
 
 
 def _deep_merge(base: dict[str, Any], over: dict[str, Any]) -> dict[str, Any]:
-    """将 `over` 递归合并到 `base`（叶节点冲突时 over 优先）。"""
+    """递归合并 ``over`` 到 ``base``；叶节点冲突时 ``over`` 优先。"""
     out = dict(base)
     for k, v in (over or {}).items():
         if isinstance(v, dict) and isinstance(out.get(k), dict):
@@ -62,36 +63,44 @@ def _deep_merge(base: dict[str, Any], over: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def load_config(path: str | None = None) -> dict[str, Any]:
-    """加载 YAML 配置，并应用环境变量覆盖。
+def load_config(path: str | Path | None = None) -> dict[str, Any]:
+    """加载 YAML 配置并应用环境变量覆盖。
 
-    基础配置始终来自 config/experiments.yaml。若 path 指向其他文件
-    （如 config/h100.yaml），则深度合并到基础配置之上，覆盖层只需声明
-    需要变更的字段（hardware/runtime/output），无需重复 models/data 等字段。
+    Args:
+        path: 覆盖层 YAML 路径（如 ``config/h100.yaml``）。若未提供或等于
+            ``config/experiments.yaml``，则只加载基础配置。
+
+    Returns:
+        合并后的配置字典。
     """
-    base_path = ROOT / "config" / "experiments.yaml"
+    base_path = DEFAULT_CONFIG_PATH
     with open(base_path, encoding="utf-8") as f:
         cfg: dict[str, Any] = yaml.safe_load(f) or {}
-    if path is not None and Path(path).resolve() != base_path.resolve():
-        with open(path, encoding="utf-8") as f:
-            overlay: dict[str, Any] = yaml.safe_load(f) or {}
-        cfg = _deep_merge(cfg, overlay)
+
+    if path is not None:
+        overlay_path = Path(path).resolve()
+        if overlay_path != base_path.resolve():
+            with open(overlay_path, encoding="utf-8") as f:
+                overlay: dict[str, Any] = yaml.safe_load(f) or {}
+            cfg = _deep_merge(cfg, overlay)
+
     return _resolve_env_overrides(cfg)
 
 
 def save_results(exp_short: str, result: dict[str, Any]) -> Path:
     """将单次实验结果保存为带时间戳的 JSON 文件。
 
-    保存路径：outputs/results/{exp_short}_{timestamp}.json
-    同时在 outputs/predictions/ 保留副本（Dataset→Prediction 溯源链）。
-    返回保存路径。
+    同时在 ``outputs/predictions/`` 保留副本，用于 Dataset→Prediction 溯源。
+
+    Returns:
+        保存的 ``outputs/results/expN_YYYYMMDD_HHMMSS.json`` 路径。
     """
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    path = _ensure_results_dir() / f"{exp_short}_{ts}.json"
+    path = get_results_dir() / f"{exp_short}_{ts}.json"
     text = json.dumps(result, ensure_ascii=False, indent=2, default=str)
     path.write_text(text, encoding="utf-8")
 
-    pred_dir = ROOT / "outputs" / "predictions"
+    pred_dir = PREDICTIONS
     pred_dir.mkdir(parents=True, exist_ok=True)
     (pred_dir / f"{exp_short}_{ts}.json").write_text(text, encoding="utf-8")
 
@@ -100,19 +109,16 @@ def save_results(exp_short: str, result: dict[str, Any]) -> Path:
 
 
 def save_all_results(all_results: dict[str, dict[str, Any]]) -> Path:
-    """将所有实验结果汇总写入 all_experiments.json。
+    """将所有实验结果汇总写入 ``all_experiments.json``。
 
-    paper_data.py 在加载单次实验 JSON 之后，会检查此文件作为候补来源：
-        outputs/results/all_experiments.json
-
-    格式：{ "exp1": {...}, "exp2": {...}, ... }
-
+    ``paper_data.py`` 在加载单次实验 JSON 之后，会检查此文件作为候补来源。
     已有键不会被覆盖（保持最新单次结果优先原则）。
-    返回文件路径。
-    """
-    _ensure_results_dir()
 
-    # 加载已有内容（若存在），以防多次调用丢失之前的键
+    Returns:
+        ``outputs/results/all_experiments.json`` 路径。
+    """
+    get_results_dir()
+
     existing: dict[str, Any] = {}
     if ALL_EXPERIMENTS_FILE.exists():
         try:
@@ -130,7 +136,7 @@ def save_all_results(all_results: dict[str, dict[str, Any]]) -> Path:
 
 
 def load_all_results() -> dict[str, dict[str, Any]]:
-    """加载 all_experiments.json（若不存在则返回空字典）。"""
+    """加载 ``all_experiments.json``（若不存在则返回空字典）。"""
     if not ALL_EXPERIMENTS_FILE.exists():
         return {}
     try:

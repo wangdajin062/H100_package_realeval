@@ -23,7 +23,7 @@ def run(config: dict) -> dict:
     )
     texts = ds.texts
 
-    def run_paper(config):
+    def run_paper(config: dict) -> dict:
         from realeval.specdec import diagnostic_B
         result = diagnostic_B(config, texts, gamma=5, n_samples=20)
         # Do NOT backfill paper alpha_tuned into the measured bucket: that would

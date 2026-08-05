@@ -5,7 +5,7 @@
 - 数据集加载回退链
 - 防泄漏训练/测试分割
 - 结果 schema 合规检查
-- 结构化日志配置
+- 结构化日志配置（实现已迁移至 utils.logging，本模块保留兼容导出）
 - 统一错误处理
 """
 from __future__ import annotations
@@ -15,14 +15,13 @@ import logging
 from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
 
+from utils.exceptions import ExperimentRuntimeError
+from utils.logging import configure_logging as _configure_logging
+
 ROOT = Path(__file__).resolve().parent.parent
 LOG_DIR = ROOT / "outputs" / "logs"
 
 logger = logging.getLogger("framework")
-
-
-class ExperimentRuntimeError(RuntimeError):
-    """实验失败 schema 或运行时检查时抛出。"""
 
 
 @dataclass(frozen=True)
@@ -42,23 +41,11 @@ class DatasetSplit:
 
 
 def configure_logging(level: int = logging.INFO) -> None:
-    """一次性配置控制台 + 文件双路日志。"""
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
-    root_logger = logging.getLogger()
-    if root_logger.handlers:
-        return
+    """一次性配置控制台 + 文件双路日志。
 
-    formatter = logging.Formatter("%(asctime)s [%(name)s] %(levelname)s %(message)s")
-
-    console = logging.StreamHandler()
-    console.setFormatter(formatter)
-
-    file_handler = logging.FileHandler(LOG_DIR / "experiments.log", encoding="utf-8")
-    file_handler.setFormatter(formatter)
-
-    root_logger.setLevel(level)
-    root_logger.addHandler(console)
-    root_logger.addHandler(file_handler)
+    实际实现已迁移至 ``utils.logging``；本函数保留旧签名以兼容既有调用。
+    """
+    _configure_logging(level=level, log_dir=LOG_DIR)
 
 
 def load_first_nonempty(
