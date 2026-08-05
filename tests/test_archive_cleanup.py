@@ -15,6 +15,11 @@ def test_clear_outputs_removes_result_jsons(tmp_path, monkeypatch):
     # Redirect RESULTS to a temp dir for isolation
     monkeypatch.setattr("realeval.io.archive.RESULTS", tmp_path)
     monkeypatch.setattr("realeval.io.archive.PREDICTIONS", tmp_path / "predictions")
+    # _CLEAR_GLOBS is initialized at import time, so update it to point to tmp_path.
+    monkeypatch.setattr(
+        "realeval.io.archive._CLEAR_GLOBS",
+        [(tmp_path, "exp*_*.json", False), (tmp_path, "all_experiments.json", False)],
+    )
     (tmp_path / "predictions").mkdir(parents=True, exist_ok=True)
 
     (tmp_path / "exp1_20260805_120000.json").write_text("{}")

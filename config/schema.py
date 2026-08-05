@@ -104,6 +104,9 @@ CONFIG_SCHEMA: dict[str, tuple[str, type | tuple[type, ...], Any, bool]] = {
     # 学生模型路径
     "students":        ("LoRA/学生检查点路径表", dict, {}, False),
     "student_variant": ("要加载的学生变体", str, "qad_ovf", False),
+
+    # 运行时覆盖（可由 REALEVAL_OUTPUT_ROOT 等环境变量注入）
+    "output_root":     ("输出根目录", str, None, False),
 }
 
 
