@@ -33,7 +33,7 @@ ROOT = Path(__file__).resolve().parent.parent
 CLAIMS = ROOT / "claims"
 OUT = ROOT / "outputs" / "claims"
 
-from experiments.runner import _SHORT_TO_FULL as _SHORT_TO_MOD
+from runner.registry import SHORT_TO_FULL as _SHORT_TO_MOD
 
 
 def _dig(d, path):

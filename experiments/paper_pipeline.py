@@ -234,7 +234,10 @@ def _print_summary(all_results: dict[str, Any], bench_summary: dict[str, Any] | 
 def main() -> int:
     ap = build_pipeline_parser()
     args = ap.parse_args()
-    smoke = args.smoke or not args.paper
+    if not args.smoke and not args.paper:
+        logger.error("必须显式指定 --smoke（沙盒验证）或 --paper（真实 H100 运行）")
+        return 1
+    smoke = args.smoke
 
     if not args.no_archive:
         try:

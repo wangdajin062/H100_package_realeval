@@ -5,13 +5,13 @@ import pytest
 
 class TestRunner:
     def test_experiment_registry(self):
-        from experiments.runner import EXPERIMENTS, _SHORT_TO_FULL
+        from runner.registry import EXPERIMENTS, SHORT_TO_FULL
         assert len(EXPERIMENTS) >= 14, f"Expected at least 14 experiments, found {len(EXPERIMENTS)}"
-        assert _SHORT_TO_FULL["exp13"] == "exp13_fusion_strategy"
+        assert SHORT_TO_FULL["exp13"] == "exp13_fusion_strategy"
 
     def test_import_exp(self):
-        from experiments.runner import _import_exp
-        mod = _import_exp("exp1_qad_production")
+        from runner.experiment_runner import import_experiment
+        mod = import_experiment("exp1_qad_production")
         assert hasattr(mod, "run")
 
 

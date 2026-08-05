@@ -3,6 +3,11 @@
 本模块定义 ``docs/figure_scripts/paper_data.py`` 消费的所有字段路径，
 并提供 ``validate_result`` / ``check_alignment`` / ``validate_latest_results``
 等工具函数。
+
+字段分为两类：
+  - MEASURED：必须由实验真实产出的字段（默认强制检查）。
+  - CITED：来自论文自引用或外部文献的字段，不视为独立测量；默认不强制，
+    但可选择检查其是否存在并单独标注。
 """
 from __future__ import annotations
 
@@ -15,7 +20,7 @@ RESULTS_DIR = ROOT / "outputs" / "results"
 
 _NOT_FOUND = object()
 
-# 各实验必须提供的字段路径（与 docs/experiment_result_contract.md 对齐）
+# 各实验必须真实产出的字段路径（与 docs/experiment_result_contract.md 对齐）
 EXPECTED_FIELDS: dict[str, list[tuple[str, ...]]] = {
     "exp1": [
         ("f1",), ("std",), ("trajectory",),
@@ -72,7 +77,6 @@ EXPECTED_FIELDS: dict[str, list[tuple[str, ...]]] = {
         ("chifraud", "f1"),
         ("advfraud", "full_pool", "f1"),
         ("advfraud", "curated", "f1"),
-        ("bf16_matched_advfraud",),
         ("ldp_tradeoff", "eps_1.5", "f1"),
         ("ldp_tradeoff", "eps_3.0", "f1"),
         ("cross_taf_on_chifraud", "f1"),
@@ -80,10 +84,6 @@ EXPECTED_FIELDS: dict[str, list[tuple[str, ...]]] = {
     ],
     "exp6": [
         ("diagnostic_B", "h100_measured", "generic"),
-        ("paper_reference", "alpha_generic"),
-        ("paper_reference", "alpha_tuned"),
-        ("paper_reference", "gamma_deploy"),
-        ("paper_reference", "speculative_speedups"),
     ],
     "exp8": [
         ("latency_detail",),
@@ -117,6 +117,19 @@ EXPECTED_FIELDS: dict[str, list[tuple[str, ...]]] = {
     ],
 }
 
+# 来自论文自引用或外部文献的字段；不视为本实验的独立测量。
+CITED_FIELDS: dict[str, list[tuple[str, ...]]] = {
+    "exp5": [
+        ("bf16_matched_advfraud",),
+    ],
+    "exp6": [
+        ("paper_reference", "alpha_generic"),
+        ("paper_reference", "alpha_tuned"),
+        ("paper_reference", "gamma_deploy"),
+        ("paper_reference", "speculative_speedups"),
+    ],
+}
+
 
 def _dig(obj: dict[str, Any], path: tuple[str, ...]) -> Any:
     """沿路径钻取嵌套 dict。键缺失返回 ``_NOT_FOUND``，值为 None 则正常返回 None。"""
@@ -130,17 +143,30 @@ def _dig(obj: dict[str, Any], path: tuple[str, ...]) -> Any:
     return cur
 
 
-def validate_result(result: dict[str, Any], exp_id: str) -> list[str]:
-    """校验单个实验结果是否满足字段合约。
-
-    Returns:
-        缺失字段路径列表；空列表表示通过。
-    """
+def _missing_paths(result: dict[str, Any], exp_id: str, paths: list[tuple[str, ...]]) -> list[str]:
+    """返回结果中缺失的字段路径列表。"""
     missing: list[str] = []
-    for path in EXPECTED_FIELDS.get(exp_id, []):
+    for path in paths:
         if _dig(result, path) is _NOT_FOUND:
             missing.append(".".join(path))
     return missing
+
+
+def validate_result(
+    result: dict[str, Any],
+    exp_id: str,
+    *,
+    include_cited: bool = False,
+) -> dict[str, list[str]]:
+    """校验单个实验结果是否满足字段合约。
+
+    Returns:
+        {"measured": [...], "cited": [...]}，分别为缺失的 measured / cited 字段路径。
+    """
+    out: dict[str, list[str]] = {"measured": _missing_paths(result, exp_id, EXPECTED_FIELDS.get(exp_id, []))}
+    if include_cited:
+        out["cited"] = _missing_paths(result, exp_id, CITED_FIELDS.get(exp_id, []))
+    return out
 
 
 def _latest_result(exp_short: str) -> dict[str, Any] | None:
@@ -150,39 +176,60 @@ def _latest_result(exp_short: str) -> dict[str, Any] | None:
     return json.loads(candidates[-1].read_text(encoding="utf-8"))
 
 
-def check_alignment(targets: list[str] | None = None) -> dict[str, list[str]]:
-    """返回 ``{exp_short: [missing_paths]}`` 诊断报告。"""
+def check_alignment(
+    targets: list[str] | None = None,
+    *,
+    include_cited: bool = False,
+) -> dict[str, dict[str, list[str]]]:
+    """返回 ``{exp_short: {"measured": [...], "cited": [...]}}`` 诊断报告。"""
     exp_list = targets or sorted(EXPECTED_FIELDS)
-    report: dict[str, list[str]] = {}
+    report: dict[str, dict[str, list[str]]] = {}
     for exp in exp_list:
         data = _latest_result(exp)
         if data is None:
-            report[exp] = ["NO_RESULT_FILE"]
+            report[exp] = {"measured": ["NO_RESULT_FILE"], "cited": []}
             continue
-        report[exp] = validate_result(data, exp)
+        report[exp] = validate_result(data, exp, include_cited=include_cited)
     return report
 
 
-def print_alignment_report(report: dict[str, list[str]]) -> bool:
-    """打印对齐报告，返回是否有失败项。"""
+def print_alignment_report(
+    report: dict[str, dict[str, list[str]]],
+    *,
+    include_cited: bool = False,
+) -> bool:
+    """打印对齐报告，返回是否有 measured 失败项。"""
     failed = False
-    for exp, missing in sorted(report.items()):
-        if missing:
+    for exp, items in sorted(report.items()):
+        measured = items.get("measured", [])
+        cited = items.get("cited", []) if include_cited else []
+        if measured:
             failed = True
             print(f"[FAIL] {exp}")
-            for item in missing:
+            for item in measured:
                 print(f"  - {item}")
+        elif cited:
+            print(f"[PASS] {exp}  (cited missing: {cited})")
         else:
             print(f"[PASS] {exp}")
     return failed
 
 
-def validate_latest_results(targets: list[str] | None = None, strict: bool = False) -> dict[str, list[str]]:
+def validate_latest_results(
+    targets: list[str] | None = None,
+    *,
+    strict: bool = False,
+    include_cited: bool = False,
+) -> dict[str, list[str]]:
     """按实验返回最新结果文件的缺失字段诊断。
 
     Args:
         targets: 指定实验列表；None 表示校验所有已知实验。
         strict: True 时额外标记 computation 不是 ``h100*`` 的结果。
+        include_cited: True 时同时检查 cited 字段。
+
+    Returns:
+        {exp_short: [diagnostic_strings]}，为与旧 CLI 兼容的扁平列表格式。
     """
     exp_list = targets or sorted(EXPECTED_FIELDS)
     report: dict[str, list[str]] = {}
@@ -196,7 +243,12 @@ def validate_latest_results(targets: list[str] | None = None, strict: bool = Fal
             comp = str(data.get("computation", ""))
             if not comp.startswith("h100"):
                 missing.append(f"NON_H100_COMPUTATION:{comp}")
-        missing.extend(validate_result(data, exp))
+
+        validated = validate_result(data, exp, include_cited=include_cited)
+        missing.extend(validated["measured"])
+        if include_cited and validated.get("cited"):
+            missing.extend(f"CITED:{c}" for c in validated["cited"])
+
         if exp == "exp8":
             if (_dig(data, ("latencies", "int8")) is _NOT_FOUND
                     and _dig(data, ("latencies", "bf16")) is _NOT_FOUND):

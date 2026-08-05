@@ -68,12 +68,17 @@ python -m experiments.runner --smoke
 # 运行指定实验
 python -m experiments.runner --smoke --exp 1,3,6
 
-# 验证字段合约
+# 验证字段合约（strict 模式会标出非 H100 结果）
 python -m experiments.runner --validate-contract
+
+# 一致性检查（SMOKE / CITED / DRIFT）
+python -m experiments.consistency_check
 
 # 不归档旧结果直接运行
 python -m experiments.runner --smoke --no-archive
 ```
+
+> **注意**：从 2026-08 重构后，`--smoke` 与 `--paper` 必须显式指定其一，未指定会报错，防止静默 fallback 到 smoke。
 
 smoke 路径使用合成数据和 sklearn GBM 模型，所有结果 JSON 字段与 paper 路径完全一致（数值为近似值）。
 
@@ -96,6 +101,8 @@ python -m experiments.runner --paper --exp 1,3,6 --config config/h100.yaml
 # 跳过运行前归档（调试用）
 python -m experiments.runner --paper --no-archive
 ```
+
+> 与 `experiments.runner` 一致，`paper_pipeline` 也必须显式指定 `--smoke` 或 `--paper`。
 
 ### 实验分组
 

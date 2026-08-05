@@ -95,6 +95,7 @@ def run(config: dict) -> dict:
                 "bf16_0.5b_transformers": {"f1": bf16_f1, "runtime": "transformers", "source": "ours"},
                 "q4km_0.5b_llama_cpp": {
                     "f1": q4_f1,
+                    "std": None,
                     "runtime": "llama_cpp (proxy)",
                     "source": "ours",
                     "note": "sandbox proxy: real 4-bit feature quantisation, not the real GGUF",

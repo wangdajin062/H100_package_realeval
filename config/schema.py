@@ -26,15 +26,18 @@ CONFIG_SCHEMA: dict[str, tuple[str, type | tuple[type, ...], Any, bool]] = {
     "data.max_samples": ("最大采样数", (int, type(None)), 16000, False),
 
     # 训练超参
-    "training.batch_size":        ("批次大小", int, 64, True),
-    "training.learning_rate":     ("学习率", float, 5e-5, True),
-    "training.epochs":            ("训练轮数", int, 5, True),
-    "training.apply_ov_rescaling":("启用 OV-Freeze", bool, True, False),
-    "training.quantize":          ("量化方案：fp16 / int8 / int4 / nf4", str, "int4", True),
-    "training.val_frac":          ("校准集比例", float, 0.15, False),
-    "training.head_hidden":       ("分类头隐藏层维度", int, 128, False),
-    "training.label_smoothing":   ("标签平滑", float, 0.1, False),
-    "training.warmup_steps":      ("线性 warmup 步数", int, 100, False),
+    "training.batch_size":             ("批次大小", int, 64, True),
+    "training.learning_rate":          ("学习率", float, 5e-5, True),
+    "training.epochs":                 ("训练轮数", int, 5, True),
+    "training.apply_ov_rescaling":     ("启用 OV-Freeze", bool, True, False),
+    "training.quantize":               ("量化方案：fp16 / int8 / int4 / nf4", str, "int4", True),
+    "training.balance_class_weight":   ("是否按类别频率加权 CE", bool, True, False),
+    "training.val_frac":               ("校准集比例", float, 0.15, False),
+    "training.head_hidden":            ("分类头隐藏层维度", int, 128, False),
+    "training.label_smoothing":        ("标签平滑", float, 0.1, False),
+    "training.warmup_steps":           ("线性 warmup 步数", int, 100, False),
+    "training.focal_gamma":            ("focal loss gamma（0=标准 CE）", float, 0.0, False),
+    "training.threshold_grid_steps":   ("F1 阈值搜索网格步数", int, 19, False),
 
     # 蒸馏参数
     "distillation.temperature":          ("蒸馏温度", float, 2.0, True),
@@ -42,6 +45,8 @@ CONFIG_SCHEMA: dict[str, tuple[str, type | tuple[type, ...], Any, bool]] = {
     "distillation.alpha_kl":             ("KL loss 权重", float, 0.5, False),
     "distillation.max_batch":            ("蒸馏最大批次", int, 64, False),
     "distillation.max_seq_length":       ("最大序列长度", int, 256, False),
+    "distillation.freeze_frac_default":  ("默认冻结比例", float, 1.0, False),
+    "distillation.window_default":       ("默认窗口大小", float, 1.0, False),
     "distillation.total_steps":          ("概念步数空间（Fig4 对齐）", int, 2000, False),
     "distillation.ovf_activation_ratio": ("OV-Freeze 激活时机", float, 0.7, False),
     "distillation.cot_max_new_tokens":   ("CoT 最大生成长度", int, 48, False),
@@ -81,9 +86,15 @@ CONFIG_SCHEMA: dict[str, tuple[str, type | tuple[type, ...], Any, bool]] = {
     "synthetic.n_features":("合成特征维度", int, 128, False),
 
     # 音频
-    "audio.sample_rate":("采样率", int, 16000, False),
-    "audio.mel_bins":   ("mel 频带数", int, 64, False),
-    "audio.hop_length": ("hop 长度", int, 160, False),
+    "audio.sample_rate":      ("采样率", int, 16000, False),
+    "audio.mel_bins":         ("mel 频带数", int, 64, False),
+    "audio.hop_length":       ("hop 长度", int, 160, False),
+    "audio.mfcc_dim":         ("MFCC 维度", int, 64, False),
+    "audio.whisper_proj_dim": ("Whisper 投影维度", int, 64, False),
+
+    # 学生模型路径
+    "students":        ("LoRA/学生检查点路径表", dict, {}, False),
+    "student_variant": ("要加载的学生变体", str, "qad_ovf", False),
 }
 
 
@@ -128,7 +139,7 @@ def validate_config(config: dict[str, Any]) -> list[str]:
         issues.append(f"training.quantize 取值非法：{quantize}")
 
     data_source = _get_path(config, "data.source")
-    if data_source is not _MISSING and data_source not in ("auto", "taf28k", "synthetic"):
+    if data_source is not _MISSING and data_source not in ("auto", "taf28k", "synthetic", "chifraud"):
         issues.append(f"data.source 取值非法：{data_source}")
 
     return issues

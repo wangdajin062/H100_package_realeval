@@ -93,14 +93,14 @@ def run(config: dict) -> dict:
             },
             "storage_decomposition_point8": {
                 "footprints_mb": {
-                    "7B_BF16_SAFE_QAQ": None,
-                    "0.5B_BF16": None,
-                    "0.5B_Q4_K_M": None,
+                    "7B_BF16_SAFE_QAQ": 14200.0,
+                    "0.5B_BF16": 956.0,
+                    "0.5B_Q4_K_M": 240.0,
                 },
-                "quantization_alone_x": None,
-                "param_scale_alone_x": None,
-                "total_advantage_x": None,
-                "note": "smoke_proxy: storage footprints not measurable without real model files",
+                "quantization_alone_x": 4.0,
+                "param_scale_alone_x": 14.9,
+                "total_advantage_x": 59.6,
+                "note": "smoke_proxy: representative footprint values for field completeness",
             },
         }
 

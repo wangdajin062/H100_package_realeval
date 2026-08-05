@@ -1,7 +1,12 @@
-"""experiments/runner.py — CLI 入口与兼容层。
+"""experiments/runner.py — Unified Experiment Orchestrator (thin wrapper).
 
-实际编排逻辑已迁移至 ``runner/orchestrator.py``；本文件保留为命令行入口，
-并继续暴露 ``EXPERIMENTS`` / ``_SHORT_TO_FULL`` 等旧符号以兼容既有导入。
+Delegates to the refactored ``runner/`` package, ``config/``, ``metrics/``,
+``realeval/io/``, and ``cli/`` modules. This file exists solely to preserve the
+historical CLI entry point:
+
+    python -m experiments.runner --smoke
+    python -m experiments.runner --paper --config config/h100.yaml
+    python -m experiments.runner --exp 1,3,6
 """
 from __future__ import annotations
 
@@ -10,37 +15,26 @@ import sys
 from pathlib import Path
 from typing import Any
 
+# Ensure project root is importable when running as ``python -m experiments.runner``
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from cli.parser import build_runner_parser
 from config import load_config
+from config.schema import ensure_valid_config
+from metrics.contract import check_alignment, print_alignment_report, validate_latest_results
 from runner.orchestrator import run_all, run_selected
 from runner.registry import EXPERIMENTS, SHORT_TO_FULL
+from realeval.io.archive import archive_if_needed
 from utils.logging import configure_logging, get_logger
 
 configure_logging()
 logger = get_logger("experiments.runner")
 
-# 兼容旧导入：外部可能引用 experiments.runner.EXPERIMENTS / _SHORT_TO_FULL / run_all
-_SHORT_TO_FULL = SHORT_TO_FULL
-
-
-def _import_exp(modname: str) -> Any:
-    """按模块名导入实验模块（兼容旧 paper_pipeline 导入）。"""
-    from runner.experiment_runner import import_experiment
-    return import_experiment(modname)
-
-
-def run_experiment(modname: str, short: str, config: dict[str, Any]) -> dict[str, Any]:
-    """运行单个实验（兼容旧接口）。"""
-    from runner.experiment_runner import run_experiment as _run
-    return _run(modname, short, config)
-
 
 def _handle_standalone_checks(args) -> bool:
-    """处理不需要运行实验的独立子命令。"""
+    """Handle CLI flags that do not run experiments. Returns True if main() should exit."""
     if args.check:
         from realeval.hwenv import check
         ok, issues = check(strict=True)
@@ -53,7 +47,7 @@ def _handle_standalone_checks(args) -> bool:
         return True
 
     if args.storage_check:
-        from realeval.paths import list_local_models, storage_report
+        from realeval.paths import storage_report, list_local_models
         rep = storage_report()
         print("Storage Report:")
         for k, v in rep.items():
@@ -74,8 +68,7 @@ def _handle_standalone_checks(args) -> bool:
         return True
 
     if args.validate_contract:
-        from metrics.contract import validate_latest_results
-        report = validate_latest_results()
+        report = validate_latest_results(strict=True)
         failed = False
         for exp, missing in report.items():
             if missing:
@@ -92,7 +85,6 @@ def _handle_standalone_checks(args) -> bool:
         return True
 
     if args.align:
-        from metrics.contract import check_alignment, print_alignment_report
         report = check_alignment()
         failed = print_alignment_report(report)
         if failed:
@@ -100,55 +92,32 @@ def _handle_standalone_checks(args) -> bool:
         return True
 
     if args.benchmark:
-        from realeval.benchmark import benchmark, summary
+        from realeval import benchmark
         import torch
         import torch.nn as nn
         model = nn.Sequential(nn.Linear(64, 128), nn.ReLU(), nn.Linear(128, 2))
-        r = benchmark(model, torch.randn(64), warmup=10, repeat=100, batch_sizes=(1, 16, 64))
-        s = summary(r)
+        r = benchmark.benchmark(model, torch.randn(64), warmup=10, repeat=100, batch_sizes=(1, 16, 64))
+        s = benchmark.summary(r)
         print("Benchmark summary:", s)
         return True
 
     return False
 
 
-def _load_and_validate_config(args) -> dict[str, Any]:
-    """加载配置、应用 smoke/paper 标记、写环境报告。"""
-    from realeval import envreport, validation
-    config = load_config(args.config, validate=False)
-    if args.smoke:
-        config["_smoke"] = True
-        logger.info("SMOKE MODE: using small model verification path")
-    if args.paper:
-        config["_paper"] = True
-        logger.info("PAPER MODE: using real Qwen + H100 backend")
-
-    try:
-        validation.validate_config(config)
-    except validation.ValidationError as e:
-        logger.error("Config validation failed: %s", e)
-        sys.exit(1)
-
-    envreport.write_report()
-    from realeval.audit import log_environment
-    log_environment(config)
-    return config
-
-
 def _resolve_experiment_selection(args) -> list[str]:
-    """根据 CLI 参数解析要运行的实验列表。"""
+    """Resolve which experiments to run from CLI args."""
     if args.exp is not None:
         raw = args.exp
     elif args.experiments is not None:
         raw = args.experiments
     else:
-        raw = "all"
+        return [e.short for e in EXPERIMENTS]
 
     if raw == "all":
         return [e.short for e in EXPERIMENTS]
 
     parts = [p.strip() for p in raw.split(",") if p.strip()]
-    digits: list[str] = []
+    digits = []
     for p in parts:
         if p.isdigit():
             digits.append(p)
@@ -157,36 +126,59 @@ def _resolve_experiment_selection(args) -> list[str]:
         else:
             logger.error("Invalid experiment identifier: %s", p)
             sys.exit(1)
+
     from realeval.validation import validate_experiment_selection
     return validate_experiment_selection(
         ",".join(digits),
-        [(e.short, e.description) for e in EXPERIMENTS]
+        [(e.short, e.description) for e in EXPERIMENTS],
     )
 
 
 def main() -> int:
-    parser = build_runner_parser()
-    args = parser.parse_args()
-
+    """CLI entry point."""
+    args = build_runner_parser().parse_args()
     if _handle_standalone_checks(args):
         return 0
 
-    config = _load_and_validate_config(args)
-    selected = _resolve_experiment_selection(args)
+    # Require explicit mode to avoid silent smoke fallback in paper context.
+    if not args.smoke and not args.paper:
+        logger.error("必须显式指定 --smoke（沙盒验证）或 --paper（真实 H100 运行）")
+        sys.exit(1)
 
-    # --resume 模式下避免归档，否则 resume 会失效
-    no_archive = getattr(args, "no_archive", False) or args.resume
+    # --resume depends on existing results; archiving would delete them and break resume.
+    no_archive = args.no_archive or args.resume
+    if not no_archive:
+        try:
+            archived = archive_if_needed()
+            if archived:
+                logger.info("旧实验结果已归档至：%s", archived)
+        except Exception as exc:
+            logger.warning("归档步骤失败（继续运行）：%s", exc)
+
+    config = load_config(args.config)
+    if args.smoke:
+        config["_smoke"] = True
+        logger.info("SMOKE MODE: lightweight verification path")
+    if args.paper:
+        config["_paper"] = True
+        logger.info("PAPER MODE: real Qwen + H100 backend")
+
+    try:
+        ensure_valid_config(config)
+    except Exception as exc:
+        logger.error("Config validation failed: %s", exc)
+        sys.exit(1)
+
+    selected = _resolve_experiment_selection(args)
     results = run_selected(
         config,
         selected,
         resume=args.resume,
-        no_archive=no_archive,
+        no_archive=True,  # already archived above
         aggregate=True,
     )
-
     logger.info("实验完成：%s", list(results.keys()))
-    logger.info("结果已保存至 outputs/results/。"
-                "运行 'python -m experiments.runner --report' 生成论文表格/图像。")
+    logger.info("结果已保存至 outputs/results/。运行 'python -m experiments.runner --report' 生成论文表格/图像。")
     return 0
 
 

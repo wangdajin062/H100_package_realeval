@@ -28,6 +28,16 @@ Supporting modules:
 
 ```bash
 pip install matplotlib numpy
+
+# 1. Run experiments first (smoke = fast sklearn verification; paper = real H100)
+python3 -m experiments.runner --smoke
+# or on H100:
+# python3 -m experiments.runner --paper --config config/h100.yaml
+
+# 2. Verify field alignment (optional but recommended)
+python3 docs/figure_scripts/check_alignment.py
+
+# 3. Regenerate all figures
 python3 generate_all.py        # regenerate all 7 PNGs
 # or run any single figure:
 python3 fig3_main_results.py
