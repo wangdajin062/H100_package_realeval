@@ -140,10 +140,60 @@ cd docs/figure_scripts && python generate_all.py
 | `check_alignment.py` | 部分通过 | 仅 exp5 / exp14 缺失（需 TAF-28k 网络下载） |
 | `validate-contract` | 部分通过 | 同上 |
 | 自动归档 | ✓ | 生成带时间戳 Markdown 并清理输出目录 |
+| 大文件从历史移除 | ✓ | 已移除 `docs/figure/`、`data/`、`cluster/cloudflared` |
+| 远程分支清理 | ✓ | 仅保留 `refs/heads/main`，`master`/`main_11` 已删除 |
+| 本地引用清理 | ✓ | 已清理 `refs/original/`、`refs/agents/`、`refs/cline/`、stash、reflog |
+| `.git` 目录大小 | ✓ | 从约 931M 降至 888K |
+| LFS 缓存清理 | ✓ | `git lfs prune --force` 删除 83 个本地对象 |
 
 ---
 
-## 7. 已知限制
+## 7. Git 历史清理记录
+
+为降低仓库体积并移除过期二进制/数据历史，对 `main` 分支执行了重写式清理。所有论文图像脚本（`docs/figure_scripts/`）未受影响。
+
+### 7.1 移除内容
+
+- `docs/figure/`：所有 `.tiff`/`.png`/`.pdf` 生成图像
+- `data/`：TAF-28k、ChiFraud 等数据集
+- `cluster/cloudflared`：集群部署二进制
+
+### 7.2 关键命令
+
+```bash
+# 重写 main，移除 docs/figure
+git filter-branch --force --index-filter 'git rm --cached --ignore-unmatch -r docs/figure' --prune-empty --tag-name-filter cat -- main
+
+# 清理本地过期引用
+git remote set-head origin -d
+git update-ref -d refs/remotes/origin/main
+git stash clear
+git reflog expire --expire=now --all
+
+# 强制推送与垃圾回收
+git push origin main --force
+git gc --aggressive --prune=now
+git lfs prune --force
+```
+
+### 7.3 清理后状态
+
+- 远程仅剩 `main` 分支
+- 本地 `.git` 从约 **931M** 降至 **888K**
+- `git rev-list --objects --all` 中无 ≥1MB blob
+- `git lfs ls-files` 为空
+
+### 7.4 协作注意
+
+这是一次强制推送，所有提交哈希已改变。其他机器请直接删除旧 clone 后重新拉取：
+
+```bash
+git clone ssh://git@ssh.github.com:443/wangdajin062/H100_package_realeval.git
+```
+
+---
+
+## 8. 已知限制
 
 - **exp5 / exp7 / exp10 / exp12 / exp13 / exp14** 在本地无网络环境时会尝试从 HuggingFace 下载 `wangdajin062/TeleAntiFraud-bucket`，导致长时间重试。请在 H100/RunPod 环境或预先下载 `data/TAF28k` 后运行。
 - smoke 路径数值为合成近似，仅用于验证代码路径与字段结构；论文图表真实数值需 paper 路径。
