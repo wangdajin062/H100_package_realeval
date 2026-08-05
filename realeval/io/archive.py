@@ -203,6 +203,14 @@ _CLEAR_GLOBS: list[tuple[Path, str, bool]] = [
 _CLEAR_DIRS: list[Path] = [FIGURES, METRICS_DIR, TABLES_DIR]
 
 
+def _rel_str(path: Path) -> str:
+    """Return path relative to ROOT when possible; otherwise absolute string."""
+    try:
+        return str(path.relative_to(ROOT))
+    except ValueError:
+        return str(path)
+
+
 def clear_outputs(dry_run: bool = False) -> list[str]:
     """删除实验输出文件并返回已删除路径列表。"""
     deleted: list[str] = []
@@ -212,7 +220,7 @@ def clear_outputs(dry_run: bool = False) -> list[str]:
             if f.is_file():
                 if not dry_run:
                     f.unlink()
-                deleted.append(str(f.relative_to(ROOT)))
+                deleted.append(_rel_str(f))
 
     for d in _CLEAR_DIRS:
         if d.exists():
@@ -222,7 +230,7 @@ def clear_outputs(dry_run: bool = False) -> list[str]:
                         shutil.rmtree(child)
                     else:
                         child.unlink()
-                deleted.append(str(child.relative_to(ROOT)))
+                deleted.append(_rel_str(child))
 
     return deleted
 

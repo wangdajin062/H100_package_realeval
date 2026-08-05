@@ -63,10 +63,16 @@ CONFIG_SCHEMA: dict[str, tuple[str, type | tuple[type, ...], Any, bool]] = {
     "reproducibility.benchmark_batch_sizes":("基准 batch 大小列表", list, [1, 8, 32, 64], False),
 
     # 隐私评估
-    "privacy.delta":           ("差分隐私 δ", float, 1.0e-5, False),
-    "privacy.sensitivity":     ("敏感度", float, 1.0, False),
-    "privacy.noise_multiplier":("高斯噪声倍率", float, 1.0, False),
-    "privacy.clip_bound":      ("梯度裁剪界", float, 3.0, False),
+    "privacy.delta":                  ("差分隐私 δ", float, 1.0e-5, False),
+    "privacy.sensitivity":            ("敏感度", float, 1.0, False),
+    "privacy.noise_multiplier":       ("高斯噪声倍率", float, 1.0, False),
+    "privacy.clip_bound":             ("梯度裁剪界", float, 3.0, False),
+    "privacy.open_set_enroll_utt":    ("开放集注册 utterance 数", int, 3, False),
+    "privacy.glo_attack_steps":       ("GLO 攻击步数", int, 150, False),
+    "privacy.glo_max_targets":        ("GLO 最大目标数", int, 30, False),
+    "privacy.speaker_id_hidden_layers":("说话人识别隐藏层", list, [256, 128], False),
+    "privacy.speaker_id_max_iter":    ("说话人识别最大迭代", int, 300, False),
+    "privacy.asv_thresholds":         ("ASV 阈值", int, 400, False),
 
     # 推测解码
     "speculative_decoding.gamma":      ("草稿 token 数 γ", int, 5, False),
@@ -74,12 +80,15 @@ CONFIG_SCHEMA: dict[str, tuple[str, type | tuple[type, ...], Any, bool]] = {
     "speculative_decoding.max_new_tokens": ("最大新 token 数", int, 40, False),
 
     # 分类
-    "classification.n_estimators": ("GBM 树数量", int, 100, False),
-    "classification.max_iter":     ("MLP 最大迭代", int, 1000, False),
+    "classification.n_estimators":        ("GBM 树数量", int, 100, False),
+    "classification.max_iter":            ("MLP 最大迭代", int, 1000, False),
+    "classification.verification_n_features": ("验证特征维度", int, 128, False),
+    "classification.verification_overlap":    ("验证特征重叠度", float, 0.9, False),
 
     # 推理
-    "inference.max_context": ("最大上下文长度", int, 2048, False),
-    "inference.max_tokens":  ("最大生成 token 数", int, 4, False),
+    "inference.max_context":   ("最大上下文长度", int, 2048, False),
+    "inference.max_tokens":    ("最大生成 token 数", int, 4, False),
+    "inference.cot_temperature": ("CoT 采样温度", float, 0.0, False),
 
     # 合成数据
     "synthetic.n_default": ("默认合成样本数", int, 200, False),

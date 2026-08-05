@@ -90,7 +90,12 @@ EXPECTED_FIELDS: dict[str, list[tuple[str, ...]]] = {
         ("diagnostic_B", "h100_measured", "generic"),
     ],
     "exp8": [
-        ("latency_detail",),
+        ("latency_detail", "bf16", "p50_ms"),
+        ("latency_detail", "bf16", "p99_ms"),
+        ("latency_detail", "fp16", "p50_ms"),
+        ("latency_detail", "fp16", "p99_ms"),
+        ("latency_detail", "int4", "p50_ms"),
+        ("latency_detail", "int4", "p99_ms"),
         ("batch_benchmark",),
     ],
     "exp10": [
