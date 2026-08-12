@@ -50,8 +50,7 @@ H100_package_realeval/
     ├── paper_pipeline.py      # 一键流水线（委托 runner + metrics）
     ├── framework.py           # 模式分发 / 数据回退 / 通用 helper
     ├── common.py              # 公共训练/评估 helper
-    ├── alignment.py           # 兼容 re-export（原字段对齐逻辑已迁移到 metrics/contract.py）
-    ├── contract.py            # 兼容 re-export
+    ├── consistency_check.py   # 论文数字 vs 实测一致性守门员
     └── exp*_*.py              # 各实验实现
 ```
 
@@ -75,26 +74,30 @@ runner.orchestrator.run_experiments()
     │       └── metrics.extraction.extract_headline(result)
     │
     ├── realeval.io.serialization.save_all_experiments()  # 写入 all_experiments.json
-    └── metrics.contract.validate_contract() # 字段合约校验
+    ├── metrics.contract.validate_contract() # 字段合约校验
+    └── experiments.consistency_check.main() # 论文数字 vs 实测漂移检查
 ```
 
 ---
 
 ## 4. 复现路径
 
-### 4.1 本地 smoke 验证（无需 GPU / 无需网络）
+### 4.1 本地 smoke 验证（无需 GPU）
 
 ```bash
 cd Projects/H100_package_realeval
 
-# 运行不需要 HuggingFace 下载的子集
-python -m experiments.runner --smoke --no-archive --exp 1,2,3,4,6,8,9,11
+# 运行全部 14 个实验的 smoke 路径（合成数据替代真实数据集）
+python -m experiments.runner --smoke --no-archive
 
-# 字段对齐检查（预期仅剩 exp5 / exp14 因需 TAF-28k 网络下载而缺失）
+# 字段对齐检查：65 处 _from_result 字段全部可解析
 python docs/figure_scripts/check_alignment.py
 
-# 合约校验
+# 合约校验（smoke 模式下会标出 NON_H100_COMPUTATION，属预期行为）
 python -m experiments.runner --validate-contract
+
+# 一致性检查（smoke / CITED / DRIFT 标注意义见第 9 节）
+python -m experiments.consistency_check
 ```
 
 ### 4.2 H100 / RunPod 论文级复现
@@ -125,7 +128,8 @@ cd docs/figure_scripts && python generate_all.py
 ## 5. 向后兼容
 
 - `from realeval.io import ...` 仍然有效（`realeval/io/__init__.py` 转发到新子包）。
-- 旧版 `experiments/alignment.py` / `experiments/contract.py` 保留兼容 re-export。
+- 旧版 `experiments/alignment.py` / `experiments/contract.py` 已删除，字段合约逻辑统一迁移到 `metrics/contract.py`。
+- `experiments/claim_engine.py` 的 `_SHORT_TO_FULL` 改为从 `runner.registry.SHORT_TO_FULL` 导入。
 - 实验脚本 `exp1_qad_production.py` 等输出字段保持原命名，未做不兼容改动。
 
 ---
@@ -135,10 +139,11 @@ cd docs/figure_scripts && python generate_all.py
 | 检查项 | 状态 | 说明 |
 |--------|------|------|
 | `py_compile` 全文件通过 | ✓ | 新/改模块无语法错误 |
-| `pytest tests/test_integration.py` | ✓ | 4/4 通过 |
-| smoke 子集运行 | ✓ | exp1/2/3/4/6/8/9/11 成功 |
-| `check_alignment.py` | 部分通过 | 仅 exp5 / exp14 缺失（需 TAF-28k 网络下载） |
-| `validate-contract` | 部分通过 | 同上 |
+| `pytest tests/ -q` | ✓ | **71 passed, 1 warning** |
+| smoke 全部 14 个实验 | ✓ | exp1–exp14 全部完成 |
+| `check_alignment.py` | ✓ | 65 处字段路径全部可用 |
+| `validate-contract` | ✓ | 严格模式按预期标出 smoke 非 H100 计算 |
+| `consistency_check` | ✓ | 仅预期内的 SMOKE/CITED/DRIFT，无 MISSING |
 | 自动归档 | ✓ | 生成带时间戳 Markdown 并清理输出目录 |
 | 大文件从历史移除 | ✓ | 已移除 `docs/figure/`、`data/`、`cluster/cloudflared` |
 | 远程分支清理 | ✓ | 仅保留 `refs/heads/main`，`master`/`main_11` 已删除 |
@@ -196,4 +201,27 @@ git clone ssh://git@ssh.github.com:443/wangdajin062/H100_package_realeval.git
 ## 8. 已知限制
 
 - **exp5 / exp7 / exp10 / exp12 / exp13 / exp14** 在本地无网络环境时会尝试从 HuggingFace 下载 `wangdajin062/TeleAntiFraud-bucket`，导致长时间重试。请在 H100/RunPod 环境或预先下载 `data/TAF28k` 后运行。
-- smoke 路径数值为合成近似，仅用于验证代码路径与字段结构；论文图表真实数值需 paper 路径。
+- smoke 路径数值为合成近似，仅用于验证代码路径与字段结构；论文图表真实数值需 `--paper` 路径。
+- H100 实测后需更新 `experiments/consistency_check.py` 中的 `PAPER_CLAIMS` 表，才能长期作为“论文数字 vs 实测”的守门员。
+
+---
+
+## 9. 一致性检查说明（`experiments/consistency_check.py`）
+
+该工具补齐了 `metrics/contract.py` 只检查“字段存在”的不足，额外做三层判定：
+
+| 判定 | 含义 | 示例 |
+|------|------|------|
+| **SMOKE** | `computation` 不以 `h100` 开头，不是真实 H100 测量 | 本地 smoke 运行全部被标红 |
+| **CITED** | 字段为硬编码论文值/自引用，不可当证据 | exp5 `bf16_matched_advfraud`、exp6 `paper_reference.*` |
+| **DRIFT** | 实测头条指标与 `PAPER_CLAIMS` 声称值差距过大 | smoke 数值与论文值偏离时会标红 |
+| **MATCH** | 实测值在容忍范围内 | exp13 late fusion 0.8975 vs 声称 0.923 |
+
+用法：
+
+```bash
+python -m experiments.consistency_check          # 人读格式，有 P0 则 exit=1
+python -m experiments.consistency_check --json   # 机读格式，供 CI 解析
+```
+
+> 注：`PAPER_CLAIMS` 中的阈值/期望值按当前论文声称填写；完成 H100 `--paper` 复测后请同步更新，再把它接进 `paper_pipeline` 末尾即可实现自动守门。
