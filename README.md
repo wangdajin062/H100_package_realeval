@@ -100,7 +100,9 @@ cd docs/figure_scripts && python generate_all.py    # 论文图像（只读脚�
 │   ├── models.py              #   Qwen 加载 + 量化（BF16/FP16/INT4/INT8/NF4）
 │   ├── data.py                #   数据集：TAF-28k · ChiFraud · AdvFraud-3k
 │   ├── specdec.py / privacy.py / metrics.py / benchmark.py
-│   ├── runlog.py              #   溯源：git SHA · config hash · seed
+│   ├── audit.py               #   可复现审计 + 实验溯源（git SHA · config hash · seed）
+│   ├── gguf_backend.py        #   llama.cpp GGUF 推理后端（exp14）
+│   ├── envreport.py           #   环境报告（硬件/驱动/版本）
 │   └── io/                    #   IO 子包（序列化 · 路径 · 归档）
 │       ├── paths.py
 │       ├── serialization.py
@@ -125,6 +127,19 @@ cd docs/figure_scripts && python generate_all.py    # 论文图像（只读脚�
 │   ├── contract.py            #   图像脚本字段合约
 │   ├── extraction.py          #   headline 指标提取
 │   └── aggregation.py         #   多 seed 聚合
+├── cluster/                   # H100 集群运维脚本
+│   ├── launch.sh              #   统一启动脚本（ddp|h100|runpod 模式）
+│   ├── manage_models.sh       #   模型下载/管理
+│   ├── setup_runpod.sh        #   RunPod 环境初始化
+│   ├── diagnose_training.py   #   训练 NaN 根因诊断
+│   ├── fix_training.py        #   训练缺陷修复（collator + label masking）
+│   └── train_*.py             #   LoRA 训练脚本
+├── scripts/                   # 辅助脚本
+│   ├── run_pipeline.sh        #   容器侧一键流水线（--train 可选）
+│   ├── export_to_gguf.py      #   LoRA → Q4_K_M GGUF 导出
+│   ├── archive_and_clear.py   #   结果归档
+│   └── sync_*.py              #   RunPod 文件同步
+├── gpu_monitor.sh             # GPU 监控工具箱（procs|top|watch）
 ├── cli/                       # 命令入口
 │   └── parser.py              #   统一 argparse
 ├── utils/                     # 通用工具
@@ -136,7 +151,7 @@ cd docs/figure_scripts && python generate_all.py    # 论文图像（只读脚�
 ├── docs/REFACTORING.md        # 重构说明
 ├── docs/experiment_result_contract.md  # 字段对齐契约
 ├── claims/ + audit/           # 论文声称 + 证据图谱
-├── reports/                   # 实验结果报告
+├── reports/                   # 实验运行日志（RUNLOG_*.md）
 └── outputs/                   # results / archive / logs / metrics / figures
 ```
 
@@ -204,7 +219,7 @@ cd docs/figure_scripts && python generate_all.py
 
 - [`docs/REPRODUCIBILITY.md`](docs/REPRODUCIBILITY.md) — 完整复现路径
 - [`docs/experiment_result_contract.md`](docs/experiment_result_contract.md) — 字段对齐契约
-- [`reports/2026-08-01_experiment_results.md`](reports/2026-08-01_experiment_results.md) — 实验数值结果
+- [`reports/RUNLOG_20260803_summary.md`](reports/RUNLOG_20260803_summary.md) — 实验运行日志汇总
 
 ## 8. 许可证
 
