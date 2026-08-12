@@ -110,8 +110,7 @@ cd docs/figure_scripts && python generate_all.py    # 论文图像（只读脚�
 │   ├── runner.py              #   CLI 包装器
 │   ├── paper_pipeline.py      #   一键 H100 流水线
 │   ├── common.py              #   公共训练/评估 helper
-│   ├── alignment.py           #   兼容 re-export
-│   ├── contract.py            #   兼容 re-export
+│   ├── consistency_check.py   #   论文数字 vs 实测一致性守门员
 │   └── exp*_*.py              #   各实验实现
 ├── config/                    # 统一配置管理
 │   ├── __init__.py            #   暴露 load_config / validate_config
