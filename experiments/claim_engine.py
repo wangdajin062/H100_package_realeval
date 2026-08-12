@@ -22,7 +22,7 @@ from pathlib import Path
 import yaml
 
 from realeval import statistics as st
-from realeval.runlog import provenance
+from realeval.audit import provenance
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s %(message)s")
 logger = logging.getLogger("claim_engine")

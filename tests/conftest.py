@@ -17,7 +17,7 @@ import pytest
 def isolate_outputs(monkeypatch, tmp_path):
     """Redirect all writable output roots to tmp_path for test isolation."""
     import realeval.io as io_mod
-    import realeval.runlog as runlog_mod
+    import realeval.audit as runlog_mod
     import realeval.paths as paths_mod
 
     saved_results = io_mod.RESULTS

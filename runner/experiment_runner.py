@@ -9,7 +9,7 @@ import logging
 from typing import Any
 
 from realeval.io.serialization import save_results
-from realeval.runlog import log_experiment_end, log_experiment_start
+from realeval.audit import log_experiment_end, log_experiment_start
 from utils.logging import get_logger
 
 logger = logging.getLogger("runner.experiment_runner")

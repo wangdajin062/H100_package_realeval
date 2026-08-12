@@ -81,8 +81,8 @@ def test_full_pipeline_smoke(tmp_path):
 def test_audit_trace_captured(tmp_path):
     """Verify audit.environment captures expected keys."""
     from realeval.audit import log_environment, reset_audit_logger
-    from realeval.runlog import log_run, read_runlog
-    import realeval.runlog as runlog_mod
+    from realeval.audit import log_run, read_runlog
+    import realeval.audit as runlog_mod
 
     saved_runlog = runlog_mod.RUNLOG
     try:

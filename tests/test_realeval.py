@@ -232,10 +232,10 @@ class TestPaths:
 
 class TestRunLog:
     def test_log_run(self, tmp_path):
-        from realeval.runlog import log_run
+        from realeval.audit import log_run
         import json
         log_run("test_exp", {"key": "val"}, {"f1": 0.9}, status="completed")
-        from realeval.runlog import RUNLOG
+        from realeval.audit import RUNLOG
         assert RUNLOG.exists()
         lines = RUNLOG.read_text().strip().split("\n")
         assert len(lines) >= 1

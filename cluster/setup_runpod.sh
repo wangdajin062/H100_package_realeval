@@ -34,4 +34,4 @@ $PY -m experiments.runner --storage-check || true
 
 echo ""
 echo "✅ RunPod setup complete."
-echo "   Paper-grade run: REALEVAL_DATA__SOURCE=taf28k ./cluster/launch_runpod_h100.sh"
+echo "   Paper-grade run: REALEVAL_DATA__SOURCE=taf28k ./cluster/launch.sh runpod"
