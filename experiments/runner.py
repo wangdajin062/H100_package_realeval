@@ -151,7 +151,6 @@ def main() -> int:
 
     config = load_config(args.config)
     if args.paper:
-        config["_paper"] = True
         logger.info("PAPER MODE: real Qwen + H100 backend")
 
     try:

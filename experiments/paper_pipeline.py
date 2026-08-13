@@ -243,8 +243,6 @@ def main() -> int:
             logger.warning("归档步骤失败（继续运行）：%s", _ae)
 
     config = load_config(args.config, validate=False)
-    if args.paper:
-        config["_paper"] = True
 
     from realeval import validation
     try:
