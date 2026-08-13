@@ -274,7 +274,7 @@ def _teacher_entry(tk, label, tokens, fallback_f1, fallback_conv):
 # exp10 调优后真实产出为单一 F1（0.5B 0.9149 / 1.5B 0.5116 / 3B 0.7676 / 7B 0.7038，
 # 见 results_20260803），而 fig5b 脚本读取 f1_fixed/f1_conv 双维（固定 token 预算 vs 收敛）。
 # 真实双维数据未记录，原 fallback 0.896/0.877/… 为论文声称值。改为 None 显式报缺
-# （字段契约待 exp10 重跑出双维数据后回填，见 CONSISTENCY_AUDIT §2.5/§6.4）。
+# （字段契约待 exp10 重跑出双维数据后回填，见 reports/CONSISTENCY_AUDIT.md §2.5/§6.4）。
 EXP09_TEACHER = [
     _teacher_entry("teacher",        "0.5B\n(same)", 0.5,
                    _from_result("exp10", "scales", "teacher", "f1_fixed", placeholder="PH_EXP10_T_05B_FIXED", fallback=None),
@@ -431,7 +431,7 @@ _FIG8_REF = {
 
 # Panel (a): quantization scheme — homogeneous INT4 vs heterogeneous NVFP4+Q4_K_M
 # 同质 INT4 读取 exp11 的 int4 方案（uniform INT4），与 PH_EXP11_INT4_F1 同源；
-# 此前误读 exp1.f1（QAD 字段），与 PH_EXP1_F1 的 fallback 相冲突（见 CONSISTENCY_AUDIT.md）。
+# 此前误读 exp1.f1（QAD 字段），与 PH_EXP1_F1 的 fallback 相冲突（见 reports/CONSISTENCY_AUDIT.md）。
 _f1_homo = _from_result("exp11", "schemes", "int4", "f1",
                         placeholder="PH_EXP11_HOMO_F1", fallback=0.6172)  # homogeneous INT4 (exp11 int4)
 _f1_hetero = _OVF_FULL_F1  # QAD+OVF (heterogeneous)

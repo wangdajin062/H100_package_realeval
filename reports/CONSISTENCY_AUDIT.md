@@ -238,7 +238,7 @@ fallback** 的「尚无真实实验产出」字段，统一改为 `fallback=None
 | 🔴 P0 | Tab.4 跨数据集 & 对抗全表重跑 | exp5/exp6 中断，需补跑 |
 | 🔴 P0 | Fig.4/5/6/7 数据来源 | 训练收敛/SNR/教师规模/OVF 激活窗需真实数据 |
 | 🟡 P2 | BF16 全管线基线 | 真实无此实验，需重跑 |
-| 🟡 P2 | 数据修复链 | `transcribe_taf28k.py` → `build_taf28k_npz.py` → 重跑 exp5/10/13（见 `REPRODUCIBILITY.md` §10） |
+| 🟡 P2 | 数据修复链 | `transcribe_taf28k.py` → `build_taf28k_npz.py` → 重跑 exp5/10/13（见 `docs/REPRODUCIBILITY.md` §10） |
 | 🟡 P2 | 手机端 GGUF 回测 | 领域 LoRA 合并后 F1 是否 > 官方 GGUF 0.7025 |
 
 > 核心原则（重申）：**先改论文结论，再改数字**。在数据修复链走完、真实数字稳定前，不要用
