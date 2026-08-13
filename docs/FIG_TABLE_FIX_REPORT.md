@@ -64,7 +64,7 @@
 | `experiments/exp11_quantization_scheme.py` | 删除 `int4 = fp16` 虚假兜底；真实 bitsandbytes 量化；优先加载 exp1 QAD 模型 |
 | `experiments/exp3_ov_freeze_control.py` | 数据源 → TAF-28k；各条件独立运行 `real_qad_distill_train()` |
 | `docs/figure_scripts/paper_data.py` | `_qat_f1` 移除 fp16 兜底，只从 `exp11.schemes.int4.f1` 读取 |
-| `experiments/contract.py` | exp1/exp11/exp3 新字段 schema |
+| `metrics/contract.py` | exp1/exp11/exp3 新字段 schema |
 | `experiments/paper_pipeline.py` | `_extract("exp11")` 删除虚假 fallback |
 
 ### Fig4：Loss Convergence
@@ -96,7 +96,7 @@
 | 文件 | 修改 |
 |------|------|
 | `realeval/specdec.py` | 新增 `_PAPER_SPECULATIVE_SPEEDUPS` 常量；`diagnostic_B` 返回新增 `paper_reference` 段；常量修正为 Fig7 值 (0.78/0.86) |
-| `experiments/exp6_speculative_decoding.py` | `run_paper`/`run_smoke` 显式传递 `paper_reference`；domain 显式设为 None |
+| `experiments/exp6_speculative_decoding.py` | `run_paper` 显式传递 `paper_reference`；domain 不产出（未实测） |
 | `docs/figure_scripts/paper_data.py` | alpha 用 `> 0.01` 显式校验替代 `or` 隐式兜底；`EXP05_SPECULATIVE` 和 `SPEC_GAMMA_DEPLOY` 从 exp6.paper_reference 读取 |
 
 ### Fig8：Revision Ablations
@@ -126,8 +126,8 @@
 
 | 文件 | 修改 |
 |------|------|
-| `experiments/exp5_cross_dataset.py` | 新增 `paper_reference` 段，包含 `ldp_eps_1_5_f1`、`ldp_eps_1_5_delta` |
-| `docs/figure_scripts/paper_data.py` | `FIG8_LDP` 从 `exp5.paper_reference.ldp_eps_1_5_f1` 读取 |
+| `experiments/exp5_cross_dataset.py` | 新增 `ldp_tradeoff` 段，产出 LDP 实测值 |
+| `docs/figure_scripts/paper_data.py` | `FIG8_LDP` 从 `exp5.ldp_tradeoff.eps_1.5.f1` 读取 |
 
 ---
 
@@ -160,7 +160,7 @@
 | 文件 | 改动 |
 |------|------|
 | `docs/figure_scripts/paper_data.py` | FIG3-8 全部数据源从实验读取；显式校验替代隐式 fallback |
-| `experiments/contract.py` | 所有实验 schema 更新 |
+| `metrics/contract.py` | 所有实验 schema 更新 |
 
 ### 图/表生成
 | 文件 | 改动 |
@@ -188,7 +188,7 @@
 **Fig8 5 个 paper_reference 值**：
 - `advfraud_curated_f1` (0.875)：原本手动评估，现由 exp5.advfraud.curated.f1 产出
 - `advfraud_bf16_matched` (0.882)：现由 exp5.bf16_matched_advfraud 产出
-- `ldp_eps_1_5_f1` (0.902)：现由 exp5.paper_reference.ldp_eps_1_5_f1 产出
+- `ldp_eps_1_5_f1` (0.902)：现由 exp5.ldp_tradeoff.eps_1.5.f1 产出（TAF-28k 存在时）
 - `pipeline_latency_p50_ms` (268.0)：端到端 pipeline 延迟，与 exp8 单样本延迟量纲不同
 - `pipeline_latency_ldp_ms` (271.0)：同上
 
@@ -225,7 +225,7 @@
 
 ```bash
 # 1. 语法检查（无需 GPU）
-cd c:\Users\wang\Projects\H100_package_realeval
+cd d:\Projects\H100_package_realeval
 python -c "import ast; [ast.parse(open(f).read()) for f in [
   'realeval/real_backend.py', 'realeval/specdec.py',
   'experiments/exp1_qad_production.py', 'experiments/exp2_qad_loss_ablation.py',
@@ -233,11 +233,11 @@ python -c "import ast; [ast.parse(open(f).read()) for f in [
   'experiments/exp6_speculative_decoding.py', 'experiments/exp8_latency_benchmark.py',
   'experiments/exp10_teacher_scale.py', 'experiments/exp11_quantization_scheme.py',
   'docs/figure_scripts/paper_data.py', 'docs/figure_scripts/fig8_revision_ablations.py',
-  'experiments/contract.py', 'experiments/paper_pipeline.py'
+  'metrics/contract.py', 'experiments/paper_pipeline.py'
 ]]"
 
 # 2. Smoke test
-python -m experiments.runner --exp 1,2,3,5,6,8,10,11 --smoke
+python -m experiments.runner --exp 1,2,3,5,6,8,10,11 --paper
 
 # 3. Paper pipeline（需 H100 GPU）
 python -m experiments.paper_pipeline --paper --config config/h100.yaml
