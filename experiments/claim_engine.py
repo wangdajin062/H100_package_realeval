@@ -249,7 +249,6 @@ def _resolve_dotted(dotted: str, ns: dict):
 def main():
     ap = argparse.ArgumentParser(description="Claim-driven research workflow engine")
     ap.add_argument("--claim", type=str, default=None, help="Run one claim id (e.g. CLAIM-01)")
-    ap.add_argument("--paper", action="store_true")
     args = ap.parse_args()
 
     from realeval.io import load_config

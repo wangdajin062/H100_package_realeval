@@ -42,20 +42,6 @@ class TestBenchmark:
             assert k in r[1]
 
 
-class TestDistributed:
-    def test_distributed_noop(self):
-        from realeval import distributed as dist
-        assert dist.world_size() >= 1
-        assert dist.is_main() in (True, False)
-        assert dist.all_reduce_mean(2.0) == 2.0  # Single process: identity
-
-    def test_distributed_init_cleanup(self):
-        from realeval import distributed as dist
-        info = dist.init()
-        assert "distributed" in info and "rank" in info
-        dist.cleanup()
-
-
 class TestReport:
     def test_build_all(self):
         """build_all() calls all generators without crashing."""

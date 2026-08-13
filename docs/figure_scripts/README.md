@@ -29,10 +29,8 @@ Supporting modules:
 ```bash
 pip install matplotlib numpy
 
-# 1. Run experiments first (smoke = fast sklearn verification; paper = real H100)
-python3 -m experiments.runner --smoke
-# or on H100:
-# python3 -m experiments.runner --paper --config config/h100.yaml
+# 1. Run experiments first (real H100)
+python3 -m experiments.runner --paper --config config/h100.yaml
 
 # 2. Verify field alignment (optional but recommended)
 python3 docs/figure_scripts/check_alignment.py

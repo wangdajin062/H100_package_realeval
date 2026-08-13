@@ -55,6 +55,4 @@ def build_pipeline_parser() -> argparse.ArgumentParser:
                         help="跳过运行前的自动归档步骤")
     parser.add_argument("--config", type=str, default=None,
                         help="配置 YAML 路径")
-    parser.add_argument("--resume", action="store_true",
-                        help="跳过已有结果的实验")
     return parser

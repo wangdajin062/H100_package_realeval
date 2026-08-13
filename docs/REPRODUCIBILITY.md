@@ -7,7 +7,6 @@
 ## 目录
 
 1. [环境配置](#1-环境配置)
-2. [快速验证（smoke）](#2-快速验证smoke)
 3. [论文级复现（paper）](#3-论文级复现paper)
 4. [生成论文图表](#4-生成论文图表)
 5. [归档与清理工作流](#5-归档与清理工作流)
@@ -57,33 +56,6 @@ config/
 
 ---
 
-## 2. 快速验证（smoke）
-
-在无 GPU 或无模型权重的环境中验证流水线完整性：
-
-```bash
-# 运行全部实验（smoke 路径：sklearn 小模型）
-python -m experiments.runner --smoke
-
-# 运行指定实验
-python -m experiments.runner --smoke --exp 1,3,6
-
-# 验证字段合约（strict 模式会标出非 H100 结果）
-python -m experiments.runner --validate-contract
-
-# 一致性检查（SMOKE / CITED / DRIFT）
-python -m experiments.consistency_check
-
-# 不归档旧结果直接运行
-python -m experiments.runner --smoke --no-archive
-```
-
-> **注意**：从 2026-08 重构后，`--smoke` 与 `--paper` 必须显式指定其一，未指定会报错，防止静默 fallback 到 smoke。
-
-smoke 路径使用合成数据和 sklearn GBM 模型，所有结果 JSON 字段与 paper 路径完全一致（数值为近似值）。
-
----
-
 ## 3. 论文级复现（paper）
 
 在 H100 SXM5 上运行完整论文流水线：
@@ -102,7 +74,6 @@ python -m experiments.runner --paper --exp 1,3,6 --config config/h100.yaml
 python -m experiments.runner --paper --no-archive
 ```
 
-> 与 `experiments.runner` 一致，`paper_pipeline` 也必须显式指定 `--smoke` 或 `--paper`。
 
 ### 实验分组
 
@@ -183,7 +154,7 @@ python fig8_revision_ablations.py
 
 ### 自动归档（集成在流水线中）
 
-`python -m experiments.runner --paper` 或 `--smoke` 启动时，若 `outputs/results/` 存在旧结果，会：
+`python -m experiments.runner --paper` 启动时，若 `outputs/results/` 存在旧结果，会：
 1. 构建包含所有实验数据、CSV 表格、图像索引的归档快照
 2. 写入 `outputs/archive/{YYYY-MM-DD_HHMMSS}_experiment_results.md`
 3. 删除所有旧实验 JSON、CSV 和图像
@@ -202,7 +173,7 @@ python scripts/archive_and_clear.py --archive-only
 python scripts/archive_and_clear.py --dry-run
 
 # 跳过归档步骤直接运行实验
-python -m experiments.runner --smoke --no-archive
+python -m experiments.runner --paper --no-archive
 ```
 
 ---
@@ -212,7 +183,6 @@ python -m experiments.runner --smoke --no-archive
 ### `python -m experiments.runner`
 
 ```
---smoke              快速验证（sklearn 小模型，无需 GPU）
 --paper              论文级运行（真实 Qwen + H100）
 --exp 1,3,6          仅运行指定实验（编号或 exp1,exp3 格式）
 --config path.yaml   指定配置文件（默认 config/experiments.yaml）
@@ -229,7 +199,6 @@ python -m experiments.runner --smoke --no-archive
 
 ```
 --paper              论文级运行
---smoke              沙盒验证
 --no-archive         跳过归档
 --config path.yaml   指定配置文件
 ```
@@ -239,7 +208,7 @@ python -m experiments.runner --smoke --no-archive
 所有配置均可通过 `REALEVAL_` 前缀的环境变量覆盖：
 
 ```bash
-REALEVAL_DATA__DATASET=chifraud python -m experiments.runner --smoke
+REALEVAL_DATA__DATASET=chifraud python -m experiments.runner --paper
 REALEVAL_TRAINING__EPOCHS=3 python -m experiments.runner --paper --exp 1
 ```
 
@@ -275,7 +244,7 @@ REALEVAL_TRAINING__EPOCHS=3 python -m experiments.runner --paper --exp 1
 **核心原则**：
 - 图像脚本通过 `paper_data.py` 的 `_get(exp_id, *keys)` 读取实验结果
 - 所有字段均配有论文常量作为回退值，保证图像脚本始终可运行
-- 实验脚本同时维护 paper 路径（真实 H100 结果）和 smoke 路径（合成近似值），两者字段结构完全一致
+- 实验脚本只走 paper 路径（真实 H100 结果），字段结构完全一致
 
 ---
 
@@ -325,9 +294,6 @@ REALEVAL_TRAINING__EPOCHS=3 python -m experiments.runner --paper --exp 1
 ---
 
 ## 10. 常见问题
-
-**Q：smoke 模式下 F1 值与论文不同？**  
-A：正常现象。smoke 路径使用 sklearn GBM 在合成数据上运行，数值为近似值。论文数值来自 H100 真实运行（paper 路径）。
 
 **Q：如何确认图像脚本使用的是最新实验结果？**  
 A：`paper_data.py` 加载 `outputs/results/exp*_*.json`（最新时间戳优先）和 `all_experiments.json`。运行 `python docs/figure_scripts/paper_data.py` 可查看当前加载状态。

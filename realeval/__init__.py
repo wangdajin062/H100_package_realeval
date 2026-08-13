@@ -4,7 +4,7 @@ QAD-MultiGuard H100 real evaluation suite.
 Restructured for paper-grade experiment authenticity.
 
 Modules: real_backend, metrics, statistics, audit, benchmark, runner, report, data,
-         models, privacy, specdec, gguf_backend, paths, io, validation, limits, envreport
+         models, privacy, specdec, gguf_backend, paths, io, validation, envreport
 """
 
 __version__ = "4.2.0"
@@ -18,7 +18,7 @@ __all__ = [
     # Hardware & deployment
     "hwenv", "real_backend", "gguf_backend",
     # Safety & reproducibility
-    "audit", "envreport", "io", "validation", "limits",
+    "audit", "envreport", "io", "validation",
     # Specialized
     "privacy", "specdec",
 ]

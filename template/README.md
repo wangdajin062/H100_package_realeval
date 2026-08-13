@@ -47,7 +47,6 @@ docker exec -it realeval-h100 bash run_all.sh
 
 ```bash
 bash run_all.sh                  # 完整 paper pipeline
-bash run_all.sh --smoke          # 冒烟测试 (无需 GPU)
 bash run_all.sh --distributed    # 多 GPU (NCCL + torchrun)
 bash run_all.sh --setup          # 仅环境配置
 bash run_all.sh --notebook       # 仅启动 Jupyter Lab
