@@ -158,4 +158,52 @@ smoke 的 `--smoke` CLI 参数已在 `cli/parser.py` 删除，但以下非 .py �
 5. **P2** 清理孤立模块（`distill.py`/`limits.py`/`distributed.py`/`defaults.py`）与死函数（`real_speculative_alpha` 等）。
 6. **P3** 清理文档 `--smoke`、claims 旧格式残留、CLI 未使用参数、死配置字段。
 
-> 注：本报告为只读审计结论，未做任何修改。修复需另行确认范围后执行。
+---
+
+## 八、修复结果（2026-08-13 补充）
+
+> 初版为只读审计。本节记录随后执行的修复及最终状态。
+
+### 已修复
+
+| 编号 | 修复内容 | 提交 |
+|---|---|---|
+| P0-1 | `claim_01_ovfreeze.yaml` treatment `ov_freeze` → `ov_freeze_full` | `d0084f9` |
+| P0-2 | 清理 `run_h100.sh` / `template/run_all.sh` / `.vscode/tasks.json` 的 `--smoke` | `d0084f9` |
+| P1-1 | 补 `exp*_seeds` 到 `experiments.yaml` + `runpod_h100.yaml`（初版只补 schema 无效，code review 发现后补 yaml 才真正生效） | `d0084f9` + `0e49a3a` |
+| P1-2 | exp8 改读 `reproducibility.benchmark_warmup/repeat` | `d0084f9` |
+| P1-3 | 补 `training.dropout`、`distillation.task_weight`；specdec 改读 `reproducibility.seed` | `d0084f9` |
+| P1-4 | 删 `paper_data.py` / `extraction.py` / `sync_paper_data.py` 的 `domain` 死读取 | `d0084f9` + `0e49a3a` |
+| P1-5 | 删 `paper_data.py` 的 `paper_reference` 死 fallback、`consistency_check.py` 死检查 | `d0084f9` |
+| P2 | 删 4 孤立模块（distill/defaults/limits/distributed）+ 3 死函数 + 改 `__init__` + 删 `TestDistributed` | `d910e7b` |
+| P3 文档 `--smoke` | 清理 README / REPRODUCIBILITY.md / figure_scripts / template 活跃文档 | `d910e7b` |
+| P3 claims 残留 | 删 4 旧格式 claim（claim_001~004） | `bb992e1` |
+| P3 CLI 未用参数 | 删 `paper_pipeline --resume`、`claim_engine --paper` | `d910e7b` |
+
+### 保留未改（有意）
+
+| 项 | 保留理由 |
+|---|---|
+| P2 其他死代码（`get_config`/`clear_cache`、`load_all_results`、`Experiment` ABC、`claim_runner.py`） | 被 `__init__` re-export 或测试引用，删除需额外处理，风险/收益不划算 |
+| P3 死配置字段（`privacy.*`、`audio.*`、`classification.*` 等） | schema 声明性字段，删除有风险（可能是完整性声明或未来会用到） |
+| P3 标注冲突（`exp5.bf16_matched_advfraud`） | 需人工确认真实身份（measured vs cited） |
+| P3 字段合约缺口（exp7/9/12/13） | 需补 `EXPECTED_FIELDS` 条目，属独立任务 |
+| P3 历史文档 smoke 描述（CONSISTENCY_AUDIT / FIG_TABLE_FIX_REPORT / RunPod_rerun_execution） | 历史快照，记录「当时有 smoke」的事实；CONSISTENCY_AUDIT 仍被 paper_data.py 注释引用 |
+| paper_data.py 的 smoke 过滤 | 防御性向后兼容安全网 |
+
+### code review 补充发现（初版审计遗漏）
+
+| 严重度 | 发现 | 修复 |
+|---|---|---|
+| Critical | P1-1 初版修复无效（schema `_default` 从不注入运行时 config，exp10 生产仍跑 3 seeds） | 补 yaml 真正生效 |
+| Important | `runner/orchestrator.py`、`metrics/contract.py` 仍硬编码 `RESULTS_DIR` | 统一到 `io.paths.RESULTS` |
+| Important | `sync_paper_data.py` 第三处 `domain` 死读取（初版审计漏列） | 删除 |
+| Minor | `config["_paper"]` 死标志 | 删除 |
+| Minor | README 日期格式、real_backend docstring 过时 | 清理 |
+
+### 最终验证（2026-08-13）
+
+- pytest **65 passed**（67 → 65，删 2 个 `TestDistributed` 测试）
+- 全模块导入无断点、无循环 import
+- 测试隔离：pytest 后 `outputs/` **0 泄漏**
+- config 字段验证：`exp10_seeds=5`、`dropout=0.1`、`task_weight=1e-3` 均从 yaml 读到
