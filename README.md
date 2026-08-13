@@ -13,7 +13,7 @@
 | **真实计算**   | 全部实验在真实 Qwen2.5 权重 + H100 上运行，结果写入带时间戳 JSON                       |
 | **可复现**     | 运行前自动归档旧结果，并记录 git SHA、配置 hash、seed                                  |
 | **诚实标注**   | 论文声称与实测差异在结果文件中显式标注，不掩盖、不合并                                 |
-| **双运行路径** | `smoke`（CPU 验证代码路径）与 `paper`（H100 真实数值）严格区分                     |
+| **真实 H100 计算** | 全部走 `paper`（H100 真实数值）路径，无 smoke/合成回退                       |
 | **字段对齐**   | 实验输出字段与论文图像脚本字段一一对应（契约见`docs/experiment_result_contract.md`） |
 
 ## 2. 任务
@@ -71,7 +71,6 @@ cd docs/figure_scripts && python generate_all.py    # 论文图像（只读脚�
 
 | 模式            | 命令                                                                     | 用途                                         |
 | --------------- | ------------------------------------------------------------------------ | -------------------------------------------- |
-| **smoke** | `python -m experiments.runner --smoke`                                 | 任意 CPU 机器验证完整代码路径，无需 GPU/权重 |
 | **paper** | `bash run_h100.sh` 或 `python -m experiments.paper_pipeline --paper` | H100 + 真实 Qwen，产出论文数值               |
 
 其他 CLI：`--exp 1,3,6`（指定实验）、`--resume`（跳过已完成）、`--no-archive`、`--check`（硬件检查）、`--report`（从已有结果生成表格/图像）。
@@ -107,7 +106,7 @@ cd docs/figure_scripts && python generate_all.py    # 论文图像（只读脚�
 │       ├── serialization.py
 │       └── archive.py
 ├── experiments/               # 14 个实验（§2.1）+ 兼容层
-│   ├── framework.py           #   模式分发 · 数据回退 · 防泄漏分割
+│   ├── framework.py           #   真实计算路径 · 数据回退 · 防泄漏分割
 │   ├── runner.py              #   CLI 包装器
 │   ├── paper_pipeline.py      #   一键 H100 流水线
 │   ├── common.py              #   公共训练/评估 helper
@@ -138,7 +137,6 @@ cd docs/figure_scripts && python generate_all.py    # 论文图像（只读脚�
 │   ├── export_to_gguf.py      #   LoRA → Q4_K_M GGUF 导出
 │   ├── archive_and_clear.py   #   结果归档
 │   └── sync_*.py              #   RunPod 文件同步
-├── gpu_monitor.sh             # GPU 监控工具箱（procs|top|watch）
 ├── cli/                       # 命令入口
 │   └── parser.py              #   统一 argparse
 ├── utils/                     # 通用工具
@@ -150,23 +148,20 @@ cd docs/figure_scripts && python generate_all.py    # 论文图像（只读脚�
 ├── docs/REFACTORING.md        # 重构说明
 ├── docs/experiment_result_contract.md  # 字段对齐契约
 ├── claims/ + audit/           # 论文声称 + 证据图谱
-├── reports/                   # 实验运行日志（RUNLOG_*.md）
+├── reports/                   # 审计报告
 └── outputs/                   # results / archive / logs / metrics / figures
 ```
 
 ## 5. 快速开始
 
 ```bash
-# 1) smoke 验证（无 GPU，验证代码路径）
-python -m experiments.runner --smoke
-
-# 2) 论文级运行（H100 + 真实 Qwen）
+# 1) 论文级运行（H100 + 真实 Qwen）
 bash run_h100.sh
 
-# 3) 仅跑指定实验
+# 2) 仅跑指定实验
 python -m experiments.runner --paper --exp 1,11 --config config/runpod_h100.yaml
 
-# 4) 生成报告与论文图像
+# 3) 生成报告与论文图像
 python -m experiments.runner --report
 cd docs/figure_scripts && python generate_all.py
 ```
@@ -218,7 +213,7 @@ cd docs/figure_scripts && python generate_all.py
 
 - [`docs/REPRODUCIBILITY.md`](docs/REPRODUCIBILITY.md) — 完整复现路径
 - [`docs/experiment_result_contract.md`](docs/experiment_result_contract.md) — 字段对齐契约
-- [`reports/RUNLOG_20260803_summary.md`](reports/RUNLOG_20260803_summary.md) — 实验运行日志汇总
+- [`reports/2026-08-13_full_audit.md`](reports/2026-08-13_full_audit.md) — 全量审计报告
 
 ## 8. 许可证
 
