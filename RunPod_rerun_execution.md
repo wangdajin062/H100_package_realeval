@@ -1,6 +1,6 @@
 QAD-MultiGuard · RunPod 恢复后执行清单
 
-> 依据：`rerun_checklist.md`（P0/P1/P2 分级）× 2026-08-13 字段对齐与 H100 就绪审核（D 盘 `cd150d9` 已推送 GitHub）
+> 依据：`rerun_checklist.md`（P0/P1/P2 分级）× 2026-08-13 字段对齐与 H100 就绪审核（D 盘 `4278290` 已推送 GitHub）
 > 环境：RunPod H100 单卡 80GB（pod `mhypfkvge474n8`）· 持久 venv `/workspace/venv` · 代码 `/workspace/H100_package_realeval`
 > 铁律：**重跑单个实验一律用 `runner --no-archive`，不要用 `run_h100.sh`**（它开头会 `rm -rf outputs/results/*` 清掉全部结果）
 
@@ -10,14 +10,12 @@ QAD-MultiGuard · RunPod 恢复后执行清单
 
 | 检查项 | 结果 | 说明 |
 |--------|------|------|
-| `pytest tests/ -q` | ✅ **71 passed, 1 warning** | 全量测试通过 |
-| smoke 全部 14 个实验 | ✅ **14/14 完成** | `all_experiments.json` 写入 14 条结果 |
+| `pytest tests/ -q` | ✅ **65 passed, 1 warning** | 全量测试通过 |
 | `check_alignment.py` | ✅ **PASS** | 65 处 `_from_result` 字段全部可解析 |
-| `--validate-contract` | ⚠️ 预期 FAIL | 严格模式正确标出 `NON_H100_COMPUTATION`（smoke 非真实 H100） |
-| `consistency_check` | ⚠️ 预期 P0 | 标出 SMOKE/CITED/DRIFT（smoke 合成值与论文声称有差距，属设计行为） |
+| `--validate-contract` | ✅ | 字段合约校验（H100 实测后应 PASS） |
+| `consistency_check` | ⚠️ 预期 P0 | 标出 CITED/DRIFT（实测与论文声称有差距，属设计行为） |
 | `--report` | ✅ | 生成 5 个交付物（summary.csv, tables.md, Table2.tex, fig_latency_benchmark.png/.pdf） |
 | 14 个实验 `run_paper` 路径 | ✅ | 全部存在且可导入 |
-| 14 个实验 `run_smoke` 路径 | ✅ | 全部存在且可导入 |
 | `realeval` 核心模块 | ✅ | `real_backend`, `models`, `data`, `specdec`, `privacy`, `metrics`, `benchmark` 全部可用 |
 | 配置加载 | ✅ | `runpod_h100.yaml` 加载正常，profile=`runpod_1xH100_80GB` |
 
@@ -32,10 +30,10 @@ QAD-MultiGuard · RunPod 恢复后执行清单
 # 2) SSH 进入（RunPod 强制 PTY）
 ssh -tt mhypfkvge474n8-64411fb1@ssh.runpod.io -i ~/.ssh/id_ed25519
 
-# 3) 代码同步到最新（cd150d9，含 README 修复 + 字段对齐 + consistency_check）
+# 3) 代码同步到最新（origin/main，含 smoke 移除 + 路径统一 + P0/P1/P2/P3 审计修复）
 cd /workspace/H100_package_realeval
 git fetch origin && git checkout main && git reset --hard origin/main
-git log --oneline -1        # 应为 cd150d9
+git log --oneline -1        # 应为 origin/main 最新提交
 
 # 4) venv 存活确认（容器重启会清系统 pip，venv 在持久卷不受影响）
 /workspace/venv/bin/python -c "import torch; print(torch.cuda.device_count(), torch.version.__version__)"
@@ -59,12 +57,7 @@ print('GPU 显存检查: 需 ≥35GB 可用')
 
 ## 阶段 0.5 · 多 seed 配置（一次配好）
 
-`config/runpod_h100.yaml` 顶层追加（exp2 从 `config["reproducibility"]["exp2_seeds"]` 读取，默认 3，论文声称 5）：
-
-```yaml
-reproducibility:
-  exp2_seeds: 5
-```
+多 seed 配置已内置（`reproducibility.exp*_seeds`，默认 5，见 `config/experiments.yaml` + `config/runpod_h100.yaml`），无需手动追加。
 
 > ⚠️ **4 处 std 补齐的两种路径**（exp1/exp3/exp11/exp14 目前单次运行、无实测 std，`check_alignment.py` 报 4 处 MISSING）：
 >
@@ -95,7 +88,7 @@ reproducibility:
 | 9  | Tab.4 跨数据集 | exp5    | `5`         | taf28k(0.2611)/chifraud(0.5654)/advfraud curated(0.0897)+full(0.1238) 实测 |
 | 10 | Tab.2 恢复率   | 随 5–8 | 回填          | 恢复率 = 实测 F1 / BF16 基线，随 Tab.3                                     |
 
-> 注：`paper_reference` 里的 0.875/0.882/0.902 是**自引（非独立证据）**，重跑后一律用实测替换。
+> 注：advfraud curated / ldp 等字段现缺测时**显式报 None**（不再静默回退论文自引值），重跑后一律用实测替换。
 
 ## 阶段 3 · P2（补测 / 降级）
 
@@ -111,13 +104,13 @@ reproducibility:
 ## 阶段 4 · 每步 / 整体验证（对齐审核闭环）
 
 ```bash
-# 字段合约验证（H100 实测后应无 [FAIL]；smoke 模式会标 NON_H100_COMPUTATION，属预期）
+# 字段合约验证（H100 实测后应无 [FAIL]；若字段缺测会标 MISSING，属预期）
 /workspace/venv/bin/python -m experiments.runner --validate-contract
 
 # 绘图字段对齐（65 处字段全部可解析才算 PASS）
 /workspace/venv/bin/python docs/figure_scripts/check_alignment.py
 
-# 论文数字 vs 实测一致性守门员（H100 实测后应无 DRIFT；smoke 模式有 DRIFT 属预期）
+# 论文数字 vs 实测一致性守门员（H100 实测后应无 DRIFT；实测与论文声称有 DRIFT 属预期）
 /workspace/venv/bin/python -m experiments.consistency_check
 
 # 出图（可选，从已有结果生成）
@@ -133,10 +126,10 @@ cd /workspace/H100_package_realeval && tar czf - outputs/results | base64   # �
 
 1. 本地 D 盘覆盖 `outputs/results/*`，核对 `check_alignment.py` 与 `--validate-contract`。
 2. **H100 实测后更新 `experiments/consistency_check.py` 的 `PAPER_CLAIMS` 表**，把声称值替换为实测值，使其成为长期守门员。
-3. 更新 `RUNLOG_2026MMDD.md`，提交：
+3. 更新 `reports/` 下的运行/审计报告，提交：
    ```bash
    cd /d/Projects/H100_package_realeval
-   git add outputs/results RUNLOG_*.md experiments/consistency_check.py && git commit -m "results: 同步 RunPod H100 实测结果" && git push origin main
+   git add outputs/results reports/ experiments/consistency_check.py && git commit -m "results: 同步 RunPod H100 实测结果" && git push origin main
    ```
 4. 回填论文 `v25_blind.tex` 前，逐项对照 `rerun_checklist.md` 判定（P0 结论反转项先改结论再改数字）。
 
@@ -150,4 +143,4 @@ cd /workspace/H100_package_realeval && tar czf - outputs/results | base64   # �
 | 脚本可导入性                        | 14/14 模块 import 成功                                   |
 | exp8 latency p50/p99                | 已改结构化`latency_detail`，消除 p99 误读 p50          |
 | 量化分支（fp16/nf4/int4/int8 区分） | `models.py` 已修（fp16 显式半精度、int4=FP4、nf4=NF4） |
-| exp2 多 seed 机制                   | 已实现（`reproducibility.exp2_seeds`，默认 3）         |
+| exp2 多 seed 机制                   | 已实现（`reproducibility.exp*_seeds`，默认 5）         |
