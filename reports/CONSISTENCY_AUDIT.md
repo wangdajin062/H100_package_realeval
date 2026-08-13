@@ -1,4 +1,4 @@
-# 一致性审计报告：论文声称值 vs 实验真实产出
+# 一致性审计报告
 
 > 依据：论文源文件 `v25.tex`（1087 行）、`docs/figure_scripts/paper_data.py`（数据桥接）。
 > 审计日期：2026-08-13。
@@ -15,11 +15,11 @@ fallback 值是**真实实验产出**（未达论文声称值），不是要「�
 
 ## 1. 三层数据源与它们的真实关系
 
-| 层 | 位置 | 值域 | 性质 |
-|---|---|---|---|
-| ① 论文声称值 | `v25.tex` | F1 0.91–0.93，KL 0.005–0.311 | 待复现的**目标** |
-| ② 图表脚本坐标轴/docstring | `docs/figure_scripts/fig*.py` | 与①一致（0.91–0.93） | 按①写死，**禁改** |
-| ③ 实验真实产出 | `paper_data.py` fallback | F1 0.56–0.80（调优后核心组件），drift 0–52.45% | **真实跑出来的** |
+| 层                          | 位置                            | 值域                                             | 性质                     |
+| --------------------------- | ------------------------------- | ------------------------------------------------ | ------------------------ |
+| ① 论文声称值               | `v25.tex`                     | F1 0.91–0.93，KL 0.005–0.311                   | 待复现的**目标**   |
+| ② 图表脚本坐标轴/docstring | `docs/figure_scripts/fig*.py` | 与①一致（0.91–0.93）                           | 按①写死，**禁改** |
+| ③ 实验真实产出             | `paper_data.py` fallback      | F1 0.56–0.80（调优后核心组件），drift 0–52.45% | **真实跑出来的**   |
 
 第③层与①/②不兼容，意味着**复现尚未成功**。这不是把③「改」成①就能解决的——那样是伪造数据；
 正确路径是「先改论文结论再改数字」（见 §5 核心原则），或等数据修复链重跑出真实数字。
@@ -30,38 +30,38 @@ fallback 值是**真实实验产出**（未达论文声称值），不是要「�
 
 ### 2.1 主结果表（论文 Table 3 / `tab3-en`，对应 Figure 3）
 
-| 行 | 论文声称 | 实验真实产出 | 判定 |
-|---|---|---|---|
-| BF16（参考） | 0.931 ± 0.005 | 无实验（`BF16_F1` 常量） | 未复现基准行 |
-| NVFP4 PTQ | 0.838 | 0.838（外部引用硬编码） | 引用，非实测 |
-| NVFP4 QAT (CE) | 0.844 ± 0.014 | fallback `PH_EXP11_INT4_F1`=0.6172（调优前 exp1_qad 下游陈旧值，待重跑） | 未复现 |
-| NVFP4 QAD | 0.916 ± 0.007 | fallback `PH_EXP1_F1`=0.7974（调优后，旧 0.5121） | 未复现 |
-| NVFP4 QAD + OV-Freeze | **0.923 ± 0.006** | fallback `PH_EXP3_OVF_FULL_F1`=0.8047（调优后） | 未复现 |
-| Q4_K_M QAD + OV-Freeze | 0.917 ± 0.007 | fallback `PH_EXP14_Q4KM_F1`=0.7025（=最新 exp14 q4km） | 未复现（值稳定在 0.70） |
-| SAFE-QAQ | 0.918 | 引用，非实测 | 引用 |
+| 行                     | 论文声称                 | 实验真实产出                                                              | 判定                    |
+| ---------------------- | ------------------------ | ------------------------------------------------------------------------- | ----------------------- |
+| BF16（参考）           | 0.931 ± 0.005           | 无实验（`BF16_F1` 常量）                                                | 未复现基准行            |
+| NVFP4 PTQ              | 0.838                    | 0.838（外部引用硬编码）                                                   | 引用，非实测            |
+| NVFP4 QAT (CE)         | 0.844 ± 0.014           | fallback`PH_EXP11_INT4_F1`=0.6172（调优前 exp1_qad 下游陈旧值，待重跑） | 未复现                  |
+| NVFP4 QAD              | 0.916 ± 0.007           | fallback`PH_EXP1_F1`=0.7974（调优后，旧 0.5121）                        | 未复现                  |
+| NVFP4 QAD + OV-Freeze  | **0.923 ± 0.006** | fallback`PH_EXP3_OVF_FULL_F1`=0.8047（调优后）                          | 未复现                  |
+| Q4_K_M QAD + OV-Freeze | 0.917 ± 0.007           | fallback`PH_EXP14_Q4KM_F1`=0.7025（=最新 exp14 q4km）                   | 未复现（值稳定在 0.70） |
+| SAFE-QAQ               | 0.918                    | 引用，非实测                                                              | 引用                    |
 
 核心卖点「QAD+OVF = 0.923」真实只到 **0.8047**；`recovery` 列若按 fallback 计算会显示
 `0.7974/0.931 = 85.6%`（论文声称 98.4%）。
 
 ### 2.2 损失函数消融（论文 Table 5 / `tab5-en`，对应 Figure 6a）— **结论反转**
 
-| 变体 | 论文 F1 | 论文 KL | 真实 exp2 F1 | 真实 exp2 KL | 排序 |
-|---|---|---|---|---|---|
-| Pure KL | **0.916**（最优） | 0.005 | 0.5577 | 0.34629 | ❌ 真实**最差** |
-| Logits MSE | 0.901 | 0.082 | **0.7667**（真实最佳） | 3.34172 | ❌ 反转 |
-| CE (QAT) | 0.844 | 0.311 | 0.7667 | 3.34172 | ❌ 反转 |
-| 3-term | 0.879 | 0.124 | 0.5577 | 0.34629 | ❌ |
-| KL + task | 0.908 | 0.041 | 0.5577 | 0.34629 | ❌ |
+| 变体       | 论文 F1                 | 论文 KL | 真实 exp2 F1                 | 真实 exp2 KL | 排序                  |
+| ---------- | ----------------------- | ------- | ---------------------------- | ------------ | --------------------- |
+| Pure KL    | **0.916**（最优） | 0.005   | 0.5577                       | 0.34629      | ❌ 真实**最差** |
+| Logits MSE | 0.901                   | 0.082   | **0.7667**（真实最佳） | 3.34172      | ❌ 反转               |
+| CE (QAT)   | 0.844                   | 0.311   | 0.7667                       | 3.34172      | ❌ 反转               |
+| 3-term     | 0.879                   | 0.124   | 0.5577                       | 0.34629      | ❌                    |
+| KL + task  | 0.908                   | 0.041   | 0.5577                       | 0.34629      | ❌                    |
 
 **论文核心卖点「Pure KL 最优」被真实实验否定**。根因：学生=教师同架构
 （Qwen2.5-0.5B），`mse_loss≈0` → `kl_mse≈kl`、`mse≈ce`，loss 区分度受限。
 
 ### 2.3 CoT 消融（论文 `tab:cot-ablation-en`）— **结论反转**
 
-| 配置 | 论文 TAF F1 | 真实 exp9 F1 | 真实 FPR |
-|---|---|---|---|
-| With CoT | 0.923 | **0.3131** | 0.2608 |
-| Without CoT | 0.905 | **0.8047** | 0.0165 |
+| 配置        | 论文 TAF F1 | 真实 exp9 F1     | 真实 FPR |
+| ----------- | ----------- | ---------------- | -------- |
+| With CoT    | 0.923       | **0.3131** | 0.2608   |
+| Without CoT | 0.905       | **0.8047** | 0.0165   |
 
 CoT 重做后：双分支都用微调模型+头，仅 CoT 不同。
 结论：**CoT 推理对微调头分类有害**（0.80→0.31），不再是 base-generate 的 0.035 假象。
@@ -70,12 +70,12 @@ CoT 重做后：双分支都用微调模型+头，仅 CoT 不同。
 
 drift（论文图 7a）—— **机理复现成功**：
 
-| 配置 | 论文 drift | 真实 exp3 drift |
-|---|---|---|
-| no OVF | +18.2% | **52.45%**（调优后） |
-| ov_freeze_quarter | — | 48.186%（调优前，待重跑） |
-| ov_freeze_half | — | 35.561%（调优前，待重跑） |
-| ov_freeze_full (q,k,v,o) | +1.3% | **0.0%** |
+| 配置                     | 论文 drift | 真实 exp3 drift            |
+| ------------------------ | ---------- | -------------------------- |
+| no OVF                   | +18.2%     | **52.45%**（调优后） |
+| ov_freeze_quarter        | —         | 48.186%（调优前，待重跑）  |
+| ov_freeze_half           | —         | 35.561%（调优前，待重跑）  |
+| ov_freeze_full (q,k,v,o) | +1.3%      | **0.0%**             |
 
 F1（论文图 7a）—— **未复现**：论文称 OVF 使 F1 0.916→0.923；真实 exp3 **f1 恒 0.8047**
 （OVF 只降低 drift、不提升 F1）。这直接否定了「OV-Freeze 提升 F1」的方法论主张。
@@ -96,11 +96,11 @@ F1（论文图 7a）—— **未复现**：论文称 OVF 使 F1 0.916→0.923；
 
 ### 2.7 修订轮消融（论文 Figure 5，对应 `fig8_revision_ablations.py`）
 
-| 面板 | 论文声称 | 真实产出 | 判定 |
-|---|---|---|---|
-| (a) 同质 INT4 vs 异质 | 0.915 vs 0.923（+0.008） | 同质=exp11 int4 0.6172，异质=exp3 full 0.8047 | 未复现，且修复后 delta 符号/量级均≠论文 |
-| (b) AdvFraud full vs curated | 0.841 vs 0.875 | full_pool fallback=0.1238（exp5 中断），curated=0.875 | full 未复现 |
-| (c) ε-LDP | 0.923→0.902（−0.021） | no-LDP=0.8047，eps-LDP=0.902（引用） | 未复现 |
+| 面板                         | 论文声称                 | 真实产出                                              | 判定                                     |
+| ---------------------------- | ------------------------ | ----------------------------------------------------- | ---------------------------------------- |
+| (a) 同质 INT4 vs 异质        | 0.915 vs 0.923（+0.008） | 同质=exp11 int4 0.6172，异质=exp3 full 0.8047         | 未复现，且修复后 delta 符号/量级均≠论文 |
+| (b) AdvFraud full vs curated | 0.841 vs 0.875           | full_pool fallback=0.1238（exp5 中断），curated=0.875 | full 未复现                              |
+| (c) ε-LDP                   | 0.923→0.902（−0.021）  | no-LDP=0.8047，eps-LDP=0.902（引用）                  | 未复现                                   |
 
 ### 2.8 隐私表（论文 `tab:privacy_attack-en`）
 
@@ -148,12 +148,12 @@ WER/PESQ/STOI/MOS/Speaker-ID/ASV-EER **全部为论文声称值，无实验产�
 exp3 的 drift fallback 此前对 `quarter/half/full` 三档错误地恒填 61.479（`no_reg` 的旧值）。
 按实测递减序列更新：
 
-| 占位符 | 旧 fallback | 新 fallback |
-|---|---|---|
-| `PH_EXP3_NO_OVF_DRIFT` | 61.479 | 61.479（不变） |
-| `PH_EXP3_OVF_QUARTER_DRIFT` | 61.479 | 48.186 |
-| `PH_EXP3_OVF_HALF_DRIFT` | 61.479 | 35.561 |
-| `PH_EXP3_OVF_FULL_DRIFT` | 61.479 | 0.0 |
+| 占位符                        | 旧 fallback | 新 fallback    |
+| ----------------------------- | ----------- | -------------- |
+| `PH_EXP3_NO_OVF_DRIFT`      | 61.479      | 61.479（不变） |
+| `PH_EXP3_OVF_QUARTER_DRIFT` | 61.479      | 48.186         |
+| `PH_EXP3_OVF_HALF_DRIFT`    | 61.479      | 35.561         |
+| `PH_EXP3_OVF_FULL_DRIFT`    | 61.479      | 0.0            |
 
 `layer_selection` 三点（early/mid/late）在最新 run 中未单独记录，暂保留 61.479（已注释说明）。
 
@@ -162,16 +162,16 @@ exp3 的 drift fallback 此前对 `quarter/half/full` 三档错误地恒填 61.4
 按调优后实测（F1 调优 + OVF 修复 +
 CoT 重做后）的最新真实 F1/KL，更新 `paper_data.py` 中真实数据驱动图表（fig3/5/6/8）的 fallback：
 
-| 占位符 | 旧 fallback | 新 fallback（调优后实测） |
-|---|---|---|
-| `PH_EXP1_F1`（QAD） | 0.4256 | **0.7974** |
-| `PH_EXP3_OVF_FULL_F1`（QAD+OVF） | 0.5577 | **0.8047** |
-| `PH_EXP11_INT4_F1` / `PH_EXP11_HOMO_F1` | 0.6185 | 0.6172（陈旧值，待重跑 ~0.8） |
-| `PH_EXP3_NO_OVF_F1` | 0.5577 | 0.8047 |
-| `PH_EXP3_OVF_HALF_F1` | 0.5577 | 0.8047 |
-| `PH_EXP3_OVF_QUARTER_F1` | 0.5577 | 0.8047 |
-| `PH_EXP3_NO_OVF_DRIFT` | 61.479 | **52.45** |
-| `PH_EXP2_*` 损失消融五组 | （上轮已同步） | 不变（调优前后一致） |
+| 占位符                                      | 旧 fallback    | 新 fallback（调优后实测）     |
+| ------------------------------------------- | -------------- | ----------------------------- |
+| `PH_EXP1_F1`（QAD）                       | 0.4256         | **0.7974**              |
+| `PH_EXP3_OVF_FULL_F1`（QAD+OVF）          | 0.5577         | **0.8047**              |
+| `PH_EXP11_INT4_F1` / `PH_EXP11_HOMO_F1` | 0.6185         | 0.6172（陈旧值，待重跑 ~0.8） |
+| `PH_EXP3_NO_OVF_F1`                       | 0.5577         | 0.8047                        |
+| `PH_EXP3_OVF_HALF_F1`                     | 0.5577         | 0.8047                        |
+| `PH_EXP3_OVF_QUARTER_F1`                  | 0.5577         | 0.8047                        |
+| `PH_EXP3_NO_OVF_DRIFT`                    | 61.479         | **52.45**               |
+| `PH_EXP2_*` 损失消融五组                  | （上轮已同步） | 不变（调优前后一致）          |
 
 **未更新（保持原值，理由）**：
 
@@ -198,12 +198,12 @@ fallback** 的「尚无真实实验产出」字段，统一改为 `fallback=None
 `fallback=None` 时返回 None、记录进 `_MISSING_PLACEHOLDERS`，不 raise——保证 `paper_data.py`
 顶层可 import，fig3 正常出图，仅 fig4/5b/6a 生成时因 None 报 TypeError 显式报缺）：
 
-| 组 | 占位符 | 旧 fallback（论文声称值） | 新 fallback |
-|---|---|---|---|
-| fig4 训练收敛/SNR | `PH_EXP1_KL_PLATEAU`/`PH_EXP1_KL_CONVERGED`/`PH_EXP1_OVF_ACTIVATION_STEP`/`PH_EXP1_TOTAL_STEPS`/`PH_EXP1_SNR_MIN`/`PH_EXP1_SNR_MAX` | 0.045 / 0.016 / 1400 / 2000 / 18.4 / 18.9 | **None** |
-| fig6a layer_selection | `PH_EXP3_LAYER_{EARLY,MID,LATE}_{F1,DRIFT}`（6 字段） | f1 0.466 / 0.6119 / 0.5893，drift 61.479 | **None** |
-| fig6a rho_sweep | `PH_EXP3_RHO_{00..05}_{F1,PPL}`（12 字段） | f1 0.4948 / 0.548 / 0.3198 / 0.6229 / 0.6837 / 0.6667；ppl 1.615 / 1.342 / 1.588 / 1.48 / 1.349 / 1.448 | **None** |
-| fig5b 教师选择 | `PH_EXP10_T_{05B,15B,3B,7B}_{FIXED,CONV}`（8 字段） | 0.8963 / 0.8775 / 0.7953 / 0.7601 / 0.8611 / 0.42 / 0.5238 / 0.5608 | **None** |
+| 组                    | 占位符                                                                                                                                          | 旧 fallback（论文声称值）                                                                               | 新 fallback    |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | -------------- |
+| fig4 训练收敛/SNR     | `PH_EXP1_KL_PLATEAU`/`PH_EXP1_KL_CONVERGED`/`PH_EXP1_OVF_ACTIVATION_STEP`/`PH_EXP1_TOTAL_STEPS`/`PH_EXP1_SNR_MIN`/`PH_EXP1_SNR_MAX` | 0.045 / 0.016 / 1400 / 2000 / 18.4 / 18.9                                                               | **None** |
+| fig6a layer_selection | `PH_EXP3_LAYER_{EARLY,MID,LATE}_{F1,DRIFT}`（6 字段）                                                                                         | f1 0.466 / 0.6119 / 0.5893，drift 61.479                                                                | **None** |
+| fig6a rho_sweep       | `PH_EXP3_RHO_{00..05}_{F1,PPL}`（12 字段）                                                                                                    | f1 0.4948 / 0.548 / 0.3198 / 0.6229 / 0.6837 / 0.6667；ppl 1.615 / 1.342 / 1.588 / 1.48 / 1.349 / 1.448 | **None** |
+| fig5b 教师选择        | `PH_EXP10_T_{05B,15B,3B,7B}_{FIXED,CONV}`（8 字段）                                                                                           | 0.8963 / 0.8775 / 0.7953 / 0.7601 / 0.8611 / 0.42 / 0.5238 / 0.5608                                     | **None** |
 
 同步两处真实值/估算修正：
 
@@ -230,16 +230,16 @@ fallback** 的「尚无真实实验产出」字段，统一改为 `fallback=None
 
 优先级如下：
 
-| 优先级 | 事项 | 说明 |
-|---|---|---|
-| 🔴 P0 | Tab.3 主结果全表重跑 | 调优后 QAD=0.7974 / QAD+OVF=0.8047，仍低于论文 0.92 |
-| 🔴 P0 | Tab.CoT 结论改写 | 真实 exp9 CoT F1=0.3131 < without 0.8047 → 「CoT 有害」 |
-| 🔴 P0 | Tab.5 损失消融结论改写 | Pure KL 真实最差（0.5577），MSE 最佳（0.7667） |
-| 🔴 P0 | Tab.4 跨数据集 & 对抗全表重跑 | exp5/exp6 中断，需补跑 |
-| 🔴 P0 | Fig.4/5/6/7 数据来源 | 训练收敛/SNR/教师规模/OVF 激活窗需真实数据 |
-| 🟡 P2 | BF16 全管线基线 | 真实无此实验，需重跑 |
-| 🟡 P2 | 数据修复链 | `transcribe_taf28k.py` → `build_taf28k_npz.py` → 重跑 exp5/10/13（见 `docs/REPRODUCIBILITY.md` §10） |
-| 🟡 P2 | 手机端 GGUF 回测 | 领域 LoRA 合并后 F1 是否 > 官方 GGUF 0.7025 |
+| 优先级 | 事项                          | 说明                                                                                                          |
+| ------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| 🔴 P0  | Tab.3 主结果全表重跑          | 调优后 QAD=0.7974 / QAD+OVF=0.8047，仍低于论文 0.92                                                           |
+| 🔴 P0  | Tab.CoT 结论改写              | 真实 exp9 CoT F1=0.3131 < without 0.8047 → 「CoT 有害」                                                      |
+| 🔴 P0  | Tab.5 损失消融结论改写        | Pure KL 真实最差（0.5577），MSE 最佳（0.7667）                                                                |
+| 🔴 P0  | Tab.4 跨数据集 & 对抗全表重跑 | exp5/exp6 中断，需补跑                                                                                        |
+| 🔴 P0  | Fig.4/5/6/7 数据来源          | 训练收敛/SNR/教师规模/OVF 激活窗需真实数据                                                                    |
+| 🟡 P2  | BF16 全管线基线               | 真实无此实验，需重跑                                                                                          |
+| 🟡 P2  | 数据修复链                    | `transcribe_taf28k.py` → `build_taf28k_npz.py` → 重跑 exp5/10/13（见 `docs/REPRODUCIBILITY.md` §10） |
+| 🟡 P2  | 手机端 GGUF 回测              | 领域 LoRA 合并后 F1 是否 > 官方 GGUF 0.7025                                                                   |
 
 > 核心原则（重申）：**先改论文结论，再改数字**。在数据修复链走完、真实数字稳定前，不要用
 > 论文声称值覆盖 `paper_data.py` 的 fallback——那会把「复现失败」伪装成「复现成功」。
@@ -263,29 +263,29 @@ latency 结构、exp10 单/双 F1、exp11 scheme key 名）经代码追踪逐一
 
 ### 6.2 逐实验字段对齐表
 
-| 实验 | paper_data 读取路径 | 实验实际产出 | 判定 |
-|---|---|---|---|
-| exp1 | `f1`/`std`/`kl_plateau`/`kl_converged`/`ovf_activation_step`/`total_steps`/`snr_min`/`snr_max`/`trajectory` | 同名顶层字段，paper 路径产出 | ✅ |
-| exp2 | `variants.{kl_only,mse_only,ce_only,kl_mse_combined,kl_task}.{f1,kl_final,std}` | 5 个 key 全产出（`kl_task` 为 `kl_only` 深拷贝别名） | ✅ |
-| exp3 | `conditions.{4}.{f1,variance_drift_pct}` + `layer_selection.{early,mid,late}.{f1,variance_drift_pct}` + `rho_sweep.{6}.{f1,ppl}` | 同名；`layer_selection` 多出 `all` 冗余 key（未读取，非缺失） | ✅ |
-| exp5 | `advfraud.{full_pool,curated}.f1`/`bf16_matched_advfraud`/`ldp_tradeoff.eps_1.5.f1` | 同名，paper 路径产出 | ✅ |
-| exp6 | `diagnostic_B.h100_measured.{generic,domain}` + `paper_reference.{4}` | `generic` 有；`domain` 不产出（未实测，见 §6.4） | ⚠️ |
-| exp8 | `latency_detail.{int4,fp16,bf16}.{p50_ms,p99_ms}` | 同名嵌套；flat `latencies.{scheme}` 仅 p50 供内部用 | ✅ |
-| exp10 | `scales.{teacher,teacher_1.5b,teacher_3b,teacher_7b}.{f1_fixed,f1_conv}` | 同名双字段真实存在 | ✅ |
-| exp11 | `schemes.int4.{f1,std}` | 同名（schemes 下 5 键：`bf16/fp16/int8/int4/nf4`） | ✅ |
-| exp14 | `models.q4km_0.5b_llama_cpp.{f1,std}` | 同名；`GGUFUnavailable` 异常分支缺 `std` 且 `f1=None` | ⚠️ |
+| 实验  | paper_data 读取路径                                                                                                                    | 实验实际产出                                                      | 判定 |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ---- |
+| exp1  | `f1`/`std`/`kl_plateau`/`kl_converged`/`ovf_activation_step`/`total_steps`/`snr_min`/`snr_max`/`trajectory`          | 同名顶层字段，paper 路径产出                                      | ✅   |
+| exp2  | `variants.{kl_only,mse_only,ce_only,kl_mse_combined,kl_task}.{f1,kl_final,std}`                                                      | 5 个 key 全产出（`kl_task` 为 `kl_only` 深拷贝别名）          | ✅   |
+| exp3  | `conditions.{4}.{f1,variance_drift_pct}` + `layer_selection.{early,mid,late}.{f1,variance_drift_pct}` + `rho_sweep.{6}.{f1,ppl}` | 同名；`layer_selection` 多出 `all` 冗余 key（未读取，非缺失） | ✅   |
+| exp5  | `advfraud.{full_pool,curated}.f1`/`bf16_matched_advfraud`/`ldp_tradeoff.eps_1.5.f1`                                              | 同名，paper 路径产出                                              | ✅   |
+| exp6  | `diagnostic_B.h100_measured.{generic,domain}` + `paper_reference.{4}`                                                              | `generic` 有；`domain` 不产出（未实测，见 §6.4）             | ⚠️ |
+| exp8  | `latency_detail.{int4,fp16,bf16}.{p50_ms,p99_ms}`                                                                                    | 同名嵌套；flat`latencies.{scheme}` 仅 p50 供内部用              | ✅   |
+| exp10 | `scales.{teacher,teacher_1.5b,teacher_3b,teacher_7b}.{f1_fixed,f1_conv}`                                                             | 同名双字段真实存在                                                | ✅   |
+| exp11 | `schemes.int4.{f1,std}`                                                                                                              | 同名（schemes 下 5 键：`bf16/fp16/int8/int4/nf4`）              | ✅   |
+| exp14 | `models.q4km_0.5b_llama_cpp.{f1,std}`                                                                                                | 同名；`GGUFUnavailable` 异常分支缺 `std` 且 `f1=None`       | ⚠️ |
 
 ### 6.3 不被消费的实验（孤立数据）
 
 以下 5 个实验的产出字段 `paper_data.py` **完全不读**（全文无 `"exp4/7/9/12/13"` 的 `_get`/`_from_result`）：
 
-| 实验 | 产出字段 | 论文对应位置 |
-|---|---|---|
-| exp4 | `classifiers.{logreg,xgb,mlp,qwen_base}.{f1,accuracy}` | 基线对比表 |
-| exp7 | `pii_report`/`asv_eer_pct`/`speaker_id_accuracy`/`glo_reconstruction_corr`/`coverage` | 隐私表（§2.8，当前全为论文声称值） |
-| exp9 | `with_cot.{f1,fpr}`/`without_cot.{f1,fpr}` | CoT 消融表（§2.3） |
-| exp12 | `competitor_comparison_real.*`/`storage_decomposition_point8.{footprints_mb,quantization_alone_x,param_scale_alone_x,total_advantage_x}` | 竞品对比 + 存储分解 |
-| exp13 | `strategies.{early_fusion,late_fusion,hybrid}.{f1,accuracy,params,latency_ms}` | 融合策略表 |
+| 实验  | 产出字段                                                                                                                                     | 论文对应位置                        |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| exp4  | `classifiers.{logreg,xgb,mlp,qwen_base}.{f1,accuracy}`                                                                                     | 基线对比表                          |
+| exp7  | `pii_report`/`asv_eer_pct`/`speaker_id_accuracy`/`glo_reconstruction_corr`/`coverage`                                              | 隐私表（§2.8，当前全为论文声称值） |
+| exp9  | `with_cot.{f1,fpr}`/`without_cot.{f1,fpr}`                                                                                               | CoT 消融表（§2.3）                 |
+| exp12 | `competitor_comparison_real.*`/`storage_decomposition_point8.{footprints_mb,quantization_alone_x,param_scale_alone_x,total_advantage_x}` | 竞品对比 + 存储分解                 |
+| exp13 | `strategies.{early_fusion,late_fusion,hybrid}.{f1,accuracy,params,latency_ms}`                                                             | 融合策略表                          |
 
 这些字段当前是**孤立数据**，与图脚本之间无桥接；它们经 `experiments/consistency_check.py` 的
 `PAPER_CLAIMS`（暴露 `exp9.with_cot.f1`/`exp13.strategies.late_fusion.f1`/`exp12...total_advantage_x`）
@@ -312,14 +312,14 @@ latency 结构、exp10 单/双 F1、exp11 scheme key 名）经代码追踪逐一
 
 真实值（调优后）绝大多数落在 fig 脚本写死的坐标轴**之外**：
 
-| 图 | 坐标轴（写死论文值） | 真实值 | 出界 |
-|---|---|---|---|
-| fig3 F1 | 0.79–0.965 | QAD 0.7974 / QAT 0.6172 / Q4KM 0.7025 | QAT 出界 |
-| fig4 KL / SNR | 0–0.055 / 18.2–19.0 | kl 0.346 / SNR 3.4–4.6 | 全出界 |
-| fig5a F1 | 0.80–0.96 | exp2 0.5577–0.7667 | 全出界 |
-| fig6a F1 / drift | 0.910–0.9265 / 0–22% | 0.8047 / 0–52.45% | 全出界 |
-| fig6b F1 / PPL | 0.914–0.9245 / 8.55–8.80 | 0.80 / — | 出界 |
-| fig8a F1 | 0.90–0.935 | 0.6172 / 0.8047 | 出界 |
+| 图               | 坐标轴（写死论文值）       | 真实值                                | 出界     |
+| ---------------- | -------------------------- | ------------------------------------- | -------- |
+| fig3 F1          | 0.79–0.965                | QAD 0.7974 / QAT 0.6172 / Q4KM 0.7025 | QAT 出界 |
+| fig4 KL / SNR    | 0–0.055 / 18.2–19.0      | kl 0.346 / SNR 3.4–4.6               | 全出界   |
+| fig5a F1         | 0.80–0.96                 | exp2 0.5577–0.7667                   | 全出界   |
+| fig6a F1 / drift | 0.910–0.9265 / 0–22%     | 0.8047 / 0–52.45%                    | 全出界   |
+| fig6b F1 / PPL   | 0.914–0.9245 / 8.55–8.80 | 0.80 / —                             | 出界     |
+| fig8a F1         | 0.90–0.935                | 0.6172 / 0.8047                       | 出界     |
 
 这是独立于字段对齐的**第二层鸿沟**：即使字段契约完全对齐、真实值已回填，图表脚本按论文声称值
 （0.91–0.93）写死的坐标轴也无法容纳真实值（0.56–0.80）。脚本禁改，只能靠「重跑出接近论文的值」
@@ -328,5 +328,6 @@ latency 结构、exp10 单/双 F1、exp11 scheme key 名）经代码追踪逐一
 ### 6.6 命名巧合（易误判，勿据此判断消费关系）
 
 `paper_data.py` 中两个变量名形似 exp4/exp9，但与这两个实验**无数据对应**：
+
 - `EXP04_OVF_LAYER_ABLATION`（fig6a）→ 实为 **exp3** 的 OV-Freeze 消融；
 - `EXP09_TEACHER`（fig5b）→ 实为 **exp10** 的教师选择。
