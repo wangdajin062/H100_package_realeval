@@ -448,7 +448,7 @@ FIG8_ADVFRAUD = {
     "labels": ["Full pool\n(3,000)", "Curated subset\n(517)"],
     "f1": [
         _from_result("exp5", "advfraud", "full_pool", "f1", placeholder="PH_EXP5_ADVFRAUD_FULL_POOL_F1", fallback=0.1238),
-        _get("exp5", "advfraud", "curated", "f1") or _FIG8_REF["advfraud_curated_f1"],
+        _from_result("exp5", "advfraud", "curated", "f1", placeholder="PH_EXP5_ADVFRAUD_CURATED_F1", fallback=None),
     ],
     "bf16_matched": (_get("exp5", "bf16_matched_advfraud")
                      or _FIG8_REF["advfraud_bf16_matched"]),
@@ -461,8 +461,7 @@ FIG8_LDP = {
     "labels": ["No LDP\n(main results)", "$\\epsilon$-LDP\n($\\epsilon$=1.5)"],
     "f1": [
         _OVF_FULL_F1,             # best QAD+OVF (no LDP)
-        (_get("exp5", "ldp_tradeoff", "eps_1.5", "f1")
-         or _FIG8_REF["ldp_eps_1_5_f1"]),
+        _from_result("exp5", "ldp_tradeoff", "eps_1.5", "f1", placeholder="PH_EXP5_LDP_EPS_1_5_F1", fallback=None),
     ],
     "latency": [
         _FIG8_REF["pipeline_latency_p50_ms"],

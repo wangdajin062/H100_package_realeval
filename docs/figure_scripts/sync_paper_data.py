@@ -184,7 +184,8 @@ def compute_updates(results: dict[str, dict]) -> dict[str, object]:
 
     # ── exp5 → cross-dataset F1 ──────────────────────────────────────────
     exp5 = results.get("exp5", {})
-    for ds_key in ("taf28k", "chifraud", "advfraud"):
+    # 注意：advfraud 是嵌套结构（full_pool/curated），走下方独立分支，不进此扁平循环。
+    for ds_key in ("taf28k", "chifraud"):
         ds_val = exp5.get(ds_key, {})
         if isinstance(ds_val, dict) and "f1" in ds_val:
             updates[f"_EXP05_{ds_key.upper()}_F1"] = _r(ds_val["f1"])
