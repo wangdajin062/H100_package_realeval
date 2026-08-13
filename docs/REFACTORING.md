@@ -23,7 +23,6 @@
 H100_package_realeval/
 ├── config/                    # 统一配置管理
 │   ├── __init__.py            # 暴露 load_config / validate_config / get_default_config
-│   ├── defaults.py            # 默认配置字典
 │   ├── loader.py              # YAML 加载、合并、环境变量覆盖、数值字符串强制转换
 │   └── schema.py              # 配置 schema 与校验
 ├── runner/                    # 实验编排

@@ -88,13 +88,28 @@ class MissingExperimentData(Exception):
 _SENTINEL = object()
 
 
+def _key_present(exp_name: str, *keys: str) -> bool:
+    """字段路径在实验结果中真实存在（即使值为 None）。"""
+    r = _RESULTS.get(exp_name)
+    for k in keys:
+        if not isinstance(r, dict) or k not in r:
+            return False
+        r = r[k]
+    return True
+
+
 def _from_result(exp_name: str, *keys: str, placeholder: str, fallback=_SENTINEL, cited: bool = False):
     """从实验结果抽取字段值。
 
     cited=True: 该值本身来自外部引用（非本实验产出），fallback 是正常的。
     cited=False: 该值应由本实验产出，缺失说明实验结果不完整 — raise MissingExperimentData。
+    实验已产出但实测值为 None（如量化方案失败 / GGUF 不可用）时显式报缺返回 None，
+    绝不回退到硬编码 fallback 常量。
     """
     value = _get(exp_name, *keys)
+    if value is None and _key_present(exp_name, *keys):
+        _MISSING_PLACEHOLDERS.append((placeholder, exp_name, keys, None))
+        return None
     if value is not None:
         return value
     if cited:
@@ -139,7 +154,7 @@ EXP01_QUANT_QUALITY = [
 
 # QAT / QAD / OV-Freeze placeholders (resolved from experiment outputs)
 PH_EXP1_F1 = _from_result("exp1", "f1", placeholder="PH_EXP1_F1", fallback=0.7974)
-# 注：调优后（RUNLOG_20260803_summary / results_20260803）exp1 F1=0.7974（旧 0.5121），
+# 注：调优后（results_20260803）exp1 F1=0.7974（旧 0.5121），
 # acc=0.9456，std=0.0133。
 PH_EXP3_OVF_FULL_F1 = _from_result(
     "exp3", "conditions", "ov_freeze_full", "f1",
@@ -154,8 +169,9 @@ PH_EXP14_Q4KM_F1 = _from_result(
     "exp14", "models", "q4km_0.5b_llama_cpp", "f1",
     placeholder="PH_EXP14_Q4KM_F1", fallback=0.7025
 )
-# 注：调优后 exp14 异常回退（q4km 0.0014 / bf16 0.16，重跑验证中），
-# 暂保持最后一次可信值 0.7025（见 RUNLOG_20260803_summary 异常清单 #2）。
+# 注：调优后 exp14 异常回退（q4km 0.0014 / bf16 0.16，重跑验证中）。0.7025 仅作
+# 「结果文件完全缺失」时的兜底；GGUF 不可用导致实测 f1=None 时显式报缺为 None，
+# 不再静默使用 0.7025。
 
 _qad_f1 = PH_EXP1_F1
 _OVF_FULL_F1 = _r(PH_EXP3_OVF_FULL_F1)
@@ -173,12 +189,17 @@ PH_EXP11_INT4_ERR    = _from_result("exp11", "schemes", "int4", "std",
 PH_EXP14_Q4KM_ERR    = _from_result("exp14", "models", "q4km_0.5b_llama_cpp", "std",
                                     placeholder="PH_EXP14_Q4KM_ERR", fallback=0.007)
 
+def _recovery(f1):
+    """由 F1 计算恢复率；F1 缺失（None，显式报缺）时恢复率同样报缺为 None。"""
+    return round(f1 / BF16_F1 * 100, 1) if f1 is not None else None
+
+
 QAT_QAD_OVF = [
-    {"name": "NVFP4 QAT (CE)",         "f1": _qat_f1, "f1_err": PH_EXP11_INT4_ERR, "recovery": round(_qat_f1 / BF16_F1 * 100, 1)},
-    {"name": "NVFP4 QAD",              "f1": _qad_f1, "f1_err": PH_EXP1_ERR, "recovery": round(_qad_f1 / BF16_F1 * 100, 1)},
-    {"name": "NVFP4 QAD + OV-Freeze",  "f1": _ovf_f1, "f1_err": PH_EXP3_OVF_FULL_ERR, "recovery": round(_ovf_f1 / BF16_F1 * 100, 1)},
+    {"name": "NVFP4 QAT (CE)",         "f1": _qat_f1, "f1_err": PH_EXP11_INT4_ERR, "recovery": _recovery(_qat_f1)},
+    {"name": "NVFP4 QAD",              "f1": _qad_f1, "f1_err": PH_EXP1_ERR, "recovery": _recovery(_qad_f1)},
+    {"name": "NVFP4 QAD + OV-Freeze",  "f1": _ovf_f1, "f1_err": PH_EXP3_OVF_FULL_ERR, "recovery": _recovery(_ovf_f1)},
     {"name": "Q4_K_M QAD + OV-Freeze", "f1": PH_EXP14_Q4KM_F1, "f1_err": PH_EXP14_Q4KM_ERR,
-     "recovery": round(PH_EXP14_Q4KM_F1 / BF16_F1 * 100, 1)},
+     "recovery": _recovery(PH_EXP14_Q4KM_F1)},
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -308,7 +329,7 @@ _f1_early  = _r(_from_result("exp3", "layer_selection", "early", "f1", placehold
 _f1_mid    = _r(_from_result("exp3", "layer_selection", "mid", "f1", placeholder="PH_EXP3_LAYER_MID_F1", fallback=None))
 _f1_late   = _r(_from_result("exp3", "layer_selection", "late", "f1", placeholder="PH_EXP3_LAYER_LATE_F1", fallback=None))
 
-# drift fallback：no_reg/full 更新为调优后 OVF 修复验证值（RUNLOG_20260803_summary）：
+# drift fallback：no_reg/full 更新为调优后 OVF 修复验证值（2026-08-03 重跑验证）：
 #   no_reg 52.45 → full 0.0。quarter/half 调优后完整 exp3 待跑，沿用调优前递减序列
 #   （48.186/35.561）。layer_selection 三点（early/mid/late）一直未单独记录，暂保留 61.479。
 _drift_no   = _r(_from_result("exp3", "conditions", "no_reg", "variance_drift_pct", placeholder="PH_EXP3_NO_OVF_DRIFT", fallback=52.45), 1)
@@ -500,7 +521,7 @@ if __name__ == "__main__":
     # Print experiment status
     print(f"Experiments loaded: {sorted(_RESULTS.keys())}" if _RESULTS else "No experiment results found.")
     for k in ("exp1", "exp2", "exp3", "exp5", "exp6", "exp8", "exp10", "exp11"):
-        status = "✓" if k in _RESULTS else "✗"
+        status = "OK" if k in _RESULTS else "X"
         print(f"  {status} {k}")
     if _MISSING_PLACEHOLDERS:
         print(f"\n[WARN] {len(_MISSING_PLACEHOLDERS)} non-cited placeholder(s) using fallback:")

@@ -31,7 +31,7 @@ def run(config: dict) -> dict:
     def run_paper(config: dict) -> dict:
         from realeval import real_backend, gguf_backend
         import numpy as np
-        from experiments.common import multi_seed_std, n_seeds_from_config, set_seed, resolve_qad_path
+        from experiments.common import multi_seed_std, n_seeds_from_config, seed_base_from_config, set_seed, resolve_qad_path
 
         models = {}
         n_seeds = n_seeds_from_config(config, "exp14")
@@ -41,7 +41,7 @@ def run(config: dict) -> dict:
         # BF16 0.5B student via transformers (safetensors)
         bf16_f1s = []
         for s in range(n_seeds):
-            set_seed(1000 + s)
+            set_seed(seed_base_from_config(config) + s)
             bf16 = real_backend.real_llm_classify(
                 config, test_texts, test_labels, quantize=None,
                 finetuned_path=finetuned_path, finetuned_dtype="bf16",
@@ -58,7 +58,7 @@ def run(config: dict) -> dict:
             gg_f1s = []
             gg = None
             for s in range(n_seeds):
-                set_seed(1000 + s)
+                set_seed(seed_base_from_config(config) + s)
                 gg = gguf_backend.gguf_classify(config["models"]["student_gguf"], test_texts, test_labels)
                 gg_f1s.append(gg["f1"])
             models["q4km_0.5b_llama_cpp"] = {

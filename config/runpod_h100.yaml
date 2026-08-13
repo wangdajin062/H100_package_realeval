@@ -27,7 +27,8 @@ reproducibility:
   exp14_seeds: 5              # 路径 B：exp14 各运行时多 seed
   exp10_seeds: 5              # 路径 B：exp10 教师规模多 seed
 data:
-  source: taf28k             # Force real; errors out if missing
+  source: taf28k             # 数据来源标记：仅 provenance 记录与白名单校验消费（realeval/validation.py）
+  dataset: taf28k            # 覆盖基础配置的 chifraud：pod 上主判别语料强制为 TAF-28k（实验读取 data.dataset）
   root_hint: /workspace/data # RunPod persistent volume
 models:
   root_hint: /workspace/models

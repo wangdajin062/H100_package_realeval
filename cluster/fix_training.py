@@ -16,7 +16,8 @@ from __future__ import annotations
 import argparse, re, shutil, sys
 from pathlib import Path
 
-TRAIN_SFT = Path("/workspace/cluster/train_sft.py")
+# train_sft.py 与本脚本同目录（cluster/），随仓库部署位置自适应（pod 上为 /workspace/H100_package_realeval）
+TRAIN_SFT = Path(__file__).resolve().parent / "train_sft.py"
 
 # ── collator 修复 ────────────────────────────────────────────────────────────
 

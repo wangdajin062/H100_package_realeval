@@ -8,6 +8,7 @@ from experiments.common import (
     load_and_split_dataset,
     multi_seed_std,
     n_seeds_from_config,
+    seed_base_from_config,
     set_seed,
 )
 
@@ -53,7 +54,7 @@ def run(config: dict) -> dict:
         for name, frac, window in layer_specs:
             f1s, drifts = [], []
             for s in range(n_seeds):
-                set_seed(1000 + s)
+                set_seed(seed_base_from_config(config) + s)
                 f1, drift, _ = _train(config, frac, window, 1.0)
                 f1s.append(f1)
                 drifts.append(drift)
@@ -67,7 +68,7 @@ def run(config: dict) -> dict:
         for rho_val in [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]:
             f1s, drifts = [], []
             for s in range(n_seeds):
-                set_seed(1000 + s)
+                set_seed(seed_base_from_config(config) + s)
                 # rho sweeps the OV-Freeze activation WINDOW (freeze_frac stays 1.0).
                 # rho=0 disables OV-Freeze entirely (freeze_frac=0), matching v25 semantics.
                 f1, drift, _ = _train(config, 1.0 if rho_val > 0 else 0.0, rho_val, rho_val)
@@ -92,7 +93,7 @@ def run(config: dict) -> dict:
         for name, frac, window, rho in cond_specs:
             f1s, drifts = [], []
             for s in range(n_seeds):
-                set_seed(1000 + s)
+                set_seed(seed_base_from_config(config) + s)
                 f1, drift, _ = _train(config, frac, window, rho)
                 f1s.append(f1)
                 drifts.append(drift)

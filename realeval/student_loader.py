@@ -19,7 +19,9 @@ from realeval.real_backend import AssetsUnavailable
 _ADAPTER_ROOT_DEFAULT = Path("/workspace/outputs/sft_checkpoints")
 if not _ADAPTER_ROOT_DEFAULT.is_dir() and not any(os.environ.get(m) for m in
     ("RUNPOD_POD_ID", "RUNPOD_POD_HOSTNAME", "RUNPOD_API_KEY")):
-    _ADAPTER_ROOT_DEFAULT = Path(__file__).resolve().parent.parent / "outputs" / "sft_checkpoints"
+    # 本地回退遵循 REALEVAL_OUTPUT_ROOT（测试隔离）；延迟导入避免包初始化循环
+    from realeval.io.paths import OUTDIR
+    _ADAPTER_ROOT_DEFAULT = OUTDIR / "sft_checkpoints"
 ADAPTER_ROOT = Path(os.environ.get("REALEVAL_ADAPTER_ROOT", str(_ADAPTER_ROOT_DEFAULT)))
 BASE_MODEL_DEFAULT = "Qwen/Qwen2.5-0.5B-Instruct"
 

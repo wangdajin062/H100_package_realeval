@@ -24,8 +24,8 @@
 ### Figure 5 → Loss & Teacher Ablation
 | 图脚本变量 | paper_data 读取路径 | 实验产出字段 |
 |-----------|-------------------|------------|
-| EXP03_LOSS_ABLATION | exp2.variants.{kl,mse,ce,kl_mse}_only.{f1,kl_final,std} | exp2 → variants.{name}.{f1,kl_final,std} |
-| EXP09_TEACHER | exp10.scales.{teacher,teacher_1.5b,3b,7b}.{f1_fixed,f1_conv} | exp10 → scales.{key}.{f1_fixed,f1_conv} |
+| EXP03_LOSS_ABLATION | exp2.variants.{kl_only,mse_only,ce_only,kl_mse_combined}.{f1,kl_final,std} | exp2 → variants.{name}.{f1,kl_final,std} |
+| EXP09_TEACHER | exp10.scales.{teacher,teacher_1.5b,teacher_3b,teacher_7b}.{f1_fixed,f1_conv} | exp10 → scales.{key}.{f1_fixed,f1_conv} |
 
 ### Figure 6 → OV-Freeze Ablation
 | 图脚本变量 | paper_data 读取路径 | 实验产出字段 |
@@ -70,10 +70,9 @@
 
 1. **`paper_data.py` 加载逻辑**：先按时间戳加载 `exp*_*.json`，再补充 `all_experiments.json`，后加载者不覆盖前加载者。
 2. **阈值兼容**：`head.pt` 无 `threshold` 键时，`real_llm_classify` 回退到 `thr=0.5`（硬 argmax）。
-3. **smoke 路径**：smoke 路径产出结构与 paper 路径完全一致，仅 `computation` 字段标记为 `"smoke_sklearn"` 而非 `"h100_real_qwen"`。
-4. **`decision_threshold`**：exp1 QAD 蒸馏新增字段；旧版结果文件不包含此字段不影响图像脚本（仅 paper 级训后才会使用）。
-5. **`exp2.variants.kl_task` 兼容别名**：exp2 的 loss ablation 在科学上已将 `kl_task` 合并到 `kl_only`（OVF 在 exp3 中单独消融），但 `paper_data.py` 的 `EXP03_LOSS_ABLATION` 仍保留 `kl_task` 标签。实验脚本在 paper 与 smoke 路径中均自动将 `kl_only` 复制为 `kl_task`，保证图像脚本无需修改即可读取。
-6. **`std` 字段补齐**：exp3 的 `conditions.*` / `layer_selection.*` 以及 exp11 的 `schemes.*` 在 smoke 路径中统一附加 `std: None`，与 paper 路径多 seed 聚合结构一致；`None` 表示单 seed 无测量标准差。
+3. **`decision_threshold`**：exp1 QAD 蒸馏新增字段；旧版结果文件不包含此字段不影响图像脚本（仅 paper 级训后才会使用）。
+4. **`exp2.variants.kl_task` 兼容别名**：exp2 的 loss ablation 在科学上已将 `kl_task` 合并到 `kl_only`（OVF 在 exp3 中单独消融），但 `paper_data.py` 的 `EXP03_LOSS_ABLATION` 仍保留 `kl_task` 标签。实验脚本自动将 `kl_only` 复制为 `kl_task`，保证图像脚本无需修改即可读取。
+5. **`std` 字段补齐**：exp3 的 `conditions.*` / `layer_selection.*` 以及 exp11 的 `schemes.*` 在单 seed 运行时 `std` 为 `None`（与多 seed 聚合结构一致）；`None` 表示单 seed 无测量标准差。
 
 ## 四、验证命令
 
@@ -97,6 +96,7 @@ cd docs/figure_scripts && python generate_all.py
 |------|---------|
 | 2026-08-03 | 初始映射创建；新增 `decision_threshold` 字段 (exp1)；新增 `std` 字段 (exp2/exp11/exp14 variants/schemes/models)；`cot_max_new_tokens` 配置项；`val_frac` 校准集比例 |
 | 2026-08-05 | 重构后对齐修复：exp2 增加 `kl_task` 兼容别名；exp3 smoke 补齐 `conditions` / `layer_selection` 的 `std`；exp11 smoke 补齐 `schemes` 的 `std` / `n_seeds`；新增 `metrics/`、`runner/`、`config/`、`realeval/io/` 子包 |
+| 2026-08-13 | 文档审计修正：移除已删除的 smoke 路径相关描述；exp1 回退值更新（f1=0.7974，Fig4 锚点统一为 `None` 显式报缺）；exp5 LDP 改读 `ldp_tradeoff.eps_1.5.f1`；exp6 移除不存在的 `domain` 键；exp8 改读 `latency_detail.*.{p50_ms,p99_ms}`；exp2/exp10 variant/scale 键名修正 |
 
 
 ---
@@ -106,7 +106,7 @@ cd docs/figure_scripts && python generate_all.py
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `experiment` | `str` | 短 ID，如 `"exp1"` |
-| `computation` | `str` | 执行路径，如 `"h100_real_qwen"` 或 `"smoke_sklearn"` |
+| `computation` | `str` | 执行路径，如 `"h100_real_qwen"`（paper 路径） |
 
 ---
 
@@ -116,14 +116,16 @@ cd docs/figure_scripts && python generate_all.py
 
 | paper_data.py 读取路径 | 实验产出字段 | 回退值 |
 |------------------------|-------------|--------|
-| `_get("exp1", "f1")` | `result["f1"]` | `0.916` |
+| `_get("exp1", "f1")` | `result["f1"]` | `0.7974` |
 | `_get("exp1", "trajectory")` | `result["trajectory"]` (list of `{"step","kl","ce","drift_pct","snr_db"}`) | `[]` |
-| `_get("exp1", "kl_plateau")` | `result["kl_plateau"]` | `0.045` |
-| `_get("exp1", "kl_converged")` | `result["kl_converged"]` | `0.016` |
-| `_get("exp1", "ovf_activation_step")` | `result["ovf_activation_step"]` | `1400` |
-| `_get("exp1", "total_steps")` | `result["total_steps"]` | `2000` |
-| `_get("exp1", "snr_min")` | `result["snr_min"]` | `18.4` |
-| `_get("exp1", "snr_max")` | `result["snr_max"]` | `18.9` |
+| `_get("exp1", "kl_plateau")` | `result["kl_plateau"]` | `None`（显式报缺） |
+| `_get("exp1", "kl_converged")` | `result["kl_converged"]` | `None`（显式报缺） |
+| `_get("exp1", "ovf_activation_step")` | `result["ovf_activation_step"]` | `None`（显式报缺） |
+| `_get("exp1", "total_steps")` | `result["total_steps"]` | `None`（显式报缺） |
+| `_get("exp1", "snr_min")` | `result["snr_min"]` | `None`（显式报缺） |
+| `_get("exp1", "snr_max")` | `result["snr_max"]` | `None`（显式报缺） |
+
+> 注：Fig4 锚点回退值统一为 `None`，表示显式报缺——不再用论文常量冒充实测；真实 exp1 结果存在时仍正常读取（fig4 缺数据时因 `None` 报错属预期行为）。
 
 ### exp2 → Fig 5(a)（loss 函数消融）
 
@@ -154,14 +156,13 @@ cd docs/figure_scripts && python generate_all.py
 | `_get("exp5", "advfraud", "full_pool", "f1")` | `result["advfraud"]["full_pool"]["f1"]` | `0.841` |
 | `_get("exp5", "advfraud", "curated", "f1")` | `result["advfraud"]["curated"]["f1"]` | `0.875` |
 | `_get("exp5", "bf16_matched_advfraud")` | `result["bf16_matched_advfraud"]` | `0.882` |
-| `_get("exp5", "paper_reference", "ldp_eps_1_5_f1")` | `result["paper_reference"]["ldp_eps_1_5_f1"]` | `0.902` |
+| `_get("exp5", "ldp_tradeoff", "eps_1.5", "f1")` | `result["ldp_tradeoff"]["eps_1.5"]["f1"]` | `None`（显式报缺） |
 
 ### exp6 → Fig 7（推测解码）
 
 | paper_data.py 读取路径 | 实验产出字段 | 回退值 |
 |------------------------|-------------|--------|
 | `_get("exp6", "diagnostic_B", "h100_measured", "generic")` | `result["diagnostic_B"]["h100_measured"]["generic"]` | `0.78` |
-| `_get("exp6", "diagnostic_B", "h100_measured", "domain")` | `result["diagnostic_B"]["h100_measured"]["domain"]` | `0.86` |
 | `_get("exp6", "paper_reference", "alpha_generic")` | `result["paper_reference"]["alpha_generic"]` | `0.78` |
 | `_get("exp6", "paper_reference", "alpha_tuned")` | `result["paper_reference"]["alpha_tuned"]` | `0.86` |
 | `_get("exp6", "paper_reference", "gamma_deploy")` | `result["paper_reference"]["gamma_deploy"]` | `5` |
@@ -171,9 +172,11 @@ cd docs/figure_scripts && python generate_all.py
 
 | paper_data.py 读取路径 | 实验产出字段 |
 |------------------------|-------------|
-| `_get("exp8", "latencies", "int4")` | `result["latencies"]["int4"]`（单位 ms P50） |
-| `_get("exp8", "latencies", "fp16")` | `result["latencies"]["fp16"]` |
-| `_get("exp8", "latencies", "bf16")` | `result["latencies"]["bf16"]` |
+| `_get("exp8", "latency_detail", "int4", "p50_ms")` | `result["latency_detail"]["int4"]["p50_ms"]`（单位 ms P50） |
+| `_get("exp8", "latency_detail", "int4", "p99_ms")` | `result["latency_detail"]["int4"]["p99_ms"]`（单位 ms P99） |
+| 同上，key = `fp16` / `bf16` | 同结构 |
+
+> 注：权威来源为结构化的 `latency_detail.<scheme>.{p50_ms,p99_ms}`；扁平的 `latencies.<scheme>` 仅存 P50 标量，不可用于 P99（会静默读到 P50 值）。
 
 ### exp10 → Fig 5(b)（教师规模消融）
 
@@ -216,6 +219,5 @@ python docs/figure_scripts/paper_data.py
 
 ## 旧字段兼容策略
 
-- `paper_data.py` 对所有字段均配有硬编码论文常量作为回退值；
-- smoke 路径产出字段结构与 paper 路径完全一致，仅数值为合成近似；
+- `paper_data.py` 对所有字段均配有硬编码论文常量作为回退值（部分字段按审计结论改为 `None` 显式报缺，详见各实验映射表）；
 - 禁止修改 `docs/figure_scripts/` 下任何文件；实验侧主动适配图像脚本期望。

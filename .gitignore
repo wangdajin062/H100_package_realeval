@@ -29,6 +29,8 @@ outputs/models/
 outputs/audit/
 outputs/archive/
 outputs/evidence/
+outputs/claims/
+outputs/sft_checkpoints/
 outputs/*.json
 outputs/*.md
 

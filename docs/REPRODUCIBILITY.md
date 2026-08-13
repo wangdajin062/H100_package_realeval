@@ -2,7 +2,7 @@
 
 本文档是完整实验复现与 H100 重跑的权威参考，以「重新跑出论文数值」为主线组织：先完成环境与前置准备，再按 P0 → P1 → P2 的优先级重跑实验，逐步验证，最后回收结果同步 GitHub。
 
-> **铁律**：重跑单个实验一律用 `runner --no-archive`，不要用 `run_h100.sh`（它开头会 `rm -rf outputs/results/*` 清掉全部结果）。
+> **铁律**：重跑单个实验一律用 `runner --no-archive`。`run_h100.sh` 用于全量论文级流水线，**默认保留旧结果**——只有显式传 `--clean`（或设 `CLEAN=1`）才会清空 `outputs/results|metrics|predictions`；需归档清理时先跑 `scripts/archive_and_clear.py`。
 > **核心原则**：先改论文结论，再改数字。在数据修复链走完、真实数字稳定前，不要用论文声称值覆盖 `paper_data.py` 的 fallback——那会把「复现失败」伪装成「复现成功」。
 
 ---
@@ -199,8 +199,9 @@ cd /workspace/H100_package_realeval && tar czf - outputs/results | base64   # �
 3. 更新 `reports/` 下的运行/审计报告，提交：
    ```bash
    cd /d/Projects/H100_package_realeval
-   git add outputs/results reports/ experiments/consistency_check.py && git commit -m "results: 同步 RunPod H100 实测结果" && git push origin main
+   git add reports/ experiments/consistency_check.py && git commit -m "results: 同步 RunPod H100 实测结果" && git push origin main
    ```
+   注意：`outputs/` 整体在 `.gitignore` 中（结果 JSON 属生成物，不进 git）；结果文件本身通过 scp/同步脚本回收，无需 `git add outputs/...`。
 4. 回填论文 `v25_blind.tex` 前，逐项对照审计报告判定（P0 结论反转项先改结论再改数字）。
 
 ---

@@ -31,7 +31,7 @@ def load_claim(path: Path) -> dict:
 
 
 def list_claims() -> list[Path]:
-    """List all claim YAML files in claims/."""
+    """List all claim YAML files in claims/legacy/."""
     if not CLAIMS_DIR.is_dir():
         return []
     return sorted(CLAIMS_DIR.glob("claim_*.yaml"))

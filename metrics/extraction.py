@@ -106,7 +106,9 @@ def extract_headline(short: str, result: dict[str, Any]) -> dict[str, Any]:
         }
 
     if short == "exp8":
-        out = {f"lat_ms[{k}]": v for k, v in r.get("latencies", {}).items()}
+        # latencies 字典可能混入布尔标记（如 int8_fallback_flagged），只保留数值。
+        out = {f"lat_ms[{k}]": v for k, v in r.get("latencies", {}).items()
+               if isinstance(v, (int, float)) and not isinstance(v, bool)}
         bb = r.get("batch_benchmark", {})
         if bb:
             out["batch_benchmark"] = bb

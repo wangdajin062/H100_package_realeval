@@ -140,14 +140,20 @@ def run(config: dict) -> dict:
                             _ = model(**enc).logits
                     torch.cuda.synchronize()
                     t0 = time.perf_counter()
+                    iter_times_ms = []
                     for _ in range(repeat):
+                        it0 = time.perf_counter()
                         with torch.inference_mode():
                             _ = model(**enc).logits
-                    torch.cuda.synchronize()
+                        torch.cuda.synchronize()
+                        iter_times_ms.append((time.perf_counter() - it0) * 1000)
                     elapsed_ms = (time.perf_counter() - t0) / repeat * 1000
                     mem_mb = torch.cuda.max_memory_allocated(dev) / 1e6 if torch.cuda.is_available() else 0
                     batch_benchmark[str(bs)] = {
                         "latency_p50_ms": round(elapsed_ms, 2),
+                        # p90/p99 与 latency_detail 一致，用 quantile_ms 在逐次迭代耗时上计算
+                        "latency_p90_ms": round(quantile_ms(iter_times_ms, 90), 2),
+                        "latency_p99_ms": round(quantile_ms(iter_times_ms, 99), 2),
                         "throughput_sps": round(bs / (elapsed_ms / 1000), 1) if elapsed_ms > 0 else 0,
                         "peak_mem_mb": round(mem_mb, 1),
                     }

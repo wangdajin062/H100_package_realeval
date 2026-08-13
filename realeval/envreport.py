@@ -12,8 +12,9 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-_OUTPUT_ROOT = Path(os.environ.get("REALEVAL_OUTPUT_ROOT", str(ROOT / "outputs")))
+# 路径常量统一由 realeval.io.paths 解析（含 REALEVAL_OUTPUT_ROOT 覆盖逻辑）
+from realeval.io.paths import OUTDIR as _OUTPUT_ROOT
+from realeval.io.paths import ROOT
 
 
 def output_root() -> Path:

@@ -95,6 +95,13 @@ EXPECTED_FIELDS: dict[str, list[tuple[str, ...]]] = {
     "exp6": [
         ("diagnostic_B", "h100_measured", "generic"),
     ],
+    "exp7": [
+        ("pii_report",),
+        ("asv_eer_pct",),
+        ("speaker_id_accuracy",),
+        ("glo_reconstruction_corr",),
+        ("n_speakers",),
+    ],
     "exp8": [
         ("latency_detail", "bf16", "p50_ms"),
         ("latency_detail", "bf16", "p99_ms"),
@@ -103,6 +110,12 @@ EXPECTED_FIELDS: dict[str, list[tuple[str, ...]]] = {
         ("latency_detail", "int4", "p50_ms"),
         ("latency_detail", "int4", "p99_ms"),
         ("batch_benchmark",),
+    ],
+    "exp9": [
+        ("with_cot", "f1"),
+        ("with_cot", "fpr"),
+        ("without_cot", "f1"),
+        ("without_cot", "fpr"),
     ],
     "exp10": [
         ("scales", "teacher", "f1_fixed"),
@@ -125,6 +138,26 @@ EXPECTED_FIELDS: dict[str, list[tuple[str, ...]]] = {
         ("schemes", "fp16", "std"),
         ("schemes", "int8", "f1"),
         ("schemes", "int8", "std"),
+    ],
+    "exp12": [
+        ("competitor_comparison_real", "QAD_MultiGuard_INT4", "f1"),
+        # storage 分解键总会产出；但 footprints_mb 依赖磁盘上的模型文件，
+        # 缺失时各 advantage 值为 None（键仍存在）。
+        ("storage_decomposition_point8", "footprints_mb"),
+        ("storage_decomposition_point8", "quantization_alone_x"),
+        ("storage_decomposition_point8", "param_scale_alone_x"),
+        ("storage_decomposition_point8", "total_advantage_x"),
+    ],
+    "exp13": [
+        ("strategies", "early_fusion", "f1"),
+        ("strategies", "early_fusion", "accuracy"),
+        ("strategies", "early_fusion", "latency_ms"),
+        ("strategies", "late_fusion", "f1"),
+        ("strategies", "late_fusion", "accuracy"),
+        ("strategies", "late_fusion", "latency_ms"),
+        ("strategies", "hybrid", "f1"),
+        ("strategies", "hybrid", "accuracy"),
+        ("strategies", "hybrid", "latency_ms"),
     ],
     "exp14": [
         ("models", "q4km_0.5b_llama_cpp", "f1"),

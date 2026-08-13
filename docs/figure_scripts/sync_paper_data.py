@@ -1,4 +1,9 @@
-"""sync_paper_data.py — Update paper_data.py from live experiment results.
+"""sync_paper_data.py — [已废弃] Update paper_data.py from live experiment results.
+
+⚠ 已废弃（2026-08-13）：paper_data.py 已改为 ``_from_result(...)`` 表达式在导入时动态
+桥接实验结果，本脚本的标量正则只匹配 ``VAR = 数字字面量``，对当前 paper_data.py 结构
+不再生效（运行不会改变任何内容）。保留仅供历史参考——更新论文数值只需重跑实验后
+直接运行 paper_data.py / generate_all.py，无需本脚本。
 
 Reads the latest experiment results (outputs/results/*.json or metrics.json)
 and writes the measured values back into paper_data.py.  Only numeric literals
@@ -390,6 +395,9 @@ def main():
     ap.add_argument("--regenerate", action="store_true",
                     help="Run generate_all.py after sync")
     args = ap.parse_args()
+
+    print("[deprecated] sync_paper_data.py 对当前 paper_data.py（_from_result 表达式动态桥接）"
+          "不再生效，运行不会改变任何内容；重跑实验后直接执行 paper_data.py / generate_all.py 即可。")
 
     os.chdir(str(SCRIPTS_DIR))
 

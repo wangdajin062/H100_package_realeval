@@ -7,6 +7,7 @@ from experiments.common import (
     load_and_split_dataset,
     multi_seed_std,
     n_seeds_from_config,
+    seed_base_from_config,
     set_seed,
 )
 
@@ -32,7 +33,7 @@ def run(config: dict) -> dict:
         snr_maxs: list[float] = []
         trajectory = None
         for s in range(n_seeds):
-            set_seed(1000 + s)
+            set_seed(seed_base_from_config(config) + s)
             result = real_backend.real_qad_distill_train(
                 config,
                 split.train_texts, split.train_labels,

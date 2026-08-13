@@ -1,6 +1,6 @@
 # QAD-MultiGuard — Paper Figure Scripts
 
-Python scripts that regenerate all seven paper figures, in **paper insertion
+Python scripts that regenerate all eight paper figures, in **paper insertion
 order**, from a single audited data source. Every numeric value has been
 cross-checked against the paper's tables and body text and the engineering
 experiment runs (EXP01–EXP10).
@@ -16,13 +16,13 @@ experiment runs (EXP01–EXP10).
 | 5 | `fig5_loss_teacher_ablation.py`| Loss-function + teacher-selection ablation |
 | 6 | `fig6_ovf_ablation.py`         | OV-Freeze layer + step-ratio ablation |
 | 7 | `fig7_speculative_decoding.py` | Speculative-decoding speedup |
+| 8 | `fig8_revision_ablations.py`   | Revision ablations (quant / AdvFraud / LDP) |
 
 Supporting modules:
 
 - `paper_data.py` — single source of truth for every number (with self-checks).
 - `paper_style.py` — shared SCI/IEEE-Elsevier matplotlib styling + palette.
-- `generate_all.py` — runs all seven scripts in order.
-- `FIGURE_CAPTIONS.md` — verified, ready-to-paste figure captions.
+- `generate_all.py` — runs all eight scripts in order.
 
 ## Usage
 
@@ -36,7 +36,7 @@ python3 -m experiments.runner --paper --config config/h100.yaml
 python3 docs/figure_scripts/check_alignment.py
 
 # 3. Regenerate all figures
-python3 generate_all.py        # regenerate all 7 PNGs
+python3 generate_all.py        # regenerate all 8 PNGs
 # or run any single figure:
 python3 fig3_main_results.py
 ```
@@ -57,5 +57,5 @@ Each script writes a 420-dpi PNG named after itself (e.g. `fig3_main_results.png
 The paper frames the field pilot as a **planned 2,000-user** deployment, not a
 completed one. The completed-deployment metrics that existed in the original
 engineering codebase (5,000 students; precision 93.2 %, recall 98.8 %) are **not
-used by any figure** and are intentionally excluded here. See the cross-check
-summary at the end of `FIGURE_CAPTIONS.md`.
+used by any figure** and are intentionally excluded here. Figure captions are
+maintained in the paper manuscript, not in this repo.

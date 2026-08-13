@@ -2,6 +2,7 @@
 
 消除 14 个实验脚本间的重复代码：
 - set_seed(): torch + numpy + cuda 三合一（修复 exp2 遗漏 np.random.seed 的 bug）
+- seed_base_from_config(): 统一 seed 基数读取（兼容 claim_engine 注入的 config["seed"]）
 - load_and_split_dataset(): 统一数据加载 + 防泄漏分割
 - n_seeds_from_config(): 统一 multi-seed 计数读取
 - run_multi_seed() / aggregate_seed_results(): 多 seed 运行与聚合
@@ -75,6 +76,15 @@ def n_seeds_from_config(config: dict[str, Any], exp_id: str) -> int:
     兼容现有的 per-experiment 配置键 (exp1_seeds, exp2_seeds, ...)。
     """
     return int(config.get("reproducibility", {}).get(f"{exp_id}_seeds", 3))
+
+
+def seed_base_from_config(config: dict[str, Any]) -> int:
+    """从 config 读取 seed 基数，默认 1000。
+
+    claim_engine 每次重复运行前注入 cfg["seed"] = 42 + s；普通运行无 "seed"
+    键时保持默认 1000，保证既有 H100 论文运行结果 bit-identical。
+    """
+    return int(config.get("seed", 1000))
 
 
 def multi_seed_std(values: list[float]) -> float | None:

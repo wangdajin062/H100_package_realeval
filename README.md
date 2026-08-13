@@ -56,6 +56,7 @@ bash run_h100.sh（或 python -m experiments.runner --paper）
    ├─ 3. 配置加载          config/experiments.yaml → h100.yaml / runpod_h100.yaml 覆盖层
    ├─ 4. 运行实验分组      00_train → 01_baseline → 02_quantization → 03_QAD
    │                       → 04_OV-Freeze → 05_latency → 06_robustness
+   │                       → 07_fusion → 08_ablations → 09_edge
    ├─ 5. 设备基准          H100 延迟 / 吞吐 / 显存（batch 1/8/32）
    ├─ 6. 归并输出          outputs/results/all_experiments.json + expN_{ts}.json
    ├─ 7. 生成交付物        metrics.json · latency.csv · throughput.csv · memory.csv
@@ -114,7 +115,6 @@ cd docs/figure_scripts && python generate_all.py    # 论文图像（只读脚�
 │   └── exp*_*.py              #   各实验实现
 ├── config/                    # 统一配置管理
 │   ├── __init__.py            #   暴露 load_config / validate_config
-│   ├── defaults.py            #   默认配置
 │   ├── loader.py              #   加载 / 合并 / 环境变量覆盖
 │   └── schema.py              #   schema 与校验
 ├── runner/                    # 实验编排

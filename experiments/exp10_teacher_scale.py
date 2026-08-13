@@ -17,7 +17,7 @@ def run(config: dict) -> dict:
     def run_paper(config: dict) -> dict:
         from realeval import real_backend
         import numpy as np
-        from experiments.common import config_override, multi_seed_std, n_seeds_from_config, set_seed
+        from experiments.common import config_override, multi_seed_std, n_seeds_from_config, seed_base_from_config, set_seed
         models_cfg = config.get("models", {})
 
         n_seeds = n_seeds_from_config(config, "exp10")
@@ -43,7 +43,7 @@ def run(config: dict) -> dict:
             try:
                 fixed_f1s, conv_f1s, conv_accs = [], [], []
                 for s in range(n_seeds):
-                    set_seed(1000 + s)
+                    set_seed(seed_base_from_config(config) + s)
                     # Fixed token budget (1 epoch)
                     fixed_result = real_backend.real_qad_distill_train(
                         fixed_config,

@@ -44,6 +44,8 @@ def load_results() -> dict:
     for f in sorted(_RESULTS_DIR.glob("exp*_*.json")):
         try:
             r = json.loads(f.read_text(encoding="utf-8"))
+            if str(r.get("computation", "")).startswith("smoke"):
+                continue  # 与 paper_data._load_results 一致：过滤 smoke 合成结果
             name = r.get("experiment", f.stem.split("_")[0])
             by_exp[name] = r
         except (json.JSONDecodeError, OSError):
@@ -52,6 +54,8 @@ def load_results() -> dict:
     if all_file.exists():
         try:
             for k, v in json.loads(all_file.read_text(encoding="utf-8")).items():
+                if str(v.get("computation", "")).startswith("smoke"):
+                    continue
                 by_exp.setdefault(k, v)
         except Exception:
             pass
@@ -184,7 +188,7 @@ def main() -> int:
         if missing:
             problems.append(f"  - [MISSING] {fn} import 未在 paper_data 定义: {missing}")
         print(f"  {fn}: import {len(names)} 项"
-              + (f"  ✓ 全部已定义" if not missing else f"  ✗ 缺失 {missing}"))
+              + (f"  [OK] 全部已定义" if not missing else f"  [X] 缺失 {missing}"))
     # ── 3) 汇总 ───────────────────────────────────────────────────────
     if problems:
         print(f"\n[FAIL] {len(problems)} 处字段对齐问题:")

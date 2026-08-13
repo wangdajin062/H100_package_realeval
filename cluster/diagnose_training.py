@@ -6,11 +6,14 @@
   python cluster/diagnose_training.py trainer    # 逐 knob 复现 Trainer NaN
   python cluster/diagnose_training.py all        # 运行全部诊断
 
-依赖 /workspace 下的 realeval 包和模型权重。
+依赖仓库内 realeval 包和模型权重（自动定位仓库根，无需硬编码 /workspace）。
 """
 from __future__ import annotations
 import sys
-sys.path.insert(0, "/workspace")
+from pathlib import Path
+
+# 仓库根目录（cluster/ 的上一级），随部署位置自适应；pod 上为 /workspace/H100_package_realeval
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import itertools
 import torch

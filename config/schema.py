@@ -21,7 +21,7 @@ CONFIG_SCHEMA: dict[str, tuple[str, type | tuple[type, ...], Any, bool]] = {
     "models.student_gguf": ("边缘部署 GGUF Q4_K_M 学生", str, None, False),
 
     # 数据配置
-    "data.source":      ("数据来源模式：auto / taf28k / synthetic", str, "auto", True),
+    "data.source":      ("数据来源模式：auto / taf28k / synthetic / chifraud", str, "auto", True),
     "data.dataset":     ("主判别语料库名称", str, "chifraud", True),
     "data.max_samples": ("最大采样数", (int, type(None)), 16000, False),
 

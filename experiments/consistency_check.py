@@ -63,6 +63,7 @@ CITED_FIELDS: dict[str, list[tuple]] = {
     "exp5": [("bf16_matched_advfraud",)],
     "exp6": [("paper_reference", "alpha_generic"),
              ("paper_reference", "alpha_tuned"),
+             ("paper_reference", "gamma_deploy"),
              ("paper_reference", "speculative_speedups")],
 }
 
@@ -106,8 +107,8 @@ def audit(targets: list[str] | None = None) -> dict[str, list[dict]]:
 
 def print_report(report: dict[str, list[dict]]) -> bool:
     """Print human report; return True if any P0 issue (SMOKE/DRIFT) present."""
-    icon = {"SMOKE": "🔴", "DRIFT": "🔴", "MISSING": "🟠", "MISSING_RESULT": "🟠",
-            "CITED": "🟡", "MATCH": "🟢"}
+    icon = {"SMOKE": "[X]", "DRIFT": "[X]", "MISSING": "[!]", "MISSING_RESULT": "[!]",
+            "CITED": "[i]", "MATCH": "[OK]"}
     has_p0 = False
     for exp, items in sorted(report.items()):
         print(f"\n[{exp}]")
@@ -118,14 +119,14 @@ def print_report(report: dict[str, list[dict]]) -> bool:
             if it.get("severity") == "P0":
                 has_p0 = True
             if k in ("MATCH", "DRIFT"):
-                print(f"  {icon.get(k,'·')} {k:5s} {it['label']}: measured={it['measured']} "
+                print(f"  {icon.get(k,'-')} {k:5s} {it['label']}: measured={it['measured']} "
                       f"vs claimed={it['claimed']} (Δ={it['delta']:+.4f})")
             elif k == "CITED":
                 print(f"  {icon['CITED']} CITED {it['field']} — {it['detail']}")
             elif k == "SMOKE":
                 print(f"  {icon['SMOKE']} SMOKE {it['detail']}")
             else:
-                print(f"  {icon.get(k,'·')} {k} {it.get('field', it.get('detail',''))}")
+                print(f"  {icon.get(k,'-')} {k} {it.get('field', it.get('detail',''))}")
     print("\n=== P0 issues present: %s ===" % ("YES" if has_p0 else "no"))
     return has_p0
 

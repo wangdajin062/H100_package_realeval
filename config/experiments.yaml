@@ -19,7 +19,7 @@ models:
   student_gguf: "Qwen/Qwen2.5-0.5B-Instruct-GGUF"
 
 data:
-  source: auto        # data source mode: auto, taf28k, synthetic (also configurable via REALEVAL_DATA__SOURCE env)
+  source: auto        # data source mode: auto, taf28k, synthetic, chifraud (also configurable via REALEVAL_DATA__SOURCE env)
   dataset: chifraud   # primary discriminative corpus (ChiFraud: 404k, ~14.3% fraud, TF-IDF ceiling 0.896). balanced4k is saturated (TF-IDF 0.997) and only a sanity set.
   max_samples: 16000  # sample from ChiFraud, keeping the natural ~14.3% fraud imbalance
 

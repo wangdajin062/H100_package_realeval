@@ -30,12 +30,12 @@ print("Cleared old figures.\n")
 SCRIPTS = [
     ("Figure 1", "fig1_architecture.py",         []),                        # diagram
     ("Figure 2", "fig2_acoustic_embedding.py",   []),                        # diagram
-    ("Figure 3", "fig3_main_results.py",         ["exp11"]),                 # needs exp11 for QAT row
+    ("Figure 3", "fig3_main_results.py",         ["exp1", "exp3", "exp11", "exp14"]),  # QAT/QAD/OVF/Q4_K_M 四行分别消费 exp11/exp1/exp3/exp14
     ("Figure 4", "fig4_loss_convergence.py",     ["exp1"]),                  # needs exp1 trajectory
     ("Figure 5", "fig5_loss_teacher_ablation.py", ["exp2", "exp10"]),       # needs exp2/exp10
     ("Figure 6", "fig6_ovf_ablation.py",         ["exp3"]),                  # needs exp3
     ("Figure 7", "fig7_speculative_decoding.py",  ["exp6"]),                 # needs exp6
-    ("Figure 8", "fig8_revision_ablations.py",    ["exp5", "exp7"]),        # needs exp5/exp7
+    ("Figure 8", "fig8_revision_ablations.py",    ["exp3", "exp5", "exp11"]),  # quant 面板消费 exp11+exp3，advfraud/ldp 面板消费 exp5（exp7 无人消费）
 ]
 
 # Check which experiment data exists
@@ -46,6 +46,8 @@ if _RESULTS.is_dir():
         try:
             import json
             r = json.loads(f.read_text(encoding="utf-8"))
+            if str(r.get("computation", "")).startswith("smoke"):
+                continue  # 与 paper_data._load_results 一致：smoke 合成结果不算可用实验数据
             _available.add(r.get("experiment", f.stem.split("_")[0]))
         except Exception:
             pass

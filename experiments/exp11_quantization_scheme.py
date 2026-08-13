@@ -21,7 +21,7 @@ def run(config: dict) -> dict:
         from realeval import real_backend
         import numpy as np
         from experiments.common import (
-            multi_seed_std, n_seeds_from_config, resolve_qad_path, set_seed,
+            multi_seed_std, n_seeds_from_config, resolve_qad_path, seed_base_from_config, set_seed,
         )
 
         qad_path = resolve_qad_path()
@@ -38,7 +38,7 @@ def run(config: dict) -> dict:
             try:
                 f1s, accs = [], []
                 for s in range(n_seeds):
-                    set_seed(1000 + s)
+                    set_seed(seed_base_from_config(config) + s)
                     result = real_backend.real_llm_classify(
                         config, split.test_texts, split.test_labels,
                         quantize=quant_arg,
@@ -54,7 +54,7 @@ def run(config: dict) -> dict:
                 }
             except Exception as e:
                 logger.warning("Quantisation scheme %s failed: %s", scheme_name, e)
-                schemes[scheme_name] = {"f1": 0.0, "std": None, "error": str(e)}
+                schemes[scheme_name] = {"f1": None, "std": None, "error": str(e)}
 
         return {
             "computation": "h100_real_qwen",
