@@ -109,38 +109,4 @@ def run(config: dict) -> dict:
             "conditions": conditions,
         }
 
-    def run_smoke(_: dict) -> dict:
-        logger.info("SMOKE: running small-model verification for exp3")
-        from sklearn.ensemble import GradientBoostingClassifier
-        from realeval.metrics import classification_metrics
-        from realeval.data import verification_features
-        from experiments.smoke import toy_kl_distill
-
-        X, y = verification_features(split.train_labels + split.test_labels)
-        ntr = len(split.train_labels)
-        clf = GradientBoostingClassifier(n_estimators=100, random_state=42).fit(X[:ntr], y[:ntr])
-        base_f1 = classification_metrics(y[ntr:], clf.predict(X[ntr:]))["f1"]
-
-        kl_result = toy_kl_distill(X, y, ntr)
-
-        layer_selection = {
-            name: {"f1": base_f1, "variance_drift_pct": 61.5, "std": None}
-            for name in ["early", "mid", "late", "all"]
-        }
-        rho_sweep = {
-            f"rho_{v}": {"f1": base_f1, "ppl": 1.5, "variance_drift_pct": 61.5, "std": None}
-            for v in [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
-        }
-        conditions = {
-            name: {"f1": base_f1, "variance_drift_pct": 61.5, "std": None}
-            for name in ["no_reg", "ov_freeze_quarter", "ov_freeze_half", "ov_freeze_full"]
-        }
-
-        return {
-            "computation": "smoke_sklearn",
-            "layer_selection": layer_selection,
-            "rho_sweep": rho_sweep,
-            "conditions": conditions,
-        }
-
-    return run_with_mode("exp3", config, run_paper, run_smoke)
+    return run_with_mode("exp3", config, run_paper)

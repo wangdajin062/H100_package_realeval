@@ -92,8 +92,7 @@ def attach_adapter(model, variant: str = "base", config: dict | None = None,
         if variant not in ("base", None, ""):
             raise AssetsUnavailable(
                 f"student_variant='{variant}' requested but no LoRA adapter found under "
-                f"{ADAPTER_ROOT}. Train one (cluster/train_sft.py) or pass adapter_path. "
-                "Falling back to smoke when appropriate.")
+                f"{ADAPTER_ROOT}. Train one (cluster/train_sft.py) or pass adapter_path.")
         return model
 
     from peft import PeftModel

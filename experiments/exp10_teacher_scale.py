@@ -81,36 +81,4 @@ def run(config: dict) -> dict:
         }
 
 
-    def run_smoke(_: dict) -> dict:
-        logger.info("SMOKE: 运行 exp10 小模型验证（teacher_scale）")
-        from sklearn.ensemble import GradientBoostingClassifier
-        from realeval.metrics import classification_metrics
-        from realeval.data import verification_features
-
-        # 用合成重叠度模拟不同规模教师的蒸馏效果：
-        # 同构 0.5B 教师特征重叠最高 → F1 最优；大教师特征分布偏移更明显
-        synthetic_overlaps = (
-            ("teacher",       0.95),   # 0.5B 同构（最佳）
-            ("teacher_1.5b",  0.88),   # 1.5B 异构
-            ("teacher_3b",    0.85),   # 3B 异构（exp10/Fig5b 所需）
-            ("teacher_7b",    0.82),   # 7B 异构
-        )
-        scales = {}
-        for teacher, overlap in synthetic_overlaps:
-            X, y = verification_features(split.train_labels + split.test_labels, overlap=overlap)
-            ntr = len(split.train_labels)
-            clf_fixed = GradientBoostingClassifier(n_estimators=50, random_state=42).fit(X[:ntr], y[:ntr])
-            m_fixed = classification_metrics(y[ntr:], clf_fixed.predict(X[ntr:]))
-            clf_conv = GradientBoostingClassifier(n_estimators=100, random_state=42).fit(X[:ntr], y[:ntr])
-            m_conv = classification_metrics(y[ntr:], clf_conv.predict(X[ntr:]))
-            scales[teacher] = {
-                "f1_fixed": m_fixed["f1"],
-                "f1_conv": m_conv["f1"],
-                "accuracy": m_conv["accuracy"],
-                "std": None,
-                "n_seeds": 1,
-                "teacher_model": f"synthetic_{teacher}",
-            }
-        return {"computation": "smoke_sklearn", "scales": scales}
-
-    return run_with_mode("exp10", config, run_paper, run_smoke)
+    return run_with_mode("exp10", config, run_paper)

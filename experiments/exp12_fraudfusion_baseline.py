@@ -75,33 +75,4 @@ def run(config: dict) -> dict:
                 }}
 
 
-    def run_smoke(_: dict) -> dict:
-        logger.info("SMOKE: running small-model verification for exp12")
-        from sklearn.ensemble import GradientBoostingClassifier
-        from realeval.metrics import classification_metrics
-        from realeval.data import verification_features
-
-        X, y = verification_features(split.train_labels + split.test_labels)
-        ntr = len(split.train_labels)
-        clf = GradientBoostingClassifier(n_estimators=100, random_state=42).fit(X[:ntr], y[:ntr])
-        f1 = classification_metrics(y[ntr:], clf.predict(X[ntr:]))["f1"]
-        return {
-            "computation": "smoke_sklearn",
-            "competitor_comparison_real": {
-                "QAD_MultiGuard_INT4": {"f1": f1, "source": "ours"},
-                "FraudFusion_pruned_INT4": {"f1": None, "source": "cited (no released weights)"},
-            },
-            "storage_decomposition_point8": {
-                "footprints_mb": {
-                    "7B_BF16_SAFE_QAQ": 14200.0,
-                    "0.5B_BF16": 956.0,
-                    "0.5B_Q4_K_M": 240.0,
-                },
-                "quantization_alone_x": 4.0,
-                "param_scale_alone_x": 14.9,
-                "total_advantage_x": 59.6,
-                "note": "smoke_proxy: representative footprint values for field completeness",
-            },
-        }
-
-    return run_with_mode("exp12", config, run_paper, run_smoke)
+    return run_with_mode("exp12", config, run_paper)

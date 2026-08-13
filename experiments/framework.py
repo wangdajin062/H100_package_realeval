@@ -1,7 +1,7 @@
 """experiments/framework.py — 实验共享运行时框架
 
 集中处理实验公共关切：
-- smoke/paper 模式分发
+- paper 真实计算路径分发
 - 数据集加载回退链
 - 防泄漏训练/测试分割
 - 结果 schema 合规检查
@@ -98,14 +98,10 @@ def pre_run_validation(config: dict[str, Any], exp_id: str) -> None:
     """H100 实验执行前的预检查。
 
     验证项：GPU 显存是否充足、模型资产是否可用。
-    smoke 模式下跳过全部 H100 检查。
 
     Raises:
         ExperimentRuntimeError: 任一检查不通过时抛出。
     """
-    if bool(config.get("_smoke", False)):
-        return
-
     try:
         import torch
         if torch.cuda.is_available():
@@ -135,31 +131,17 @@ def run_with_mode(
     exp_id: str,
     config: dict[str, Any],
     run_paper: Callable[[dict[str, Any]], dict[str, Any]],
-    run_smoke: Callable[[dict[str, Any]], dict[str, Any]],
 ) -> dict[str, Any]:
-    """按运行模式分派：smoke 直接走轻量验证路径；paper 走真实计算，资产不可用时才报错。
+    """运行真实 H100 计算路径；资产不可用时抛出 AssetsUnavailable。
 
-    预检查确保 H100 安全性后再执行高代价计算（smoke 跳过全部检查）。
+    预检查确保 H100 安全性后再执行高代价计算。
     """
-    from realeval.real_backend import run_paper_safe, AssetsUnavailable
+    from realeval.real_backend import AssetsUnavailable
 
     pre_run_validation(config, exp_id)
 
     try:
-        if bool(config.get("_smoke", False)):
-            # smoke 是轻量代码路径验证：不加载真实模型/资产，直接走 run_smoke。
-            return ensure_result_contract(exp_id, run_smoke(config))
-        paper_result = run_paper_safe(False, config, run_paper)
-        if paper_result is not None:
-            return ensure_result_contract(exp_id, paper_result)
-        # In paper mode, silently falling back to smoke would write sklearn
-        # placeholder values into paper tables without warning (alignment/contract
-        # only checks field existence, not computation source).
-        # Ref: code_review_20260803 §2.1, revision_worklist Part 0.
-        raise AssetsUnavailable(
-            f"{exp_id}: real assets unavailable in --paper mode. "
-            f"Smoke fallback blocked to prevent placeholder values in paper tables. "
-            f"Verify models_root() and H100 mount point, or run --smoke explicitly.")
+        return ensure_result_contract(exp_id, run_paper(config))
     except AssetsUnavailable:
         raise
     except Exception as exc:

@@ -1,4 +1,4 @@
-"""Tests for realeval package — smoke tests for all core modules."""
+"""Tests for realeval package — tests for all core modules."""
 from __future__ import annotations
 import pytest
 
@@ -295,20 +295,6 @@ class TestRealBackend:
         from realeval.real_backend import require_assets, AssetsUnavailable
         with pytest.raises(AssetsUnavailable):
             require_assets(False, "should raise")
-
-    def test_run_paper_safe_smoke(self):
-        from realeval.real_backend import run_paper_safe, AssetsUnavailable
-        def fail(_c):
-            raise AssetsUnavailable("unavailable")
-        result = run_paper_safe(True, {}, fail)
-        assert result is None
-
-    def test_run_paper_safe_no_smoke(self):
-        from realeval.real_backend import run_paper_safe, AssetsUnavailable
-        def fail(_c):
-            raise AssetsUnavailable("unavailable")
-        with pytest.raises(AssetsUnavailable):
-            run_paper_safe(False, {}, fail)
 
 
 class TestEnvReport:

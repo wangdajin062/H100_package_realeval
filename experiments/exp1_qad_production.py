@@ -1,4 +1,4 @@
-"""exp1: QAD Production Distillation — Real H100 training or small-model smoke verification."""
+"""exp1: QAD Production Distillation — Real H100 training."""
 from __future__ import annotations
 import logging
 
@@ -76,30 +76,4 @@ def run(config: dict) -> dict:
             "save_note": "seed-0 checkpoint saved (save_name='exp1_qad'); downstream loads this single weight" if n_seeds > 1 else None,
         }
 
-    def run_smoke(_: dict) -> dict:
-        logger.info("SMOKE: running small-model verification for exp1")
-        from sklearn.ensemble import GradientBoostingClassifier
-        from realeval.metrics import classification_metrics
-        from realeval.data import verification_features
-        from experiments.smoke import toy_kl_distill
-
-        X, y = verification_features(split.train_labels + split.test_labels)
-        ntr = len(split.train_labels)
-        clf = GradientBoostingClassifier(n_estimators=100, random_state=42).fit(X[:ntr], y[:ntr])
-        f1 = classification_metrics(y[ntr:], clf.predict(X[ntr:]))["f1"]
-
-        kl_result = toy_kl_distill(X, y, ntr)
-
-        return {
-            "computation": "smoke_sklearn",
-            "path": "small_model_verification",
-            "f1": f1,
-            "accuracy": f1,
-            "n_train": ntr,
-            "n_test": len(y) - ntr,
-            "is_synthetic": True,
-            "std": None,
-            **kl_result,
-        }
-
-    return run_with_mode("exp1", config, run_paper, run_smoke)
+    return run_with_mode("exp1", config, run_paper)

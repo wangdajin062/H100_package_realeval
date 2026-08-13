@@ -4,7 +4,6 @@ Delegates to the refactored ``runner/`` package, ``config/``, ``metrics/``,
 ``realeval/io/``, and ``cli/`` modules. This file exists solely to preserve the
 historical CLI entry point:
 
-    python -m experiments.runner --smoke
     python -m experiments.runner --paper --config config/h100.yaml
     python -m experiments.runner --exp 1,3,6
 """
@@ -140,11 +139,6 @@ def main() -> int:
     if _handle_standalone_checks(args):
         return 0
 
-    # Require explicit mode to avoid silent smoke fallback in paper context.
-    if not args.smoke and not args.paper:
-        logger.error("必须显式指定 --smoke（沙盒验证）或 --paper（真实 H100 运行）")
-        sys.exit(1)
-
     # --resume depends on existing results; archiving would delete them and break resume.
     no_archive = args.no_archive or args.resume
     if not no_archive:
@@ -156,9 +150,6 @@ def main() -> int:
             logger.warning("归档步骤失败（继续运行）：%s", exc)
 
     config = load_config(args.config)
-    if args.smoke:
-        config["_smoke"] = True
-        logger.info("SMOKE MODE: lightweight verification path")
     if args.paper:
         config["_paper"] = True
         logger.info("PAPER MODE: real Qwen + H100 backend")

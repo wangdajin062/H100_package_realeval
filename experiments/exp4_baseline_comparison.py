@@ -38,27 +38,4 @@ def run(config: dict) -> dict:
                 "dataset": "ChiFraud (load_chifraud_balanced); NOT TAF-28k. "
                            "Do not compare directly with Tab.3 TAF-28k numbers."}
 
-    def run_smoke(_: dict) -> dict:
-        logger.info("SMOKE: running small-model verification for exp4")
-        from sklearn.linear_model import LogisticRegression
-        from sklearn.ensemble import GradientBoostingClassifier
-        from sklearn.neural_network import MLPClassifier
-        from realeval.metrics import classification_metrics
-        from realeval.data import verification_features
-
-        X, y = verification_features(split.train_labels + split.test_labels)
-        ntr = len(split.train_labels)
-        Xtr, Xte = X[:ntr], X[ntr:]
-        baselines = {}
-        for bl_name, clf in [
-            ("logreg", LogisticRegression(max_iter=1000, random_state=42)),
-            ("xgb", GradientBoostingClassifier(n_estimators=50, random_state=42)),
-            ("mlp", MLPClassifier(hidden_layer_sizes=(64,), max_iter=500, random_state=42)),
-            ("qwen_base", LogisticRegression(max_iter=1000, random_state=42)),
-        ]:
-            clf.fit(Xtr, split.train_labels)
-            m = classification_metrics(split.test_labels, clf.predict(Xte))
-            baselines[bl_name] = {"f1": m["f1"], "accuracy": m["accuracy"]}
-        return {"computation": "smoke_sklearn", "classifiers": baselines}
-
-    return run_with_mode("exp4", config, run_paper, run_smoke)
+    return run_with_mode("exp4", config, run_paper)

@@ -12,7 +12,6 @@ def build_runner_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例：
-  python -m experiments.runner --smoke          # 快速验证（小模型路径）
   python -m experiments.runner --paper          # 论文级运行（真实 Qwen + H100）
   python -m experiments.runner --exp 1,3,6      # 指定实验
   python -m experiments.runner --no-archive     # 跳过运行前归档
@@ -22,8 +21,6 @@ def build_runner_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("experiments", nargs="?", default=None,
                         help="逗号分隔的实验名（如 exp1,exp4）或 'all'")
-    parser.add_argument("--smoke", action="store_true",
-                        help="快速验证（小模型路径）")
     parser.add_argument("--paper", action="store_true",
                         help="论文级运行（真实 Qwen + H100）")
     parser.add_argument("--exp", type=str, default=None,
@@ -54,8 +51,6 @@ def build_pipeline_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="一键式 H100 论文验证流水线")
     parser.add_argument("--paper", action="store_true",
                         help="论文级运行（真实 Qwen + H100）")
-    parser.add_argument("--smoke", action="store_true",
-                        help="沙盒验证（无 GPU/权重）")
     parser.add_argument("--no-archive", action="store_true",
                         help="跳过运行前的自动归档步骤")
     parser.add_argument("--config", type=str, default=None,

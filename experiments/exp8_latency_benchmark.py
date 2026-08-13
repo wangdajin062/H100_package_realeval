@@ -49,8 +49,8 @@ def run(config: dict) -> dict:
             dev = next(model.parameters()).device
 
             # Attach LoRA adapter when available (consistent with normal inference path).
-            # Convert adapter-not-found RuntimeError to AssetsUnavailable so smoke
-            # fallback triggers cleanly when weights are absent on the local machine.
+            # Convert adapter-not-found RuntimeError to AssetsUnavailable so the
+            # missing-asset signal propagates cleanly when weights are absent.
             from realeval.student_loader import attach_adapter
             from realeval.real_backend import AssetsUnavailable
             try:
@@ -164,55 +164,4 @@ def run(config: dict) -> dict:
             "all_batch_sizes": batch_benchmark,  # alias for paper_pipeline compatibility
         }
 
-    def run_smoke(_: dict) -> dict:
-        logger.info("SMOKE: running small-model verification for exp8")
-        import time
-        import torch
-
-        torch.manual_seed(0)
-        x = torch.randn(64, 128)
-        # Smoke: use separate passes for bf16/fp16 (both half()) and int8/int4 (uniform quant).
-        # CPU doesn't distinguish BF16 from FP16 in a toy MLP, but keeping separate passes
-        # preserves the same key structure as the paper path.
-        latency_detail = {}
-        for quant, bits in (("bf16", 16), ("fp16", 16), ("int8", 8), ("int4", 4)):
-            torch.manual_seed(0)
-            m = torch.nn.Sequential(torch.nn.Linear(128, 256), torch.nn.ReLU(), torch.nn.Linear(256, 2))
-            if bits >= 16:
-                m = m.half()
-            xi = x.half() if bits >= 16 else x.clone()
-            if bits < 16:
-                levels = 2 ** bits
-                xi = torch.round(xi * levels) / levels
-            with torch.no_grad():
-                for _ in range(3):
-                    m(xi)
-                ts = []
-                for _ in range(20):
-                    t0 = time.perf_counter()
-                    m(xi)
-                    ts.append((time.perf_counter() - t0) * 1000)
-            latency_detail[quant] = {
-                "p50_ms": round(quantile_ms(ts, 50), 4),
-                "p90_ms": round(quantile_ms(ts, 90), 4),
-                "p99_ms": round(quantile_ms(ts, 99), 4),
-            }
-
-        latencies = {k: v["p50_ms"] for k, v in latency_detail.items()}
-        batch_benchmark = {
-            str(bs): {
-                "latency_p50_ms": round(latencies["int4"] * max(1, bs) / 8, 4),
-                "throughput_sps": round(bs / (latencies["int4"] * max(1, bs) / 8 / 1000), 1),
-                "peak_mem_mb": None,
-            }
-            for bs in (1, 8, 32, 64)
-        }
-        return {
-            "computation": "smoke_cpu",
-            "latencies": latencies,
-            "latency_detail": latency_detail,
-            "batch_benchmark": batch_benchmark,
-            "all_batch_sizes": batch_benchmark,
-        }
-
-    return run_with_mode("exp8", config, run_paper, run_smoke)
+    return run_with_mode("exp8", config, run_paper)

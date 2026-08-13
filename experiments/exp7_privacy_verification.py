@@ -63,29 +63,4 @@ def run(config: dict) -> dict:
                 "coverage": coverage}
 
 
-    def run_smoke(_: dict) -> dict:
-        logger.info("SMOKE: running small-model verification for exp7")
-        from realeval import privacy
-        import numpy as np
-
-        pii_report = privacy.scan_texts(texts)
-        rng = np.random.RandomState(42)
-        n_sp, per = 50, 5
-        centres = rng.randn(n_sp, 128) * 2.0
-        emb = np.stack([centres[i // per] + rng.randn(128) * 0.5 for i in range(n_sp * per)]).astype(np.float32)
-        spk_labels = [f"spk_{i // per}" for i in range(n_sp * per)]
-        asv = privacy.asv_eer_open_set(emb, spk_labels, n_enroll_utt=3, seed=42)
-        sid = privacy.speaker_identification(emb, spk_labels, seed=42)
-        glo = privacy.glo_reconstruction_attack(emb, rng.randn(n_sp * per, 64), steps=50, seed=42)
-        return {
-            "computation": "smoke_privacy",
-            "embedding_source": "synthetic_speaker_structured",
-            "pii_report": pii_report,
-            "asv_eer_pct": asv["asv_eer_pct"],
-            "min_dcf": asv.get("min_dcf"),
-            "speaker_id_accuracy": sid["accuracy"],
-            "glo_reconstruction_corr": glo["mean_reconstruction_corr"],
-            "n_speakers": sid["n_speakers"],
-        }
-
-    return run_with_mode("exp7", config, run_paper, run_smoke)
+    return run_with_mode("exp7", config, run_paper)

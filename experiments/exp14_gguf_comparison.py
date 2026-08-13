@@ -75,34 +75,4 @@ def run(config: dict) -> dict:
                 "cite_only": {"SAFE_QAQ_7B": {"source": "cited", "note": "reported by source paper; not run here"}}}
 
 
-    def run_smoke(_: dict) -> dict:
-        logger.info("SMOKE: running small-model verification for exp14 (GGUF path unavailable in sandbox)")
-        import numpy as np
-        from sklearn.ensemble import GradientBoostingClassifier
-        from realeval.metrics import classification_metrics
-        from realeval.data import verification_features
-        from experiments.smoke import quantize_proxy
-
-        X, y = verification_features(labels)
-        ntr = split
-        clf = GradientBoostingClassifier(n_estimators=100, random_state=42).fit(X[:ntr], y[:ntr])
-
-        bf16_f1 = classification_metrics(y[ntr:], clf.predict(X[ntr:]))["f1"]
-        q4_f1 = classification_metrics(y[ntr:], clf.predict(quantize_proxy(X[ntr:], 4)))["f1"]
-        return {
-            "computation": "smoke_sklearn",
-            "models": {
-                "bf16_0.5b_transformers": {"f1": bf16_f1, "runtime": "transformers", "source": "ours"},
-                "q4km_0.5b_llama_cpp": {
-                    "f1": q4_f1,
-                    "std": None,
-                    "runtime": "llama_cpp (proxy)",
-                    "source": "ours",
-                    "note": "sandbox proxy: real 4-bit feature quantisation, not the real GGUF",
-                },
-            },
-            "cite_only": {"SAFE_QAQ_7B": {"source": "cited", "note": "reported by source paper; not run here"}},
-            "is_synthetic": True,
-        }
-
-    return run_with_mode("exp14", config, run_paper, run_smoke)
+    return run_with_mode("exp14", config, run_paper)

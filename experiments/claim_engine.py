@@ -49,7 +49,6 @@ def _run_experiment_seeds(short, base_config, seeds):
     for s in range(seeds):
         cfg = copy.deepcopy(base_config)
         cfg["seed"] = 42 + s
-        cfg["_smoke"] = base_config.get("_smoke", True)
         results.append(mod.run(cfg))
     return results
 
@@ -250,13 +249,11 @@ def _resolve_dotted(dotted: str, ns: dict):
 def main():
     ap = argparse.ArgumentParser(description="Claim-driven research workflow engine")
     ap.add_argument("--claim", type=str, default=None, help="Run one claim id (e.g. CLAIM-01)")
-    ap.add_argument("--smoke", action="store_true")
     ap.add_argument("--paper", action="store_true")
     args = ap.parse_args()
 
     from realeval.io import load_config
     base = load_config()
-    base["_smoke"] = args.smoke or not args.paper
 
     OUT.mkdir(parents=True, exist_ok=True)
     summary = []

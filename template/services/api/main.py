@@ -24,7 +24,6 @@ REPO = Path("/workspace/repo")
 
 class ExperimentRequest(BaseModel):
     experiments: str = "all"          # e.g. "1,3,6" or "all"
-    mode: str = "paper"               # paper | smoke
     distributed: bool = False
     benchmark: bool = True
     resume: bool = True
@@ -125,7 +124,7 @@ async def run_experiments(req: ExperimentRequest):
     args = [
         "python", "-m", "experiments.runner",
         "--exp", req.experiments,
-        f"--{req.mode}",
+        "--paper",
     ]
     if req.benchmark:
         args.append("--benchmark")

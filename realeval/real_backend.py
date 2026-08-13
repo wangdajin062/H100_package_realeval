@@ -28,17 +28,6 @@ def require_assets(cond, msg):
 _require = require_assets
 
 
-def run_paper_safe(smoke, config, paper_fn):
-    """Run a paper-path function safely: if it raises AssetsUnavailable and smoke=True, return None
-    (caller falls through to the smoke path); if not smoke, re-raise. Functional form of paper_ready."""
-    try:
-        return paper_fn(config)
-    except AssetsUnavailable:
-        if not smoke:
-            raise
-        return None
-
-
 # Shared classification prompt template (used by both training and inference)
 _CLS_PFX = "请判断以下消息是否为欺诈信息（fraud）或正常信息（normal）。"
 _CLS_SFX = chr(10) + "仅输出一个词：fraud 或 normal。" + chr(10) + chr(10) + "消息：{text}" + chr(10) + "分类："

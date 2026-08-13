@@ -234,10 +234,6 @@ def _print_summary(all_results: dict[str, Any], bench_summary: dict[str, Any] | 
 def main() -> int:
     ap = build_pipeline_parser()
     args = ap.parse_args()
-    if not args.smoke and not args.paper:
-        logger.error("必须显式指定 --smoke（沙盒验证）或 --paper（真实 H100 运行）")
-        return 1
-    smoke = args.smoke
 
     if not args.no_archive:
         try:
@@ -248,7 +244,6 @@ def main() -> int:
             logger.warning("归档步骤失败（继续运行）：%s", _ae)
 
     config = load_config(args.config, validate=False)
-    config["_smoke"] = smoke
     if args.paper:
         config["_paper"] = True
 

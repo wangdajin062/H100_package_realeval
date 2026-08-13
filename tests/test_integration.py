@@ -1,4 +1,4 @@
-"""test_integration.py — End-to-end pipeline smoke tests.
+"""test_integration.py — End-to-end pipeline tests.
 
 Verifies the full compute→metrics→audit chain:
   1. Synthetic data generation
@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 
-def test_full_pipeline_smoke(tmp_path):
+def test_full_pipeline(tmp_path):
     """End-to-end: synthetic data → sklearn classifier → metrics → save → read back."""
     from realeval.data import load_synthetic
     from realeval.metrics import classification_metrics
@@ -63,7 +63,7 @@ def test_full_pipeline_smoke(tmp_path):
         io_mod.RESULTS = tmp_path
         path = save_results("integration_test", {
             "experiment": "integration_test",
-            "computation": "smoke_sklearn",
+            "computation": "test_synthetic",
             "metrics": m,
             "statistics": s,
             "comparison": {"mean_diff": cmp["mean_diff"]},
@@ -72,7 +72,7 @@ def test_full_pipeline_smoke(tmp_path):
 
         data = json.loads(path.read_text(encoding="utf-8"))
         assert data["experiment"] == "integration_test"
-        assert data["computation"] == "smoke_sklearn"
+        assert data["computation"] == "test_synthetic"
         assert "metrics" in data
     finally:
         io_mod.RESULTS = saved
