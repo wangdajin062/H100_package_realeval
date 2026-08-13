@@ -1,7 +1,6 @@
 # 一致性审计报告：论文声称值 vs 实验真实产出
 
-> 依据：论文源文件 `v25.tex`（1087 行）、`docs/figure_scripts/paper_data.py`（数据桥接）、
-> `reports/RUNLOG_20260802.md`、`reports/RUNLOG_20260803.md`（RunPod H100 真实重跑）。
+> 依据：论文源文件 `v25.tex`（1087 行）、`docs/figure_scripts/paper_data.py`（数据桥接）。
 > 审计日期：2026-08-13。
 
 ---
@@ -20,10 +19,10 @@ fallback 值是**真实实验产出**（未达论文声称值），不是要「�
 |---|---|---|---|
 | ① 论文声称值 | `v25.tex` | F1 0.91–0.93，KL 0.005–0.311 | 待复现的**目标** |
 | ② 图表脚本坐标轴/docstring | `docs/figure_scripts/fig*.py` | 与①一致（0.91–0.93） | 按①写死，**禁改** |
-| ③ 实验真实产出 | `paper_data.py` fallback + RUNLOG | F1 0.56–0.80（调优后核心组件），drift 0–52.45% | **真实跑出来的** |
+| ③ 实验真实产出 | `paper_data.py` fallback | F1 0.56–0.80（调优后核心组件），drift 0–52.45% | **真实跑出来的** |
 
 第③层与①/②不兼容，意味着**复现尚未成功**。这不是把③「改」成①就能解决的——那样是伪造数据；
-正确路径是「先改论文结论再改数字」（`RUNLOG_20260802` §3 原则），或等数据修复链重跑出真实数字。
+正确路径是「先改论文结论再改数字」（见 §5 核心原则），或等数据修复链重跑出真实数字。
 
 ---
 
@@ -54,7 +53,7 @@ fallback 值是**真实实验产出**（未达论文声称值），不是要「�
 | 3-term | 0.879 | 0.124 | 0.5577 | 0.34629 | ❌ |
 | KL + task | 0.908 | 0.041 | 0.5577 | 0.34629 | ❌ |
 
-**论文核心卖点「Pure KL 最优」被真实实验否定**。根因（`RUNLOG_20260803`）：学生=教师同架构
+**论文核心卖点「Pure KL 最优」被真实实验否定**。根因：学生=教师同架构
 （Qwen2.5-0.5B），`mse_loss≈0` → `kl_mse≈kl`、`mse≈ce`，loss 区分度受限。
 
 ### 2.3 CoT 消融（论文 `tab:cot-ablation-en`）— **结论反转**
@@ -64,7 +63,7 @@ fallback 值是**真实实验产出**（未达论文声称值），不是要「�
 | With CoT | 0.923 | **0.3131** | 0.2608 |
 | Without CoT | 0.905 | **0.8047** | 0.0165 |
 
-CoT 重做后（`RUNLOG_20260803_summary`）：双分支都用微调模型+头，仅 CoT 不同。
+CoT 重做后：双分支都用微调模型+头，仅 CoT 不同。
 结论：**CoT 推理对微调头分类有害**（0.80→0.31），不再是 base-generate 的 0.035 假象。
 
 ### 2.4 OV-Freeze 消融（论文 Figure 7，对应 Figure 6a/6b）— **drift 复现 ✅ / F1 未复现**
@@ -147,7 +146,7 @@ WER/PESQ/STOI/MOS/Speaker-ID/ASV-EER **全部为论文声称值，无实验产�
 ### 4.2 修复 2：drift 过时值
 
 exp3 的 drift fallback 此前对 `quarter/half/full` 三档错误地恒填 61.479（`no_reg` 的旧值）。
-按 `RUNLOG_20260803` 实测递减序列更新：
+按实测递减序列更新：
 
 | 占位符 | 旧 fallback | 新 fallback |
 |---|---|---|
@@ -160,7 +159,7 @@ exp3 的 drift fallback 此前对 `quarter/half/full` 三档错误地恒填 61.4
 
 ### 4.3 同步：最新实验产出 → fallback（2026-08-13，调优后）
 
-按 `outputs/results_20260803.md` + `reports/RUNLOG_20260803_summary.md`（F1 调优 + OVF 修复 +
+按调优后实测（F1 调优 + OVF 修复 +
 CoT 重做后）的最新真实 F1/KL，更新 `paper_data.py` 中真实数据驱动图表（fig3/5/6/8）的 fallback：
 
 | 占位符 | 旧 fallback | 新 fallback（调优后实测） |
@@ -208,7 +207,7 @@ fallback** 的「尚无真实实验产出」字段，统一改为 `fallback=None
 
 同步两处真实值/估算修正：
 
-- `PH_EXP1_ERR` 0.007 → **0.0133**（exp1 真实 std，5 seed，来自 `results_20260803.md`）。
+- `PH_EXP1_ERR` 0.007 → **0.0133**（exp1 真实 std，5 seed，来自调优后实测）。
 - `PH_EXP3_OVF_FULL_ERR`/`PH_EXP11_INT4_ERR`/`PH_EXP14_Q4KM_ERR` **保留**论文估算
   0.006 / 0.014 / 0.007（无实测 std；误差棒非核心结论，改 None 会破坏 fig3 误差棒渲染；注释已
   标注「非实测，待重跑回填」）。
@@ -229,7 +228,7 @@ fallback** 的「尚无真实实验产出」字段，统一改为 `fallback=None
 
 ## 5. 待重跑 / 待改写清单
 
-优先级沿用 `RUNLOG_20260802` §3：
+优先级如下：
 
 | 优先级 | 事项 | 说明 |
 |---|---|---|
@@ -240,7 +239,7 @@ fallback** 的「尚无真实实验产出」字段，统一改为 `fallback=None
 | 🔴 P0 | Fig.4/5/6/7 数据来源 | 训练收敛/SNR/教师规模/OVF 激活窗需真实数据 |
 | 🟡 P2 | BF16 全管线基线 | 真实无此实验，需重跑 |
 | 🟡 P2 | 数据修复链 | `transcribe_taf28k.py` → `build_taf28k_npz.py` → 重跑 exp5/10/13（见 `REPRODUCIBILITY.md` §10） |
-| 🟡 P2 | 手机端 GGUF 回测 | 领域 LoRA 合并后 F1 是否 > 官方 GGUF 0.7025（见 `RUNLOG_20260803`） |
+| 🟡 P2 | 手机端 GGUF 回测 | 领域 LoRA 合并后 F1 是否 > 官方 GGUF 0.7025 |
 
 > 核心原则（重申）：**先改论文结论，再改数字**。在数据修复链走完、真实数字稳定前，不要用
 > 论文声称值覆盖 `paper_data.py` 的 fallback——那会把「复现失败」伪装成「复现成功」。
@@ -249,7 +248,7 @@ fallback** 的「尚无真实实验产出」字段，统一改为 `fallback=None
 
 ## 6. 字段契约审计（2026-08-13）：实验产出字段 vs 图表消费字段
 
-> 系统化审计 14 个实验脚本（`experiments/exp*.py` 的 `run_paper`/`run_smoke` 两条路径）实际产出
+> 系统化审计 14 个实验脚本（`experiments/exp*.py` 的 `run_paper` 路径）实际产出
 > 的字段路径，是否与 `paper_data.py` 消费的 65 个字段路径一致。方法：静态追踪脚本代码（非读结果
 > JSON——当前 `outputs/results/` 仅存 failed 的 exp1）。
 
@@ -266,11 +265,11 @@ latency 结构、exp10 单/双 F1、exp11 scheme key 名）经代码追踪逐一
 
 | 实验 | paper_data 读取路径 | 实验实际产出 | 判定 |
 |---|---|---|---|
-| exp1 | `f1`/`std`/`kl_plateau`/`kl_converged`/`ovf_activation_step`/`total_steps`/`snr_min`/`snr_max`/`trajectory` | 同名顶层字段，paper/smoke 均产出 | ✅ |
+| exp1 | `f1`/`std`/`kl_plateau`/`kl_converged`/`ovf_activation_step`/`total_steps`/`snr_min`/`snr_max`/`trajectory` | 同名顶层字段，paper 路径产出 | ✅ |
 | exp2 | `variants.{kl_only,mse_only,ce_only,kl_mse_combined,kl_task}.{f1,kl_final,std}` | 5 个 key 全产出（`kl_task` 为 `kl_only` 深拷贝别名） | ✅ |
 | exp3 | `conditions.{4}.{f1,variance_drift_pct}` + `layer_selection.{early,mid,late}.{f1,variance_drift_pct}` + `rho_sweep.{6}.{f1,ppl}` | 同名；`layer_selection` 多出 `all` 冗余 key（未读取，非缺失） | ✅ |
-| exp5 | `advfraud.{full_pool,curated}.f1`/`bf16_matched_advfraud`/`ldp_tradeoff.eps_1.5.f1` | 同名，两路径均产出 | ✅ |
-| exp6 | `diagnostic_B.h100_measured.{generic,domain}` + `paper_reference.{4}` | `generic` 两路径有；`domain` 仅 smoke（有意设计，见 §6.4） | ⚠️ |
+| exp5 | `advfraud.{full_pool,curated}.f1`/`bf16_matched_advfraud`/`ldp_tradeoff.eps_1.5.f1` | 同名，paper 路径产出 | ✅ |
+| exp6 | `diagnostic_B.h100_measured.{generic,domain}` + `paper_reference.{4}` | `generic` 有；`domain` 不产出（未实测，见 §6.4） | ⚠️ |
 | exp8 | `latency_detail.{int4,fp16,bf16}.{p50_ms,p99_ms}` | 同名嵌套；flat `latencies.{scheme}` 仅 p50 供内部用 | ✅ |
 | exp10 | `scales.{teacher,teacher_1.5b,teacher_3b,teacher_7b}.{f1_fixed,f1_conv}` | 同名双字段真实存在 | ✅ |
 | exp11 | `schemes.int4.{f1,std}` | 同名（schemes 下 5 键：`bf16/fp16/int8/int4/nf4`） | ✅ |
@@ -295,7 +294,7 @@ latency 结构、exp10 单/双 F1、exp11 scheme key 名）经代码追踪逐一
 ### 6.4 边界 / 隐患清单（字段契约层面，非数值）
 
 1. **exp1 trajectory 缺 `ce` 键**：paper 路径（`real_backend.real_qad_distill_train`）每项为
-   `{step,kl,drift_pct,snr_db}`；`ce` 键只在 smoke（`toy_kl_distill`）存在。`paper_data` 读
+   `{step,kl,drift_pct,snr_db}`。`paper_data` 读
    trajectory 只用 `kl`（plateau/converged fallback），当前不触发，但若下游依赖 paper trajectory 的
    `ce` 会取不到。
 2. **exp2 `kl_task` 是 `kl_only` 深拷贝别名**：fig5a 第 5 行「KL+task」展示的实为 KL-only 重复数据，
@@ -305,11 +304,9 @@ latency 结构、exp10 单/双 F1、exp11 scheme key 名）经代码追踪逐一
 4. **exp14 `GGUFUnavailable` 异常分支缺 `std` 且 `f1=None`**：静默落到 fallback `0.7025`/`0.007`
    —— 正是 §4.3 记录的「exp14 异常回退」边界。
 5. **exp10 异常/缺配分支**：某 teacher 抛异常时变 `{f1_fixed:None,f1_conv:None,error}`；paper 路径
-   config 未填某 `teacher_*` 时 `continue` 跳过 → 落到 fallback。smoke 路径固定产出全部 4 key。
-6. **exp6 paper 路径缺 `h100_measured.domain`**：有意设计（domain-tuned alpha 未实测），
+   config 未填某 `teacher_*` 时 `continue` 跳过 → 落到 fallback。
+6. **exp6 缺 `h100_measured.domain`**：有意设计（domain-tuned alpha 未实测），
    `paper_data` 正确回退到 `paper_reference.alpha_tuned=0.86`（cited-only）。
-7. **exp5 `paper_reference` 仅 smoke 路径有**：backward-compat fallback；paper 路径
-   `ldp_tradeoff.eps_1.5.f1` 直接命中，不会走到它。
 
 ### 6.5 渲染层坐标轴鸿沟（fig 脚本写死论文值，禁改）
 
