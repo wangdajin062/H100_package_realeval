@@ -7,15 +7,15 @@
 ## 目录
 
 1. [环境配置](#1-环境配置)
-3. [论文级复现（paper）](#3-论文级复现paper)
-4. [生成论文图表](#4-生成论文图表)
-5. [归档与清理工作流](#5-归档与清理工作流)
-6. [CLI 命令参考](#6-cli-命令参考)
-7. [配置参数字典](#7-配置参数字典)
-8. [字段对齐说明](#8-字段对齐说明)
-9. [手机端 Snapdragon 8 Gen 3 实测流程](#9-手机端-snapdragon-8-gen-3-实测流程)
-10. [常见问题](#10-常见问题)
-11. [TAF-28k 数据修复链（音频转录 → 特征 → 重跑）](#11-taf-28k-数据修复链音频转录--特征--重跑)
+2. [论文级复现（paper）](#2-论文级复现paper)
+3. [生成论文图表](#3-生成论文图表)
+4. [归档与清理工作流](#4-归档与清理工作流)
+5. [CLI 命令参考](#5-cli-命令参考)
+6. [配置参数字典](#6-配置参数字典)
+7. [字段对齐说明](#7-字段对齐说明)
+8. [手机端 Snapdragon 8 Gen 3 实测流程](#8-手机端-snapdragon-8-gen-3-实测流程)
+9. [常见问题](#9-常见问题)
+10. [TAF-28k 数据修复链（音频转录 → 特征 → 重跑）](#10-taf-28k-数据修复链音频转录--特征--重跑)
 
 ---
 
@@ -56,7 +56,7 @@ config/
 
 ---
 
-## 3. 论文级复现（paper）
+## 2. 论文级复现（paper）
 
 在 H100 SXM5 上运行完整论文流水线：
 
@@ -109,7 +109,7 @@ outputs/
 
 ---
 
-## 4. 生成论文图表
+## 3. 生成论文图表
 
 实验完成后，图像脚本从 `outputs/results/` 自动读取结果：
 
@@ -148,7 +148,7 @@ python fig8_revision_ablations.py
 
 ---
 
-## 5. 归档与清理工作流
+## 4. 归档与清理工作流
 
 每次重跑前，流水线会自动将旧实验结果以带时间戳的 Markdown 保存，然后清空输出目录。
 
@@ -178,7 +178,7 @@ python -m experiments.runner --paper --no-archive
 
 ---
 
-## 6. CLI 命令参考
+## 5. CLI 命令参考
 
 ### `python -m experiments.runner`
 
@@ -214,7 +214,7 @@ REALEVAL_TRAINING__EPOCHS=3 python -m experiments.runner --paper --exp 1
 
 ---
 
-## 7. 配置参数字典
+## 6. 配置参数字典
 
 完整参数列表见 `config/__init__.py` 的 `CONFIG_SCHEMA` 字典。核心参数如下：
 
@@ -237,7 +237,7 @@ REALEVAL_TRAINING__EPOCHS=3 python -m experiments.runner --paper --exp 1
 
 ---
 
-## 8. 字段对齐说明
+## 7. 字段对齐说明
 
 详见 `docs/experiment_result_contract.md`。
 
@@ -248,7 +248,7 @@ REALEVAL_TRAINING__EPOCHS=3 python -m experiments.runner --paper --exp 1
 
 ---
 
-## 9. 手机端 Snapdragon 8 Gen 3 实测流程
+## 8. 手机端 Snapdragon 8 Gen 3 实测流程
 
 本项目的边缘部署目标是生成 **0.5B Q4_K_M GGUF**，用于 Snapdragon 8 Gen 3 或其他 `llama.cpp` 兼容移动平台。
 
@@ -293,7 +293,7 @@ REALEVAL_TRAINING__EPOCHS=3 python -m experiments.runner --paper --exp 1
 
 ---
 
-## 10. 常见问题
+## 9. 常见问题
 
 **Q：如何确认图像脚本使用的是最新实验结果？**  
 A：`paper_data.py` 加载 `outputs/results/exp*_*.json`（最新时间戳优先）和 `all_experiments.json`。运行 `python docs/figure_scripts/paper_data.py` 可查看当前加载状态。
