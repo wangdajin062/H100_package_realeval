@@ -15,11 +15,13 @@ def test_clear_outputs_removes_result_jsons(tmp_path, monkeypatch):
     # Redirect RESULTS to a temp dir for isolation
     monkeypatch.setattr("realeval.io.archive.RESULTS", tmp_path)
     monkeypatch.setattr("realeval.io.archive.PREDICTIONS", tmp_path / "predictions")
-    # _CLEAR_GLOBS is initialized at import time, so update it to point to tmp_path.
+    # _CLEAR_GLOBS/_CLEAR_DIRS are initialized at import time, so update them to
+    # point to tmp_path — otherwise the real outputs/ tree gets deleted.
     monkeypatch.setattr(
         "realeval.io.archive._CLEAR_GLOBS",
         [(tmp_path, "exp*_*.json", False), (tmp_path, "all_experiments.json", False)],
     )
+    monkeypatch.setattr("realeval.io.archive._CLEAR_DIRS", [])
     (tmp_path / "predictions").mkdir(parents=True, exist_ok=True)
 
     (tmp_path / "exp1_20260805_120000.json").write_text("{}")
@@ -38,6 +40,14 @@ def test_archive_if_needed_force(tmp_path, monkeypatch):
     monkeypatch.setattr("realeval.io.archive.METRICS_DIR", tmp_path / "metrics")
     monkeypatch.setattr("realeval.io.archive.TABLES_DIR", tmp_path / "tables")
     monkeypatch.setattr("realeval.io.archive.ARCHIVE", tmp_path / "archive")
+    # CRITICAL: archive_if_needed() ends with clear_outputs(), which reads the
+    # import-time-built _CLEAR_GLOBS/_CLEAR_DIRS — not the patched scalars above.
+    # Without these two patches the test DELETES the real outputs/ tree.
+    monkeypatch.setattr(
+        "realeval.io.archive._CLEAR_GLOBS",
+        [(tmp_path, "exp*_*.json", False), (tmp_path, "all_experiments.json", False)],
+    )
+    monkeypatch.setattr("realeval.io.archive._CLEAR_DIRS", [])
 
     (tmp_path / "predictions").mkdir(parents=True, exist_ok=True)
 

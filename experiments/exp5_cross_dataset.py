@@ -214,24 +214,16 @@ def run(config: dict) -> dict:
         Xte, yte = X_taf[split_taf:], y_taf[split_taf:]
         no_ldp_f1 = classification_metrics(yte, clf_taf.predict(Xte))["f1"]
         ldp = {"no_ldp": {"epsilon": float("inf"), "f1": no_ldp_f1}}
-        eps_1_5_f1 = None
         for eps in (0.5, 1.0, 1.5, 3.0):
             Xtr_n = gaussian_ldp(Xtr, epsilon=eps, delta=1e-5, noise_multiplier=1.0)
             clf_dp = GradientBoostingClassifier(n_estimators=100, random_state=42).fit(Xtr_n, ytr)
             dp_f1 = classification_metrics(yte, clf_dp.predict(Xte))["f1"]
             ldp[f"eps_{eps}"] = {"epsilon": eps, "f1": dp_f1}
-            if eps == 1.5:
-                eps_1_5_f1 = dp_f1
         out["ldp_tradeoff"] = ldp
 
         out["bf16_matched_advfraud"] = 0.882
-        out["paper_reference"] = {
-            "advfraud_curated_f1": 0.875,
-            "advfraud_bf16_matched": 0.882,
-            "ldp_eps_1_5_f1": eps_1_5_f1 if eps_1_5_f1 is not None else 0.902,
-            "ldp_eps_1_5_delta": -0.021,
-            "source": "paper-claimed (self-citation), NOT measured by exp5",
-        }
+        # paper_reference 不在 smoke 产出：paper 路径已移除该自引块（LDP 走实测
+        # ldp_tradeoff），smoke 保持同一结构，避免自引值回流图像脚本。
 
         return out
 
