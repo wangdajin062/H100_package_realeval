@@ -1,7 +1,7 @@
 """realeval/real_backend.py — Real Qwen Computation Backend (H100 Path)
 
 Produces paper-grade real numbers with real Qwen weights + GPU. Each function checks asset availability first,
-raises AssetsUnavailable when unavailable, caught by experiment layer to fall back to small model verification path.
+raises AssetsUnavailable when unavailable, surfaced by the experiment layer as a clear error.
 
 Real computation:
   - real_teacher_student_logits: real teacher(BF16)/student(quantized) forward on same batch, real KL

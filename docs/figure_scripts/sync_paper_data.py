@@ -173,8 +173,6 @@ def compute_updates(results: dict[str, dict]) -> dict[str, object]:
     hm = diag.get("h100_measured", {})
     if hm.get("generic") is not None and _nonzero(hm["generic"]):
         updates["SPEC_ALPHA_GENERIC"] = _r(hm["generic"])
-    if hm.get("domain") is not None and _nonzero(hm["domain"]):
-        updates["SPEC_ALPHA_TUNED"] = _r(hm["domain"])
 
     # ── exp8 → latencies ─────────────────────────────────────────────────
     exp8 = results.get("exp8", {})

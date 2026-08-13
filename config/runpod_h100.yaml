@@ -25,6 +25,7 @@ reproducibility:
   exp3_seeds: 5               # 路径 B：exp3 OV-Freeze 各条件多 seed
   exp11_seeds: 5              # 路径 B：exp11 各量化方案多 seed
   exp14_seeds: 5              # 路径 B：exp14 各运行时多 seed
+  exp10_seeds: 5              # 路径 B：exp10 教师规模多 seed
 data:
   source: taf28k             # Force real; errors out if missing
   root_hint: /workspace/data # RunPod persistent volume

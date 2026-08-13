@@ -6,18 +6,16 @@ from __future__ import annotations
 
 import json
 import logging
-from pathlib import Path
 from typing import Any
 
 from realeval.io.archive import archive_if_needed
+from realeval.io.paths import RESULTS as RESULTS_DIR
 from realeval.io.serialization import save_all_results
 from metrics.contract import check_alignment, print_alignment_report
 from runner.experiment_runner import run_experiment
 from runner.registry import EXPERIMENTS, SHORT_TO_FULL
 
 logger = logging.getLogger("runner.orchestrator")
-
-RESULTS_DIR = Path(__file__).resolve().parent.parent / "outputs" / "results"
 
 
 def _load_existing(short: str) -> dict[str, Any] | None:

@@ -12,11 +12,9 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parent.parent
-RESULTS_DIR = ROOT / "outputs" / "results"
+from realeval.io.paths import RESULTS as RESULTS_DIR
 
 _NOT_FOUND = object()
 

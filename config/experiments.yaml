@@ -36,11 +36,13 @@ training:
   warmup_steps: 100            # linear LR warmup steps before cosine decay
   focal_gamma: 0.0              # focal loss gamma (0=standard CE; >0 e.g. 2.0 focuses on hard positives)
   threshold_grid_steps: 19      # grid resolution for _best_f1_threshold (19=0.05 bins; 91=0.01 bins)
+  dropout: 0.1                  # classification-head dropout
 
 distillation:
   temperature: 2.0
   alpha_ce: 0.5
   alpha_kl: 0.5
+  task_weight: 1e-3             # classification-head loss weight (head LR coefficient)
   max_batch: 64
   max_seq_length: 256
   freeze_frac_default: 1.0
@@ -60,6 +62,12 @@ reproducibility:
   benchmark_warmup: 10
   benchmark_repeat: 100
   benchmark_batch_sizes: [1, 8, 32, 64]
+  exp1_seeds: 5                # exp1 QAD 蒸馏多 seed
+  exp2_seeds: 5                # exp2 损失消融多 seed
+  exp3_seeds: 5                # exp3 OV-Freeze 各条件多 seed
+  exp10_seeds: 5               # exp10 教师规模多 seed
+  exp11_seeds: 5               # exp11 各量化方案多 seed
+  exp14_seeds: 5               # exp14 各运行时多 seed
 
 # ── Privacy evaluation ──
 privacy:
