@@ -51,7 +51,7 @@ def diagnostic_B(config: dict, texts: list[str], *, gamma=5, n_samples=20) -> di
 
     # Compute alpha from token counts (paper method)
     # Acceptance is a stochastic rule, so the draw needs a fixed source.
-    _rng = torch.Generator(device="cpu").manual_seed(int(config.get("seed", 42)))
+    _rng = torch.Generator(device="cpu").manual_seed(int(config.get("reproducibility", {}).get("seed", 42)))
     accepted, proposed = 0, 0
     for text in texts[:n_samples]:
         ids = tok(text, return_tensors="pt").input_ids.to(dev)

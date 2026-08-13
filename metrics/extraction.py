@@ -93,8 +93,6 @@ def extract_headline(short: str, result: dict[str, Any]) -> dict[str, Any]:
         out = {}
         if isinstance(hm, dict) and hm.get("generic") is not None:
             out["alpha_generic"] = hm["generic"]
-        if isinstance(hm, dict) and hm.get("domain") is not None:
-            out["alpha_domain"] = hm["domain"]
         if isinstance(ref, dict) and ref.get("alpha_generic") is not None:
             out["ref_alpha_generic"] = ref["alpha_generic"]
         if isinstance(ref, dict) and ref.get("alpha_tuned") is not None:

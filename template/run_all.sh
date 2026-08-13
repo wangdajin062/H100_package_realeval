@@ -3,7 +3,6 @@
 # ===========================================================================
 # Usage:
 #   bash run_all.sh                    # Full paper pipeline (all experiments)
-#   bash run_all.sh --smoke            # Smoke test (sandbox verification)
 #   bash run_all.sh --distributed      # Multi-GPU via torchrun + NCCL
 #   bash run_all.sh --setup            # Environment setup only (no experiments)
 #   bash run_all.sh --notebook         # Jupyter Lab only
@@ -23,7 +22,6 @@ SKIP_MODELS=0
 
 for arg in "$@"; do
     case "$arg" in
-        --smoke)        MODE="smoke" ;;
         --distributed)  DISTRIBUTED=1 ;;
         --setup)        SETUP_ONLY=1 ;;
         --notebook)     NOTEBOOK_ONLY=1 ;;
@@ -32,7 +30,6 @@ for arg in "$@"; do
             echo "Usage: bash run_all.sh [OPTIONS]"
             echo ""
             echo "Options:"
-            echo "  --smoke          Smoke test (no GPU/weights required)"
             echo "  --distributed    Multi-GPU via torchrun + NCCL"
             echo "  --setup          Environment setup only"
             echo "  --notebook       Launch Jupyter Lab only"
@@ -93,7 +90,7 @@ fi
 echo ""
 echo "━━━ Step 2/5: Download Models ━━━"
 
-if [ "$SKIP_MODELS" = "0" ] && [ "$MODE" != "smoke" ]; then
+if [ "$SKIP_MODELS" = "0" ]; then
     if [ -f cluster/manage_models.sh ]; then
         bash cluster/manage_models.sh download
     else
@@ -133,30 +130,22 @@ if torch.cuda.is_available():
         print(f'  Memory[{i}]:    {props.total_mem / 1024**3:.1f} GB')
 " || echo "  WARNING: GPU check failed"
 
-if [ "$MODE" = "smoke" ]; then
-    echo ""
-    echo "━━━ Step 4/5: Smoke Test ━━━"
-    python -m experiments.runner --smoke --benchmark 2>&1 || {
-        echo "[run_all] Smoke test completed with warnings (expected in sandbox)."
-    }
+# ── Step 4: Run experiments ──
+echo ""
+echo "━━━ Step 4/5: Run Experiments (mode=$MODE) ━━━"
+
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7}"
+export TOKENIZERS_PARALLELISM=false
+export NCCL_DEBUG="${NCCL_DEBUG:-WARN}"
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+if [ "$DISTRIBUTED" = "1" ]; then
+    NGPU=$(python -c 'import torch; print(torch.cuda.device_count())' 2>/dev/null || echo 1)
+    echo "[run_all] Launching distributed with $NGPU GPUs..."
+    torchrun --nproc_per_node="$NGPU" -m experiments.paper_pipeline "--$MODE" --config config/h100.yaml
 else
-    # ── Step 4: Run experiments ──
-    echo ""
-    echo "━━━ Step 4/5: Run Experiments (mode=$MODE) ━━━"
-
-    export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7}"
-    export TOKENIZERS_PARALLELISM=false
-    export NCCL_DEBUG="${NCCL_DEBUG:-WARN}"
-    export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-
-    if [ "$DISTRIBUTED" = "1" ]; then
-        NGPU=$(python -c 'import torch; print(torch.cuda.device_count())' 2>/dev/null || echo 1)
-        echo "[run_all] Launching distributed with $NGPU GPUs..."
-        torchrun --nproc_per_node="$NGPU" -m experiments.paper_pipeline "--$MODE" --config config/h100.yaml
-    else
-        echo "[run_all] Launching single-process paper pipeline..."
-        python -m experiments.paper_pipeline "--$MODE" --config config/h100.yaml
-    fi
+    echo "[run_all] Launching single-process paper pipeline..."
+    python -m experiments.paper_pipeline "--$MODE" --config config/h100.yaml
 fi
 
 # ── Step 5: Collect results ──

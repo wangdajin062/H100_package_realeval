@@ -16,18 +16,6 @@
 			"problemMatcher": []
 		},
 		{
-			"label": "run-smoke-all",
-			"type": "shell",
-			"command": "python",
-			"args": [
-				"-m",
-				"experiments.runner",
-				"--smoke"
-			],
-			"group": "test",
-			"problemMatcher": []
-		},
-		{
 			"label": "run-paper-all",
 			"type": "shell",
 			"command": "python",
@@ -47,17 +35,6 @@
 				"-m",
 				"experiments.runner",
 				"--validate-contract"
-			],
-			"group": "test",
-			"problemMatcher": []
-		},
-		{
-			"label": "rerun-and-validate-smoke",
-			"type": "shell",
-			"command": "python",
-			"args": [
-				"scripts/rerun_and_validate_contract.py",
-				"--smoke"
 			],
 			"group": "test",
 			"problemMatcher": []

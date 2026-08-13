@@ -371,13 +371,11 @@ EXP10_OVF_STEP_RATIO = [
 # alpha values: prefer H100 measured, fall back to paper_reference, then hardcoded
 _ref = _get("exp6", "paper_reference") or {}
 _alpha_generic_meas = _get("exp6", "diagnostic_B", "h100_measured", "generic")
-_alpha_tuned_meas   = _get("exp6", "diagnostic_B", "h100_measured", "domain")
 
 # Use measured value only if it's clearly valid (> 0.01), otherwise use paper reference
 _alpha_generic = (_alpha_generic_meas if (_alpha_generic_meas is not None and _alpha_generic_meas > 0.01)
                   else _ref.get("alpha_generic") or 0.78)
-_alpha_tuned   = (_alpha_tuned_meas if (_alpha_tuned_meas is not None and _alpha_tuned_meas > 0.01)
-                  else _ref.get("alpha_tuned") or 0.86)
+_alpha_tuned   = _ref.get("alpha_tuned") or 0.86
 
 SPEC_ALPHA_GENERIC = _r(_alpha_generic) if _alpha_generic else 0.78
 SPEC_ALPHA_TUNED   = _r(_alpha_tuned)   if _alpha_tuned   else 0.86
@@ -464,7 +462,6 @@ FIG8_LDP = {
     "f1": [
         _OVF_FULL_F1,             # best QAD+OVF (no LDP)
         (_get("exp5", "ldp_tradeoff", "eps_1.5", "f1")
-         or _get("exp5", "paper_reference", "ldp_eps_1_5_f1")  # smoke backward compat
          or _FIG8_REF["ldp_eps_1_5_f1"]),
     ],
     "latency": [

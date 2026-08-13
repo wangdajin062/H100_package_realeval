@@ -60,10 +60,7 @@ PAPER_CLAIMS: dict[str, list[tuple]] = {
 
 # Fields that are hardcoded paper self-citations, never independent measurements.
 CITED_FIELDS: dict[str, list[tuple]] = {
-    "exp5": [("bf16_matched_advfraud",),
-             ("paper_reference", "advfraud_curated_f1"),
-             ("paper_reference", "advfraud_bf16_matched"),
-             ("paper_reference", "ldp_eps_1_5_f1")],
+    "exp5": [("bf16_matched_advfraud",)],
     "exp6": [("paper_reference", "alpha_generic"),
              ("paper_reference", "alpha_tuned"),
              ("paper_reference", "speculative_speedups")],

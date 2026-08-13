@@ -6,7 +6,7 @@ independent_variable: regulariser_condition
 dependent_variable: variance_drift_pct
 control: [dataset, seed, quantize]
 compare:                    # two conditions to contrast
-  treatment: ov_freeze
+  treatment: ov_freeze_full
   baseline: no_reg
 acceptance:                 # PASS if ALL hold (drift lower is better)
   - "treatment.variance_drift_pct < baseline.variance_drift_pct"

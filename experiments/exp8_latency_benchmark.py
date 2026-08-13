@@ -33,8 +33,8 @@ def run(config: dict) -> dict:
 
         batch_size = max(1, int(config.get("training", {}).get("batch_size", 8)))
         max_seq = int(config.get("distillation", {}).get("max_seq_length", 256))
-        warmup = max(1, int(config.get("benchmark", {}).get("warmup", 2)))
-        repeat = max(3, int(config.get("benchmark", {}).get("repeat", 10)))
+        warmup = max(1, int(config.get("reproducibility", {}).get("benchmark_warmup", 2)))
+        repeat = max(3, int(config.get("reproducibility", {}).get("benchmark_repeat", 10)))
 
         latency_detail = {}
         # bf16: quantize=None with bf16=True is the proper native-BF16 path on H100.

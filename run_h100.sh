@@ -2,7 +2,6 @@
 # One-command H100 paper-validation entry.
 #   bash run_h100.sh                 # paper-grade (real Qwen + H100), single process
 #   bash run_h100.sh --all           # same, runs all experiment groups (default)
-#   bash run_h100.sh --smoke         # sandbox verification (no GPU/weights)
 #   bash run_h100.sh --distributed   # 8x H100 via torchrun --nproc_per_node=8 + NCCL
 #
 # Pipeline: CUDA check -> GPU detect -> env report -> model load -> benchmark -> metrics -> save
@@ -14,7 +13,6 @@ MODE="--paper"
 DISTRIBUTED=0
 CLEAN=0
 for a in "$@"; do
-  [ "$a" = "--smoke" ] && MODE="--smoke"
   [ "$a" = "--distributed" ] && DISTRIBUTED=1
   [ "$a" = "--clean" ] && CLEAN=1
 done

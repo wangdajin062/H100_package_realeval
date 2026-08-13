@@ -38,11 +38,13 @@ CONFIG_SCHEMA: dict[str, tuple[str, type | tuple[type, ...], Any, bool]] = {
     "training.warmup_steps":           ("线性 warmup 步数", int, 100, False),
     "training.focal_gamma":            ("focal loss gamma（0=标准 CE）", float, 0.0, False),
     "training.threshold_grid_steps":   ("F1 阈值搜索网格步数", int, 19, False),
+    "training.dropout":                ("分类头 dropout", float, 0.1, False),
 
     # 蒸馏参数
     "distillation.temperature":          ("蒸馏温度", float, 2.0, True),
     "distillation.alpha_ce":             ("CE loss 权重", float, 0.5, False),
     "distillation.alpha_kl":             ("KL loss 权重", float, 0.5, False),
+    "distillation.task_weight":          ("分类头 loss 权重（head LR 系数）", float, 1e-3, False),
     "distillation.max_batch":            ("蒸馏最大批次", int, 64, False),
     "distillation.max_seq_length":       ("最大序列长度", int, 256, False),
     "distillation.freeze_frac_default":  ("默认冻结比例", float, 1.0, False),
@@ -61,6 +63,12 @@ CONFIG_SCHEMA: dict[str, tuple[str, type | tuple[type, ...], Any, bool]] = {
     "reproducibility.benchmark_warmup":    ("基准测试预热轮数", int, 10, False),
     "reproducibility.benchmark_repeat":    ("基准测试重复轮数", int, 100, False),
     "reproducibility.benchmark_batch_sizes":("基准 batch 大小列表", list, [1, 8, 32, 64], False),
+    "reproducibility.exp1_seeds":  ("exp1 多 seed 数", int, 5, False),
+    "reproducibility.exp2_seeds":  ("exp2 多 seed 数", int, 5, False),
+    "reproducibility.exp3_seeds":  ("exp3 多 seed 数", int, 5, False),
+    "reproducibility.exp10_seeds": ("exp10 多 seed 数", int, 5, False),
+    "reproducibility.exp11_seeds": ("exp11 多 seed 数", int, 5, False),
+    "reproducibility.exp14_seeds": ("exp14 多 seed 数", int, 5, False),
 
     # 隐私评估
     "privacy.delta":                  ("差分隐私 δ", float, 1.0e-5, False),
