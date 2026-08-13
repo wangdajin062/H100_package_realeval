@@ -23,6 +23,7 @@ import yaml
 
 from realeval import statistics as st
 from realeval.audit import provenance
+from realeval.io.paths import CLAIMS as OUT
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s %(message)s")
 logger = logging.getLogger("claim_engine")
@@ -31,7 +32,6 @@ ROOT = Path(__file__).resolve().parent.parent
 # New-format claims (YAML with "experiment" key, evaluated by this engine).
 # Legacy-format claims live in claims/legacy/ and are handled by runner/claim_runner.py.
 CLAIMS = ROOT / "claims"
-OUT = ROOT / "outputs" / "claims"
 
 from runner.registry import SHORT_TO_FULL as _SHORT_TO_MOD
 

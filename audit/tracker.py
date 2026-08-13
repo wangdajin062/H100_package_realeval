@@ -22,8 +22,9 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from realeval.io.paths import AUDIT_DIR as AUDIT_ROOT
+
 ROOT = Path(__file__).resolve().parent.parent
-AUDIT_ROOT = ROOT / "outputs" / "audit"
 
 
 class RunTracker:

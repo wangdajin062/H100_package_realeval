@@ -20,6 +20,8 @@ from typing import Any, Callable, TypeVar
 import numpy as np
 import torch
 
+from realeval.io.paths import MODELS
+
 from experiments.framework import (
     DatasetSplit,
     TextDataset,
@@ -95,7 +97,7 @@ def config_override(config: dict[str, Any], **overrides: Any) -> dict[str, Any]:
 
 def resolve_qad_path() -> Path:
     """解析 exp1 产出的 QAD 模型路径。"""
-    return Path(__file__).resolve().parent.parent / "outputs" / "models" / "exp1_qad"
+    return MODELS / "exp1_qad"
 
 
 def aggregate_seed_results(

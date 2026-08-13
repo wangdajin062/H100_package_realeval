@@ -20,8 +20,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parent.parent
-EVIDENCE_DIR = ROOT / "outputs" / "evidence"
+from realeval.io.paths import EVIDENCE as EVIDENCE_DIR
 
 
 class EvidenceNode:

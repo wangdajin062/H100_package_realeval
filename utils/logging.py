@@ -8,6 +8,8 @@ import logging
 from pathlib import Path
 from typing import ClassVar
 
+from realeval.io.paths import LOGS
+
 
 class _LoggingConfig:
     """内部单例，确保根日志只被配置一次。"""
@@ -26,7 +28,7 @@ class _LoggingConfig:
             cls._configured = True
             return
 
-        log_dir = log_dir or Path(__file__).resolve().parent.parent / "outputs" / "logs"
+        log_dir = log_dir or LOGS
         log_dir.mkdir(parents=True, exist_ok=True)
         cls._log_dir = log_dir
 

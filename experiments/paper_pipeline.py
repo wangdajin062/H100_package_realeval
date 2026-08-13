@@ -26,6 +26,7 @@ if str(ROOT) not in sys.path:
 from cli.parser import build_pipeline_parser
 from config import load_config
 from realeval.io.archive import archive_if_needed
+from realeval.io.paths import RESULTS
 from realeval.io.serialization import save_all_results, save_results
 from metrics.extraction import extract_headline
 from runner.registry import EXPERIMENTS, SHORT_TO_FULL
@@ -33,8 +34,6 @@ from utils.logging import configure_logging, get_logger
 
 configure_logging()
 logger = get_logger("paper_pipeline")
-
-RESULTS = Path(__file__).resolve().parent.parent / "outputs" / "results"
 
 # Paper experiment groups -> underlying experiment short names.
 PAPER_GROUPS = {

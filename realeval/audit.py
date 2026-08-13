@@ -26,9 +26,11 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from realeval.io.paths import LOGS
+
 ROOT = Path(__file__).resolve().parent.parent
-AUDIT_LOG = ROOT / "outputs" / "logs" / "audit.log"
-RUNLOG = ROOT / "outputs" / "logs" / "runlog.jsonl"
+AUDIT_LOG = LOGS / "audit.log"
+RUNLOG = LOGS / "runlog.jsonl"
 
 # ── logger singletons ──────────────────────────────────────────────────────────
 

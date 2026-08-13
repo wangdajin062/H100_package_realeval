@@ -19,6 +19,11 @@ FIGURES: Path = OUTDIR / "figures"
 METRICS_DIR: Path = OUTDIR / "metrics"
 TABLES_DIR: Path = OUTDIR / "tables"
 ARCHIVE: Path = OUTDIR / "archive"
+LOGS: Path = OUTDIR / "logs"
+EVIDENCE: Path = OUTDIR / "evidence"
+AUDIT_DIR: Path = OUTDIR / "audit"
+CLAIMS: Path = OUTDIR / "claims"
+MODELS: Path = OUTDIR / "models"
 
 ALL_EXPERIMENTS_FILE: Path = RESULTS / "all_experiments.json"
 

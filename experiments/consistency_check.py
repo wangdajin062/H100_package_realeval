@@ -19,12 +19,10 @@ Exit code is non-zero if any SMOKE or DRIFT (P0) issue is found.
 """
 from __future__ import annotations
 
-from pathlib import Path
 import json
 from typing import Any
 
-ROOT = Path(__file__).resolve().parent.parent
-RESULTS_DIR = ROOT / "outputs" / "results"
+from realeval.io.paths import RESULTS as RESULTS_DIR
 
 _NOT_FOUND = object()
 

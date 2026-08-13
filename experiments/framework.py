@@ -12,14 +12,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
 
+from realeval.io.paths import LOGS
 from utils.exceptions import ExperimentRuntimeError
 from utils.logging import configure_logging as _configure_logging
 
-ROOT = Path(__file__).resolve().parent.parent
-LOG_DIR = ROOT / "outputs" / "logs"
+LOG_DIR = LOGS
 
 logger = logging.getLogger("framework")
 

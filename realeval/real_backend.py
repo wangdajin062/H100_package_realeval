@@ -11,6 +11,8 @@ Real computation:
 from __future__ import annotations
 import logging
 
+from realeval.io.paths import MODELS
+
 logger = logging.getLogger("real_backend")
 
 
@@ -505,9 +507,8 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
     snr_max = round(max(snr_values), 1) if snr_values else 18.9
 
     # ── Save QAD-trained model ──
-    from pathlib import Path
     if save_name:
-        save_dir = Path(__file__).resolve().parent.parent / "outputs" / "models" / save_name
+        save_dir = MODELS / save_name
         save_dir.mkdir(parents=True, exist_ok=True)
         student.save_pretrained(str(save_dir))
         tok.save_pretrained(str(save_dir))
@@ -632,8 +633,7 @@ def real_distill_train(config: dict, train_texts: list[str], train_labels: list[
     m = classification_metrics([int(v) for v in test_labels], preds)
 
     # Save fine-tuned model + head for downstream experiments (exp4/exp11)
-    from pathlib import Path
-    save_dir = Path(__file__).resolve().parent.parent / "outputs" / "models" / "exp1_finetuned"
+    save_dir = MODELS / "exp1_finetuned"
     save_dir.mkdir(parents=True, exist_ok=True)
     model.save_pretrained(str(save_dir))
     tok.save_pretrained(str(save_dir))

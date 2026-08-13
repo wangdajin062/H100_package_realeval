@@ -11,13 +11,15 @@ from pathlib import Path
 
 import numpy as np
 
+from realeval.io.paths import (
+    OUTDIR as OUT,
+    TABLES_DIR as TABLES,
+    FIGURES as FIGS,
+    RESULTS,
+    METRICS_DIR as METRICS,
+)
+
 logger = logging.getLogger("report")
-ROOT = Path(__file__).resolve().parent.parent
-OUT = ROOT / "outputs"
-TABLES = OUT / "tables"
-FIGS = OUT / "figures"
-RESULTS = OUT / "results"
-METRICS = OUT / "metrics"
 
 
 def _latest_results() -> dict[str, dict]:

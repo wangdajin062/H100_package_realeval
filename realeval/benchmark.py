@@ -11,12 +11,9 @@ Only orchestrates, never computes metrics or statistics.
 from __future__ import annotations
 import csv
 import logging
-from pathlib import Path
 
+from realeval.io.paths import METRICS_DIR as OUT
 from realeval.runner import run_forward_benchmark, best_batch_size
-
-ROOT = Path(__file__).resolve().parent.parent
-OUT = ROOT / "outputs" / "metrics"
 
 logger = logging.getLogger("benchmark")
 
