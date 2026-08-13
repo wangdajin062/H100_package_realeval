@@ -188,7 +188,7 @@ smoke 的 `--smoke` CLI 参数已在 `cli/parser.py` 删除，但以下非 .py �
 | P3 死配置字段（`privacy.*`、`audio.*`、`classification.*` 等） | schema 声明性字段，删除有风险（可能是完整性声明或未来会用到） |
 | P3 标注冲突（`exp5.bf16_matched_advfraud`） | 需人工确认真实身份（measured vs cited） |
 | P3 字段合约缺口（exp7/9/12/13） | 需补 `EXPECTED_FIELDS` 条目，属独立任务 |
-| P3 历史文档 smoke 描述（CONSISTENCY_AUDIT / FIG_TABLE_FIX_REPORT / RunPod_rerun_execution） | 历史快照，记录「当时有 smoke」的事实；CONSISTENCY_AUDIT 仍被 paper_data.py 注释引用 |
+| P3 历史文档 smoke 描述（CONSISTENCY_AUDIT / FIG_TABLE_FIX_REPORT） | 历史快照，记录「当时有 smoke」的事实；CONSISTENCY_AUDIT 仍被 paper_data.py 注释引用 |
 | paper_data.py 的 smoke 过滤 | 防御性向后兼容安全网 |
 
 ### code review 补充发现（初版审计遗漏）
