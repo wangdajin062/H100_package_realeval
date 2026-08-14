@@ -45,10 +45,26 @@ pip install -r requirements.txt
 
 | 项目 | 要求 |
 |------|------|
-| Python | ≥ 3.10 |
-| PyTorch | ≥ 2.1 |
-| CUDA | 12.x（论文级运行需要 H100 SXM5 80GB） |
+| Python | ≥ 3.10（实测 3.12.3） |
+| PyTorch | ≥ 2.1（实测 2.8.0+cu128） |
+| CUDA | 12.x（论文级运行需要 H100 SXM5 80GB；实测 12.8） |
 | 磁盘 | ≥ 100 GB（模型权重 + 数据集） |
+
+**RunPod H100 实测环境**（2026-08-03，pod `mhypfkvge474n8`，镜像 `runpod/pytorch:2.8.0`）：
+
+| 组件 | 版本 |
+|------|------|
+| Python | 3.12.3 |
+| PyTorch | 2.8.0+cu128 |
+| CUDA / cuDNN | 12.8 / 9.1.0.2 |
+| Driver | 580.126.09 |
+| GPU | NVIDIA H100 80GB HBM3 ×1 |
+| CPU | x86_64, 208 cores |
+| transformers | 5.14.1 |
+| accelerate | 1.14.0 |
+| bitsandbytes | 0.50.0 |
+| scikit-learn | 1.9.0 |
+| BF16 / Flash Attn / torch.compile / NCCL | ✅ / ✅ / ✅ / ✅ |
 
 ### 1.3 配置文件说明
 
