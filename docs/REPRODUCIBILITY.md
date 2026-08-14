@@ -143,6 +143,8 @@ print('GPU 显存检查: 需 ≥35GB 可用')
 ## 3. 重跑执行流程（P0 → P1 → P2）
 
 > 命令统一前缀：`cd /workspace/H100_package_realeval && /workspace/venv/bin/python -m experiments.runner --no-archive --config config/runpod_h100.yaml --exp N`
+>
+> **切分一致性（P1-M1）**：exp5/13/14 复用 exp1 的 held-out 测试集（split manifest `outputs/splits/taf28k.json`），因此**必须先跑 exp1** 生成 manifest；若单独跑 exp5/13/14 而 exp1 未跑过，会 fallback 到 seed=42 的 group_split（仍防泄漏，但与 exp1 非同一分区）。
 
 ### 3.1 P0（结论反转 / 核心数字崩塌，最先处理）
 
