@@ -14,6 +14,7 @@ soundfile>=0.12
 # Missing these makes exp1 crash and silently degrades the int4 path to full precision.
 peft>=0.7
 accelerate>=0.25
+bitsandbytes>=0.43
 # Audio feature extraction / transcription pipeline (data/scripts/*)
 torchaudio>=2.1
 
