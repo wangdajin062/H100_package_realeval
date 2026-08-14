@@ -472,6 +472,12 @@ def group_split(
 
     for lbl, indices in groups.items():
         rng.shuffle(indices)
+        if len(indices) < 2:
+            # A class with a single example: keep it in TRAIN so the model actually
+            # sees the class, rather than holding out its only sample (max(1,...) below
+            # would otherwise send the whole class to test and none to train).
+            train_idx.extend(indices)
+            continue
         n_test = max(1, int(len(indices) * test_ratio))
         test_idx.extend(indices[:n_test])
         train_idx.extend(indices[n_test:])

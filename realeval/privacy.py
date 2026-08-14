@@ -44,6 +44,9 @@ def glo_reconstruction_attack(embeddings, targets, steps=150, seed=0,
                  If None, assumes embedding is random orthogonal projection (sandbox demo only).
     """
     import torch
+    # Save/restore the GLOBAL torch RNG so seeding this attack does not perturb the
+    # caller's reproducibility (restored before every return below).
+    _rng_state = torch.get_rng_state()
     torch.manual_seed(seed)
     emb = torch.tensor(embeddings, dtype=torch.float32)
     tgt = torch.tensor(targets, dtype=torch.float32)
@@ -72,6 +75,7 @@ def glo_reconstruction_attack(embeddings, targets, steps=150, seed=0,
         rec = z.detach().numpy().ravel(); orig = targets[i]
         c = np.corrcoef(rec, orig)[0, 1]
         corrs.append(0.0 if np.isnan(c) else abs(float(c)))
+    torch.set_rng_state(_rng_state)
     return {"mean_reconstruction_corr": round(float(np.mean(corrs)), 4),
             "note": ("Sandbox: random orthogonal projection (not real embedding function), corr is demo only; "
                      "real scenario: pass proj_fn=real embedding function") if proj_fn is None

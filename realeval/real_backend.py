@@ -424,9 +424,11 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
     kl_plateau = round(sum(pre_ovf_kls) / len(pre_ovf_kls), 6) if pre_ovf_kls else kl_final
     kl_converged = round(sum(post_ovf_kls) / len(post_ovf_kls), 6) if post_ovf_kls else kl_final
 
-    # Quantization SNR range across all training steps (for Fig4 panel b)
-    snr_min = round(min(snr_values), 1) if snr_values else 18.4
-    snr_max = round(max(snr_values), 1) if snr_values else 18.9
+    # Quantization SNR range across all training steps (for Fig4 panel b). When no SNR
+    # was measured (empty/degenerate training), report None (explicit-missing) instead of
+    # fabricating the paper's 18.4/18.9 values — paper_data treats None as missing.
+    snr_min = round(min(snr_values), 1) if snr_values else None
+    snr_max = round(max(snr_values), 1) if snr_values else None
 
     # ── Save QAD-trained model ──
     if save_name:

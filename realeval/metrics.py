@@ -13,6 +13,14 @@ def classification_metrics(y_true: list, y_pred: list, y_score: list = None) -> 
     If only hard 0/1 predictions are available, AUC is set to None (a hard-prediction ROC degenerates
     to a single point, so roc_auc_score on 0/1 labels would be misleading).
     """
+    # Exclude unknown labels (-1, e.g. rows _load_jsonl could not parse) so they are not
+    # silently counted as the negative class. Filter y_true/y_pred/y_score in lockstep.
+    if any(t == -1 for t in y_true):
+        keep = [i for i, t in enumerate(y_true) if t != -1]
+        y_true = [y_true[i] for i in keep]
+        y_pred = [y_pred[i] for i in keep]
+        if y_score is not None:
+            y_score = [y_score[i] for i in keep]
     # All metrics use average="binary" because fraud detection is a binary
     # classification problem. For multi-class extensions, this would need to
     # be parameterized to the appropriate average strategy.

@@ -1,16 +1,17 @@
 # 实验产出 → 论文图像脚本 字段对齐映射
 
 > 本文档定义 `docs/figure_scripts/paper_data.py` 所需字段与实验脚本产出字段的完整对齐关系。
-> **硬性约束：`docs/figure_scripts/` 下所有文件不可修改，实验侧须主动适配。**
+> **硬性约束：`docs/figure_scripts/` 下的**图像脚本**（`figN_*.py` / `paper_style.py`）不可修改；
+> `paper_data.py` 是唯一的适配/桥接层——实验侧字段变化在此对齐，实验脚本本身也须相应产出。**
 
 ## 一、映射总表
 
 ### Figure 3 → Main Results (F1 + Recovery)
 | 图脚本变量 | paper_data 读取路径 | 实验产出字段 | 类型 | 备注 |
 |-----------|-------------------|------------|------|------|
-| EXP01_QUANT_QUALITY | exp1.f1, exp1.std | exp1 → f1, std | float×2 | QAD F1 |
-| QAT_QAD_OVF | exp11.schemes.int4.f1, .std | exp11 → schemes.int4.f1, .std | float×2 | QAT baseline |
-| BF16_F1 | exp11.schemes.bf16.f1 | exp11 → schemes.bf16.f1 | float | BF16 ceiling |
+| EXP01_QUANT_QUALITY | （论文常量，**不读实验**） | 外部 PTQ 基线常量表（RTN/AWQ/GPTQ/SpinQuant/QuaRot/BitDistill） | list | paper_data 硬编码，非本套件测量 |
+| QAT_QAD_OVF | exp11.schemes.int4.{f1,std} + exp1.{f1,std} + exp3.conditions.ov_freeze_full.{f1,std} + exp14.models.q4km_0.5b_llama_cpp.{f1,std} | 各实验对应字段 | 4 行 | QAT(int4)/QAD/QAD+OVF/Q4_K_M 四行，分别来自 exp11/exp1/exp3/exp14 |
+| BF16_F1 | （论文自引用常量 0.931，**不读实验**） | — | float | BF16 ceiling，非实测 |
 
 ### Figure 4 → Loss Convergence
 | 图脚本变量 | paper_data 读取路径 | 实验产出字段 | 类型 |
@@ -36,17 +37,17 @@
 ### Figure 7 → Speculative Decoding
 | 图脚本变量 | paper_data 读取路径 | 实验产出字段 |
 |-----------|-------------------|------------|
-| EXP05_SPECULATIVE | exp6.diagnostic_B.h100_measured.generic | exp6 → diagnostic_B.h100_measured.generic |
-| SPEC_ALPHA_GENERIC | exp6.paper_reference.alpha_generic | exp6 → paper_reference.alpha_generic (cited) |
-| SPEC_ALPHA_TUNED | exp6.paper_reference.alpha_tuned | exp6 → paper_reference.alpha_tuned (cited) |
-| SPEC_GAMMA_DEPLOY | exp6.paper_reference.gamma_deploy | exp6 → paper_reference.gamma_deploy (cited) |
+| EXP05_SPECULATIVE | exp6.paper_reference.speculative_speedups (cited) | exp6 → paper_reference.speculative_speedups | 缺失时用内置 speedup 表 |
+| SPEC_ALPHA_GENERIC | exp6.diagnostic_B.h100_measured.generic（实测，>0.01 时优先）否则 exp6.paper_reference.alpha_generic (cited) | exp6 → 二者之一 | measured 优先、回退 cited |
+| SPEC_ALPHA_TUNED | exp6.paper_reference.alpha_tuned (cited) | exp6 → paper_reference.alpha_tuned |  |
+| SPEC_GAMMA_DEPLOY | exp6.paper_reference.gamma_deploy (cited) | exp6 → paper_reference.gamma_deploy |  |
 
 ### Figure 8 → Revision Ablations
 | 图脚本变量 | paper_data 读取路径 | 实验产出字段 |
 |-----------|-------------------|------------|
-| FIG8_QUANT | exp11.schemes.{int4,nf4}.f1 + exp11.schemes.bf16.f1 | exp11 → schemes.{int4,nf4,bf16}.f1 |
-| FIG8_ADVFRAUD | exp5.advfraud.{full_pool,curated}.f1 + exp5.bf16_matched_advfraud | exp5 → advfraud.{full_pool,curated}.f1 + bf16_matched_advfraud |
-| FIG8_LDP | exp5.ldp_tradeoff.eps_1.5.f1 | exp5 → ldp_tradeoff.eps_1.5.f1 |
+| FIG8_QUANT | exp11.schemes.int4.f1（同质 INT4）+ exp3.conditions.ov_freeze_full.f1（异质 QAD+OVF）；`bf16_ref`=BF16_F1 常量 | exp11 → schemes.int4.f1；exp3 → conditions.ov_freeze_full.f1 | `delta` 由两 F1 计算 |
+| FIG8_ADVFRAUD | exp5.advfraud.{full_pool,curated}.f1 + exp5.bf16_matched_advfraud (cited) | exp5 → advfraud.{full_pool,curated}.f1 + bf16_matched_advfraud | bf16_matched 为自引用常量 |
+| FIG8_LDP | exp3.conditions.ov_freeze_full.f1（no-LDP）+ exp5.ldp_tradeoff.eps_1.5.f1 | exp3 → conditions.ov_freeze_full.f1；exp5 → ldp_tradeoff.eps_1.5.f1 | latency 为论文常量 |
 
 ## 二、结果文件格式与命名规范
 
@@ -97,7 +98,8 @@ cd docs/figure_scripts && python generate_all.py
 | 2026-08-03 | 初始映射创建；新增 `decision_threshold` 字段 (exp1)；新增 `std` 字段 (exp2/exp11/exp14 variants/schemes/models)；`cot_max_new_tokens` 配置项；`val_frac` 校准集比例 |
 | 2026-08-05 | 重构后对齐修复：exp2 增加 `kl_task` 兼容别名；exp3 smoke 补齐 `conditions` / `layer_selection` 的 `std`；exp11 smoke 补齐 `schemes` 的 `std` / `n_seeds`；新增 `metrics/`、`runner/`、`config/`、`realeval/io/` 子包 |
 | 2026-08-13 | 文档审计修正：移除已删除的 smoke 路径相关描述；exp1 回退值更新（f1=0.7974，Fig4 锚点统一为 `None` 显式报缺）；exp5 LDP 改读 `ldp_tradeoff.eps_1.5.f1`；exp6 移除不存在的 `domain` 键；exp8 改读 `latency_detail.*.{p50_ms,p99_ms}`；exp2/exp10 variant/scale 键名修正 |
-| 2026-08-14 | 第三轮全量审计登记（本轮未修订本文档）：审计发现本文档仍有出入——§一映射总表的 Fig3 来源表（`EXP01_QUANT_QUALITY` 实为常量列表不读 exp1、`BF16_F1` 为常量不读 exp11）与 Fig7/Fig8 来源表均与代码不符、exp5 fallback 值过时（现为 full_pool=0.1238 / curated=None 显式报缺）、缺 exp4/7/9/12/13 章节。详见 [`reports/2026-08-14_full_audit.md`](../reports/2026-08-14_full_audit.md) P2-18，待后续修订 |
+| 2026-08-14 | 第三轮审计登记（P2-18 发现）：Fig3/Fig7/Fig8 来源表与代码不符、exp5 fallback 过时、缺 exp4/7/9/12/13 章节 |
+| 2026-08-14（修订） | 按 P2-18 修订本文档：§一 Fig3 表（`EXP01_QUANT_QUALITY`/`BF16_F1` 标注为论文常量、`QAT_QAD_OVF` 明确跨 exp11/exp1/exp3/exp14）、Fig7 表（`EXP05_SPECULATIVE` 读 speculative_speedups、`SPEC_ALPHA_GENERIC` measured 优先）、Fig8 表（`FIG8_QUANT`=exp11.int4+exp3.ov_freeze_full、`FIG8_LDP` 含 exp3 no-LDP）；exp5 fallback 更新为 0.1238/None；顶部约束澄清 `paper_data.py` 为桥接层；补 exp4/7/9/12/13 契约章节 |
 
 
 ---
@@ -154,8 +156,8 @@ cd docs/figure_scripts && python generate_all.py
 
 | paper_data.py 读取路径 | 实验产出字段 | 回退值 |
 |------------------------|-------------|--------|
-| `_get("exp5", "advfraud", "full_pool", "f1")` | `result["advfraud"]["full_pool"]["f1"]` | `0.841` |
-| `_get("exp5", "advfraud", "curated", "f1")` | `result["advfraud"]["curated"]["f1"]` | `0.875` |
+| `_get("exp5", "advfraud", "full_pool", "f1")` | `result["advfraud"]["full_pool"]["f1"]` | `0.1238` |
+| `_get("exp5", "advfraud", "curated", "f1")` | `result["advfraud"]["curated"]["f1"]` | `None`（显式报缺） |
 | `_get("exp5", "bf16_matched_advfraud")` | `result["bf16_matched_advfraud"]` | `0.882` |
 | `_get("exp5", "ldp_tradeoff", "eps_1.5", "f1")` | `result["ldp_tradeoff"]["eps_1.5"]["f1"]` | `None`（显式报缺） |
 
@@ -193,6 +195,38 @@ cd docs/figure_scripts && python generate_all.py
 |------------------------|-------------|
 | `_get("exp11", "schemes", "int4", "f1")` | `result["schemes"]["int4"]["f1"]` |
 | 同上，key = `nf4` / `fp16` / `int8` | 同结构 |
+
+### exp4 → 经典基线（不直接进图，consistency/contract 校验）
+
+| 契约字段 | 实验产出字段 |
+|---------|-------------|
+| `classifiers.logreg.f1` / `xgb.f1` / `mlp.f1` / `qwen_base.f1` | `result["classifiers"][{name}]["f1"]` |
+
+### exp7 → 隐私验证（不直接进图，contract 校验）
+
+| 契约字段 | 实验产出字段 | 备注 |
+|---------|-------------|------|
+| `pii_report` / `asv_eer_pct` / `speaker_id_accuracy` / `n_speakers` | 对应顶层键 | 真实测量 |
+| `glo_reconstruction_corr` | 顶层键 | **DEMO-only**：`glo_reconstruction_is_demo=True` 时为随机投影沙盒值，非独立测量（见 P1-M4） |
+
+### exp9 → CoT 消融（contract 校验）
+
+| 契约字段 | 实验产出字段 |
+|---------|-------------|
+| `with_cot.{f1,fpr}` / `without_cot.{f1,fpr}` | `result[{with_cot,without_cot}][{f1,fpr}]` |
+
+### exp12 → FraudFusion 基线 + 存储分解（contract 校验）
+
+| 契约字段 | 实验产出字段 | 备注 |
+|---------|-------------|------|
+| `competitor_comparison_real.QAD_MultiGuard_INT4.f1` | 同结构 | FraudFusion_pruned_INT4.f1 为 cited（None，无发布权重） |
+| `storage_decomposition_point8.{footprints_mb,quantization_alone_x,param_scale_alone_x,total_advantage_x}` | 同结构 | footprints_mb 缺磁盘模型文件时各 advantage 为 None（键仍存在） |
+
+### exp13 → 融合策略（不直接进图，contract 校验）
+
+| 契约字段 | 实验产出字段 | 备注 |
+|---------|-------------|------|
+| `strategies.{early_fusion,late_fusion,hybrid}.{f1,accuracy,latency_ms}` | `result["strategies"][{name}][...]` | `fusion_degraded=True` 时为纯文本回退（见 P2-2） |
 
 ---
 
