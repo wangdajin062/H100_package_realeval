@@ -95,6 +95,11 @@ def run(config: dict) -> dict:
             out["cross_taf_on_chifraud"] = {"f1": cross_tc["f1"]}
             out["cross_chifraud_on_taf"] = {"f1": cross_ct["f1"]}
 
+        # CITED (not measured): paper-claimed BF16 baseline on the AdvFraud curated subset.
+        # No full BF16 run on that subset exists in this suite, so this is a self-citation
+        # constant, mirrored in docs/figure_scripts/paper_data.py::_FIG8_REF and classified
+        # CITED in metrics/contract.py. Emitted here only so consistency_check flags it as a
+        # cited value; it must NEVER be presented as an independent measurement.
         out["bf16_matched_advfraud"] = 0.882
         # ── LDP tradeoff: real (ε,δ)-DP measurement via calibrated noise on hidden states ──
         # Uses the same formula as gaussian_ldp: σ = Δf·√(2·ln(1.25/δ))/ε
@@ -121,8 +126,8 @@ def run(config: dict) -> dict:
                 ldp_out[key] = {"epsilon": eps, "f1": r["f1"], "noise_sigma": round(sigma, 2)}
             out["ldp_tradeoff"] = ldp_out
             out["ldp_note"] = "real H100 measurement via calibrated noise on hidden states"
-            # Remove hardcoded self-citation — replaced by real measurement above.
-            # paper_reference removed; bf16_matched_advfraud kept as-is (measured value).
+            # paper_reference LDP constants removed — replaced by the real measurement above.
+            # (bf16_matched_advfraud above stays a CITED self-citation, not a measurement.)
         else:
             out["ldp_tradeoff"] = {"note": "TAF-28k unavailable; LDP not measured"}
 

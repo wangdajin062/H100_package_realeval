@@ -292,10 +292,10 @@ def _teacher_entry(tk, label, tokens, fallback_f1, fallback_conv):
     return {"teacher": label, "f1_fixed": f1_fixed, "f1_conv": f1_conv,
             "tokens_B": tokens}
 
-# exp10 调优后真实产出为单一 F1（0.5B 0.9149 / 1.5B 0.5116 / 3B 0.7676 / 7B 0.7038，
-# 见 results_20260803），而 fig5b 脚本读取 f1_fixed/f1_conv 双维（固定 token 预算 vs 收敛）。
-# 真实双维数据未记录，原 fallback 0.896/0.877/… 为论文声称值。改为 None 显式报缺
-# （字段契约待 exp10 重跑出双维数据后回填，见 reports/CONSISTENCY_AUDIT.md §2.5/§6.4）。
+# exp10 现产出 f1_fixed/f1_conv 双维（experiments/exp10_teacher_scale.py:66-68：固定 token
+# 预算 1 epoch vs 收敛 5 epoch），fig5b 脚本读取的正是这两维。旧的调优前重跑仅记录单维
+# F1，故此处 fallback 统一为 None 显式报缺（不再用论文声称值 0.896/0.877/… 冒充实测），
+# exp10 真实产出存在时正常读取双维（见 reports/CONSISTENCY_AUDIT.md §2.5/§6.4）。
 EXP09_TEACHER = [
     _teacher_entry("teacher",        "0.5B\n(same)", 0.5,
                    _from_result("exp10", "scales", "teacher", "f1_fixed", placeholder="PH_EXP10_T_05B_FIXED", fallback=None),
@@ -471,8 +471,11 @@ FIG8_ADVFRAUD = {
         _from_result("exp5", "advfraud", "full_pool", "f1", placeholder="PH_EXP5_ADVFRAUD_FULL_POOL_F1", fallback=0.1238),
         _from_result("exp5", "advfraud", "curated", "f1", placeholder="PH_EXP5_ADVFRAUD_CURATED_F1", fallback=None),
     ],
-    "bf16_matched": (_get("exp5", "bf16_matched_advfraud")
-                     or _FIG8_REF["advfraud_bf16_matched"]),
+    "bf16_matched": _from_result(
+        "exp5", "bf16_matched_advfraud",
+        placeholder="PH_EXP5_BF16_MATCHED",
+        fallback=_FIG8_REF["advfraud_bf16_matched"], cited=True,
+    ),
 }
 
 # Panel (c): epsilon-LDP privacy-utility trade-off
@@ -524,7 +527,7 @@ if __name__ == "__main__":
         status = "OK" if k in _RESULTS else "X"
         print(f"  {status} {k}")
     if _MISSING_PLACEHOLDERS:
-        print(f"\n[WARN] {len(_MISSING_PLACEHOLDERS)} non-cited placeholder(s) using fallback:")
+        print(f"\n[WARN] {len(_MISSING_PLACEHOLDERS)} placeholder(s) using fallback (cited ones are legitimate):")
         for ph, exp_name, keys, fallback in _MISSING_PLACEHOLDERS:
             key_path = ".".join(keys)
             print(f"  - {ph}: missing {exp_name}.{key_path}, fallback={fallback}")
