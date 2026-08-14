@@ -189,7 +189,11 @@ def build_paper_figures(fmt: str = "png") -> list:
     lat = e8.get("latencies", {})
     if lat:
         fig, ax = plt.subplots(figsize=(6, 4))
-        schemes = list(lat.keys())
+        # exp8 stores boolean diagnostic flags (int8_fallback_flagged,
+        # fp16_slower_than_int4) alongside the numeric p50 latencies — filter them out
+        # so the chart doesn't draw 0/1 bars. (bool is a subclass of int, hence the
+        # explicit isinstance(..., bool) exclusion.)
+        schemes = [s for s in lat if isinstance(lat[s], (int, float)) and not isinstance(lat[s], bool)]
         vals = [lat[s] for s in schemes]
         colors = _COLORS[:len(schemes)]
         ax.bar(schemes, vals, color=colors)

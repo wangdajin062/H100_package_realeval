@@ -24,6 +24,7 @@ EVIDENCE: Path = OUTDIR / "evidence"
 AUDIT_DIR: Path = OUTDIR / "audit"
 CLAIMS: Path = OUTDIR / "claims"
 MODELS: Path = OUTDIR / "models"
+SPLITS: Path = OUTDIR / "splits"   # persisted train/test split manifests (leakage control)
 
 ALL_EXPERIMENTS_FILE: Path = RESULTS / "all_experiments.json"
 

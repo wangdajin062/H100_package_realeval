@@ -48,7 +48,11 @@ def _run_experiment_seeds(short, base_config, seeds):
     results = []
     for s in range(seeds):
         cfg = copy.deepcopy(base_config)
-        cfg["seed"] = 42 + s
+        # Space the per-repeat seed base by 1000 so each repeat draws a DISJOINT window of
+        # internal seeds (experiments use base + inner_index). The old `42 + s` made
+        # consecutive repeats overlap 4/5 of their internal seeds — correlated samples that
+        # made the bootstrap CI overstate significance. s=0 keeps base=1000 (the default).
+        cfg["seed"] = 1000 * (s + 1)
         results.append(mod.run(cfg))
     return results
 

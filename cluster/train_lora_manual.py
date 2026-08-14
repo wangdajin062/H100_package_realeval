@@ -18,7 +18,9 @@ from __future__ import annotations
 import argparse, json, math, sys, time
 from pathlib import Path
 
-sys.path.insert(0, "/workspace")
+# Repo root relative to this file, not a hardcoded /workspace (pod layout is
+# /workspace/<repo>, so the literal path put the wrong dir on sys.path).
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import torch
 import torch.nn.functional as F
 

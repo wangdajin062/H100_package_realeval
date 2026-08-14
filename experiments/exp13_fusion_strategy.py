@@ -20,9 +20,14 @@ def run(config: dict) -> dict:
         audio_emb = ds["embeddings"]
     n = min(len(texts), len(audio_emb))
     texts, labels, audio_emb = texts[:n], labels[:n], np.asarray(audio_emb[:n])
-    split = int(n * 0.8)
-    train_labels, test_labels = labels[:split], labels[split:]
-    test_texts = texts[split:]
+    # Leakage-safe test partition shared with exp1/exp5/exp14 (P1-M1): one index set
+    # applied to text, labels AND the aligned acoustic embeddings, instead of a
+    # positional tail slice that overlaps exp1's training data.
+    from experiments.common import shared_test_indices
+    test_idx = shared_test_indices("taf28k", texts, labels)
+    test_texts = [texts[i] for i in test_idx]
+    test_labels = [labels[i] for i in test_idx]
+    test_audio = audio_emb[test_idx]
 
     def run_paper(config: dict) -> dict:
         from realeval import real_backend
@@ -32,7 +37,7 @@ def run(config: dict) -> dict:
         for sname in ("early_fusion", "late_fusion", "hybrid"):
             t0 = time.perf_counter()
             result = real_backend.real_fusion_classify(
-                config, test_texts, test_labels, audio_emb[split:],
+                config, test_texts, test_labels, test_audio,
                 quantize="int4", fusion_strategy=sname.replace("_fusion", ""))
             lat_ms = (time.perf_counter() - t0) / max(1, len(test_texts)) * 1000
             # Compute params from actual embedding dimensionalities; fall back to NOT_MEASURED.

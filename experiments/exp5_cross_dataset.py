@@ -24,7 +24,7 @@ def run(config: dict) -> dict:
 
     def run_paper(config: dict) -> dict:
         from realeval import real_backend, models
-        from experiments.common import seed_base_from_config, set_seed
+        from experiments.common import seed_base_from_config, set_seed, shared_test_split
         real_backend.require_assets(models.models_available(config), "Real Qwen weights unavailable")
 
         # Seed the global RNG so the LDP calibrated-noise measurement (and any other
@@ -35,22 +35,32 @@ def run(config: dict) -> dict:
         qad_path = resolve_qad_path()
         finetuned_path = str(qad_path) if qad_path.exists() else None
 
+        # Leakage-safe TAF-28k test partition (P1-M1): the exp1-trained int4 model is
+        # evaluated only on exp1's held-out set, never on its training data. Reused for
+        # the AdvFraud normal-sample pool, the cross-dataset eval, and the LDP sweep.
+        taf_ds_all = datasets.get("taf28k", {})
+        taf_test_texts, taf_test_labels = [], []
+        if taf_ds_all.get("texts"):
+            taf_test_texts, taf_test_labels = shared_test_split(
+                "taf28k", taf_ds_all["texts"], taf_ds_all["labels"])
+
         results = {}
         for dname, ds in datasets.items():
             if not ds["texts"]:
                 continue
-            split = int(len(ds["texts"]) * 0.8)
 
-            if dname == "advfraud3k" and datasets.get("taf28k", {}).get("texts"):
-                taf_ds = datasets["taf28k"]
+            if dname == "advfraud3k" and taf_test_texts:
                 n_adv = len(ds["texts"])
-                normal_mask = [l == 0 for l in taf_ds["labels"]]
-                normal_texts = [t for t, m in zip(taf_ds["texts"], normal_mask) if m][:n_adv]
+                # Normal (label 0) samples drawn from TAF's held-out TEST set, so they
+                # are never part of exp1's training data (previous code took a positional
+                # tail of ALL taf, ~80% of which sat in exp1's train split).
+                normal_texts = [t for t, l in zip(taf_test_texts, taf_test_labels) if l == 0][:n_adv]
+                # AdvFraud is not a training set, so a stratified group_split test slice
+                # is a clean held-out sample of it.
+                adv_test_texts, adv_test_labels = shared_test_split("advfraud3k", ds["texts"], ds["labels"])
                 if normal_texts:
-                    adv_split = int(n_adv * 0.8)
-                    normal_split = int(len(normal_texts) * 0.8)
-                    mixed_texts = ds["texts"][adv_split:] + normal_texts[normal_split:]
-                    mixed_labels = ds["labels"][adv_split:] + [0] * (len(normal_texts) - normal_split)
+                    mixed_texts = adv_test_texts + normal_texts
+                    mixed_labels = list(adv_test_labels) + [0] * len(normal_texts)
                     result = real_backend.real_llm_classify(
                         config, mixed_texts, mixed_labels, quantize="int4",
                         finetuned_path=finetuned_path,
@@ -59,21 +69,23 @@ def run(config: dict) -> dict:
 
                     curated_n = min(517, n_adv)
                     curated_texts = ds["texts"][:curated_n] + normal_texts[:curated_n]
-                    curated_labels = ds["labels"][:curated_n] + [0] * curated_n
+                    curated_labels = ds["labels"][:curated_n] + [0] * min(curated_n, len(normal_texts))
                     curated_result = real_backend.real_llm_classify(
                         config, curated_texts, curated_labels, quantize="int4",
                         finetuned_path=finetuned_path,
                     )
                     results["advfraud_curated"] = {"f1": curated_result["f1"], "accuracy": curated_result["accuracy"]}
                 else:
+                    adv_test_texts, adv_test_labels = shared_test_split("advfraud3k", ds["texts"], ds["labels"])
                     result = real_backend.real_llm_classify(
-                        config, ds["texts"][split:], ds["labels"][split:], quantize="int4",
+                        config, adv_test_texts, adv_test_labels, quantize="int4",
                         finetuned_path=finetuned_path,
                     )
                     results[dname] = {"f1": result["f1"], "accuracy": result["accuracy"], "note": "fraud-only"}
             else:
+                test_texts, test_labels = shared_test_split(dname, ds["texts"], ds["labels"])
                 result = real_backend.real_llm_classify(
-                    config, ds["texts"][split:], ds["labels"][split:], quantize="int4",
+                    config, test_texts, test_labels, quantize="int4",
                     finetuned_path=finetuned_path,
                 )
                 results[dname] = {"f1": result["f1"], "accuracy": result["accuracy"]}
@@ -94,8 +106,11 @@ def run(config: dict) -> dict:
                 config, datasets["chifraud"]["texts"], datasets["chifraud"]["labels"],
                 quantize="int4", finetuned_path=finetuned_path,
             )
+            # Evaluate the taf-trained model on TAF's held-out test set (not the full
+            # corpus, which is ~80% training data) — cross_tc stays on all of ChiFraud,
+            # which the model never trained on, so no leakage there.
             cross_ct = real_backend.real_llm_classify(
-                config, datasets["taf28k"]["texts"], datasets["taf28k"]["labels"],
+                config, taf_test_texts, taf_test_labels,
                 quantize="int4", finetuned_path=finetuned_path,
             )
             out["cross_taf_on_chifraud"] = {"f1": cross_tc["f1"]}
@@ -107,16 +122,17 @@ def run(config: dict) -> dict:
         # CITED in metrics/contract.py. Emitted here only so consistency_check flags it as a
         # cited value; it must NEVER be presented as an independent measurement.
         out["bf16_matched_advfraud"] = 0.882
-        # ── LDP tradeoff: real (ε,δ)-DP measurement via calibrated noise on hidden states ──
-        # Uses the same formula as gaussian_ldp: σ = Δf·√(2·ln(1.25/δ))/ε
-        # with clip_bound=5.0 (empirical float32 hidden-state range), δ=1e-5 → Δf=10.
-        taf_texts_all = datasets.get("taf28k", {}).get("texts", [])
-        taf_labels_all = datasets.get("taf28k", {}).get("labels", [])
-        if taf_texts_all:
+        # ── Calibrated-noise robustness sweep (Gaussian-mechanism σ schedule) ──
+        # NOTE: this is NOT a certified (ε,δ)-DP guarantee. σ is set from the Gaussian-DP
+        # formula σ = Δf·√(2·ln(1.25/δ))/ε with an ASSUMED sensitivity Δf, but the hidden
+        # states are not actually clipped to that bound and there is no privacy-loss
+        # composition accounting — so the true sensitivity is unbounded. The measured F1-vs-σ
+        # curve is real; the ε values are a noise-schedule label, not a formal DP claim.
+        if taf_test_texts:
             import math
-            n_taf = len(taf_texts_all)
-            taf_s = int(n_taf * 0.8)
-            ttx, tly = taf_texts_all[taf_s:], taf_labels_all[taf_s:]
+            # LDP sweep runs on TAF's held-out test partition (leakage-safe), same set
+            # used for the taf28k headline and cross-eval above.
+            ttx, tly = taf_test_texts, taf_test_labels
             delta = 1e-5
             sensitivity = 10.0  # 2·clip_bound=5.0
             nf = sensitivity * math.sqrt(2.0 * math.log(1.25 / delta))
@@ -131,7 +147,10 @@ def run(config: dict) -> dict:
                 key = "no_ldp" if eps == float("inf") else f"eps_{eps}"
                 ldp_out[key] = {"epsilon": eps, "f1": r["f1"], "noise_sigma": round(sigma, 2)}
             out["ldp_tradeoff"] = ldp_out
-            out["ldp_note"] = "real H100 measurement via calibrated noise on hidden states"
+            out["ldp_note"] = ("real H100 F1-vs-noise measurement via Gaussian noise on hidden "
+                               "states; epsilon is a noise-schedule label, NOT a certified "
+                               "(epsilon,delta)-DP guarantee (states are not clipped; no "
+                               "privacy-loss composition accounting)")
             # paper_reference LDP constants removed — replaced by the real measurement above.
             # (bf16_matched_advfraud above stays a CITED self-citation, not a measurement.)
         else:

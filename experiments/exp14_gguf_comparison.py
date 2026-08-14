@@ -24,9 +24,12 @@ def run(config: dict) -> dict:
         loaders=[lambda: data.load_taf28k(max_samples=config.get("data", {}).get("max_samples", 2000))],
         synthetic_loader=lambda: data.load_synthetic(n=200),
     )
+    from experiments.common import shared_test_split
     texts, labels = ds.texts, ds.labels
-    split = int(len(texts) * 0.8)
-    test_texts, test_labels = texts[split:], labels[split:]
+    # Leakage-safe: evaluate on exp1's held-out TAF-28k test partition (persisted split
+    # manifest), not a positional tail that overlaps exp1's training data (P1-M1). This
+    # makes the docstring's "SAME TAF-28k test split" claim actually true.
+    test_texts, test_labels = shared_test_split("taf28k", texts, labels)
 
     def run_paper(config: dict) -> dict:
         from realeval import real_backend, gguf_backend

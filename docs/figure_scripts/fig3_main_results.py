@@ -58,8 +58,10 @@ fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.7, 4.0),
 # --- panel (a): F1 ---------------------------------------------------------
 names = [m[0] for m in methods]
 y = np.arange(len(methods))[::-1]
-f1s = [m[1] for m in methods]
-errs = [m[3] for m in methods]
+# None -> NaN / 0 so a not-yet-measured method skips its bar instead of crashing
+# barh (P2-20); the annotation loop below skips NaN too.
+f1s = [np.nan if m[1] is None else m[1] for m in methods]
+errs = [0.0 if m[3] is None else m[3] for m in methods]
 cols = [color_map[m[4]] for m in methods]
 ax1.barh(y, f1s, xerr=errs, color=cols, edgecolor="black", lw=0.5,
          error_kw=dict(ecolor="#333", lw=0.8, capsize=2))
@@ -73,6 +75,8 @@ ax1.axvline(BF16_F1, color="#555", ls="--", lw=0.9)
 ax1.text(BF16_F1 + 0.002, len(methods) / 2, "BF16 ceiling", rotation=90,
          ha="left", va="center", fontsize=7, color="#888")
 for yi, f1, e in zip(y, f1s, errs):
+    if f1 is None or (isinstance(f1, float) and np.isnan(f1)):
+        continue  # skip label for a missing/NaN method
     ax1.text(f1 + (e or 0) + 0.004, yi, f"{f1:.3f}", va="center", fontsize=7.2)
 ax1.grid(axis="x", alpha=0.25)
 ax1.grid(axis="y", visible=False)

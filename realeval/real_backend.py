@@ -682,16 +682,27 @@ def real_fusion_classify(config, texts, labels, audio_emb, *, quantize="int4", f
     import numpy as np
     txt = real_llm_classify(config, texts, labels, quantize=quantize, return_preds=True)
     txt_pred = np.asarray(txt["preds"])
+
+    def _text_only(reason: str) -> dict:
+        # Mark the degradation so callers/results don't mistake a text-only fallback for a
+        # real fusion measurement (otherwise all three exp13 strategies can be the SAME
+        # text-only number with nothing flagging it).
+        out = {k: v for k, v in txt.items() if k != "preds"}
+        out["fusion_degraded"] = True
+        out["fusion_strategy_effective"] = "text_only"
+        out["fusion_note"] = reason
+        return out
+
     if audio_emb is None or len(audio_emb) != len(labels):
-        return {k: v for k, v in txt.items() if k != "preds"}
+        return _text_only("acoustic embeddings unavailable or length-mismatched — text-only fallback")
     from sklearn.linear_model import LogisticRegression
     ae = np.asarray(audio_emb); n = len(labels); split = max(1, int(n * 0.5))
     try:
         # Train on first half, predict on held-out second half to prevent data leakage
         clf = LogisticRegression(max_iter=500).fit(ae[:split], labels[:split])
         ac_pred_test = clf.predict(ae[split:])
-    except Exception:
-        return {k: v for k, v in txt.items() if k != "preds"}
+    except Exception as e:
+        return _text_only(f"acoustic classifier failed — text-only fallback: {e}")
     # Evaluate fusion only on the held-out test portion (no leakage)
     txt_test = txt_pred[split:]
     labels_test = labels[split:]

@@ -195,7 +195,10 @@ def load_chifraud_balanced(max_samples: int | None = None) -> dict:
     n_normal = sum(1 for l in cf_labels if int(l) == 0)
     sf_fraud = [t for t, l in zip(sf_texts, sf_labels) if int(l) == 1]
     import random
-    random.shuffle(sf_fraud)
+    # Seeded RNG for reproducibility (set_seed does not touch the stdlib `random` module,
+    # so a bare random.shuffle here made this fallback non-reproducible run-to-run).
+    random.Random(42).shuffle(sf_fraud)
+    # Note: this yields a ~2:1 fraud:normal pool (not 1:1) — a fraud-heavy sanity set.
     sf_fraud = sf_fraud[:n_normal * 2]
     texts = cf_texts + sf_fraud
     labels = cf_labels + [1] * len(sf_fraud)

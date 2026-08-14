@@ -46,8 +46,16 @@ def run(config: dict) -> dict:
         # WER / PESQ / STOI / MOS need a full TTS+ASR rebuild (obfuscated audio → decode →
         # score); they are NOT produced by this experiment, so the paper table must either
         # run them separately or label them "not measured / planned".
+        # GLO reconstruction: with no real embedding function passed as proj_fn, the attack
+        # runs against a RANDOM orthogonal projection — a sandbox DEMO number, not a real
+        # reconstruction measurement (P1-M4). Report it honestly: keep the source note and a
+        # demo flag, and don't list it among the real measurements when it is demo-only.
+        glo_is_demo = str(glo.get("note", "")).startswith("Sandbox")
+        measured_fields = ["pii_scan", "asv_eer", "speaker_id_acc", "n_speakers"]
+        if not glo_is_demo:
+            measured_fields.append("glo_reconstruction_corr")
         coverage = {
-            "measured": ["pii_scan", "asv_eer", "speaker_id_acc", "glo_reconstruction_corr", "n_speakers"],
+            "measured": measured_fields,
             "not_measured": {
                 "wer_reconstruction": "requires obfuscate→decode→WER pipeline (TODO/planned)",
                 "pesq_reconstruction": "requires audio reconstruction scoring (TODO/planned)",
@@ -55,10 +63,15 @@ def run(config: dict) -> dict:
                 "mos_reconstruction": "requires subjective/neural MOS scoring (TODO/planned)",
             },
         }
+        if glo_is_demo:
+            coverage["demo_only"] = {"glo_reconstruction_corr": glo.get("note")}
         return {"computation": "h100_real_qwen", "embedding_source": embedding_source,
                 "pii_report": pii_report,
                 "asv_eer_pct": asv["asv_eer_pct"], "min_dcf": asv.get("min_dcf"),
-                "speaker_id_accuracy": sid["accuracy"], "glo_reconstruction_corr": glo["mean_reconstruction_corr"],
+                "speaker_id_accuracy": sid["accuracy"],
+                "glo_reconstruction_corr": glo["mean_reconstruction_corr"],
+                "glo_reconstruction_note": glo.get("note"),
+                "glo_reconstruction_is_demo": glo_is_demo,
                 "n_speakers": sid["n_speakers"],
                 "coverage": coverage}
 

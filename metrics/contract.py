@@ -99,6 +99,9 @@ EXPECTED_FIELDS: dict[str, list[tuple[str, ...]]] = {
         ("pii_report",),
         ("asv_eer_pct",),
         ("speaker_id_accuracy",),
+        # Present but DEMO-only until a real embedding proj_fn is wired (see exp7
+        # glo_reconstruction_is_demo / note). Kept here as a presence check, not an
+        # endorsement that it is an independent measurement (P1-M4).
         ("glo_reconstruction_corr",),
         ("n_speakers",),
     ],
@@ -221,7 +224,12 @@ def _latest_result(exp_short: str) -> dict[str, Any] | None:
     candidates = sorted(RESULTS_DIR.glob(f"{exp_short}_*.json"))
     if not candidates:
         return None
-    return json.loads(candidates[-1].read_text(encoding="utf-8"))
+    try:
+        return json.loads(candidates[-1].read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        # Treat a corrupt/truncated result file as missing rather than crashing
+        # contract validation (matches orchestrator/report tolerance).
+        return None
 
 
 def check_alignment(

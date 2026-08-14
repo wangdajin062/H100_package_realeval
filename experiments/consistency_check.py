@@ -40,7 +40,11 @@ def _latest_result(exp_short: str) -> dict | None:
     candidates = sorted(RESULTS_DIR.glob(f"{exp_short}_*.json"))
     if not candidates:
         return None
-    return json.loads(candidates[-1].read_text(encoding="utf-8"))
+    try:
+        return json.loads(candidates[-1].read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        # A truncated/corrupt result file must not crash the whole auditor.
+        return None
 
 
 # Headline metrics vs the paper's claimed value: (dotted path, claimed, tol, label).

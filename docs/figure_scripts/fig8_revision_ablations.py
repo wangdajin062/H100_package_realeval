@@ -41,9 +41,16 @@ C_REF     = ps.PALETTE["secondary"]   # red     (reference line)
 C_LAT     = ps.PALETTE["tertiary"]    # green   (latency)
 
 
+def _plot_vals(seq):
+    """None -> NaN so matplotlib skips missing bars instead of raising (P2-20)."""
+    return [np.nan if v is None else v for v in seq]
+
+
 def _annotate_bars(ax, bars, fmt="{:.3f}", dy=0.0008):
     for b in bars:
         h = b.get_height()
+        if h is None or (isinstance(h, float) and np.isnan(h)):
+            continue  # no label for a missing/NaN bar
         ax.text(b.get_x() + b.get_width() / 2, h + dy, fmt.format(h),
                 ha="center", va="bottom", fontsize=7.5)
 
@@ -74,7 +81,7 @@ def main():
     ax = axes[1]
     a = DATA["advfraud"]
     x = np.arange(len(a["labels"]))
-    bars = ax.bar(x, a["f1"], width=0.55,
+    bars = ax.bar(x, _plot_vals(a["f1"]), width=0.55,
                   color=[C_SECOND, C_PRIMARY], edgecolor="black", linewidth=0.6)
     ax.axhline(a["bf16_matched"], color=C_REF, ls="--", lw=1.0,
                label=f"BF16 matched ({a['bf16_matched']:.3f})")
@@ -91,7 +98,7 @@ def main():
     l = DATA["ldp"]
     x = np.arange(len(l["labels"]))
     w = 0.38
-    bars1 = ax.bar(x - w / 2, l["f1"], width=w, color=C_PRIMARY,
+    bars1 = ax.bar(x - w / 2, _plot_vals(l["f1"]), width=w, color=C_PRIMARY,
                    edgecolor="black", linewidth=0.6, label=r"TAF-28k $F_1$")
     _annotate_bars(ax, bars1, fmt="{:.3f}")
     ax.set_ylim(0.88, 0.93)
