@@ -10,5 +10,12 @@ matplotlib>=3.7
 librosa>=0.10
 soundfile>=0.12
 
+# Real-compute path (default student_variant=qad_ovf): adapter loading + device map + int4.
+# Missing these makes exp1 crash and silently degrades the int4 path to full precision.
+peft>=0.7
+accelerate>=0.25
+# Audio feature extraction / transcription pipeline (data/scripts/*)
+torchaudio>=2.1
+
 # GGUF inference (exp14) — optional
 # llama-cpp-python>=0.2

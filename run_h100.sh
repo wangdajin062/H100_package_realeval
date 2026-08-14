@@ -11,7 +11,9 @@ cd "$(dirname "$0")"
 
 MODE="--paper"
 DISTRIBUTED=0
-CLEAN=0
+# Respect an inherited CLEAN=1 from the environment; default to 0 when unset.
+# (A bare `CLEAN=0` here would clobber `CLEAN=1 bash run_h100.sh`.)
+CLEAN="${CLEAN:-0}"
 for a in "$@"; do
   [ "$a" = "--distributed" ] && DISTRIBUTED=1
   [ "$a" = "--clean" ] && CLEAN=1

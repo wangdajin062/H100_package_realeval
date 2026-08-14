@@ -24,7 +24,13 @@ def run(config: dict) -> dict:
 
     def run_paper(config: dict) -> dict:
         from realeval import real_backend, models
+        from experiments.common import seed_base_from_config, set_seed
         real_backend.require_assets(models.models_available(config), "Real Qwen weights unavailable")
+
+        # Seed the global RNG so the LDP calibrated-noise measurement (and any other
+        # stochastic backend path) is reproducible whether exp5 runs standalone or in
+        # the pipeline. Without this the ldp_tradeoff curve varied run-to-run.
+        set_seed(seed_base_from_config(config))
 
         qad_path = resolve_qad_path()
         finetuned_path = str(qad_path) if qad_path.exists() else None

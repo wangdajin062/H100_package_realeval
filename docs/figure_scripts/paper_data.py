@@ -457,11 +457,19 @@ _f1_homo = _from_result("exp11", "schemes", "int4", "f1",
                         placeholder="PH_EXP11_HOMO_F1", fallback=0.6172)  # homogeneous INT4 (exp11 int4)
 _f1_hetero = _OVF_FULL_F1  # QAD+OVF (heterogeneous)
 
+
+def _safe_delta(a, b, ndigits=3):
+    """b - a, or None when either operand is a显式报缺 None. Guards module-import
+    time: a bare `round(None - x)` here would TypeError and take down EVERY figure
+    script (exp11 int4 failure / exp14 GGUF-unavailable can make these None)."""
+    return round(a - b, ndigits) if (a is not None and b is not None) else None
+
+
 FIG8_QUANT = {
     "labels": ["Homogeneous\nINT4", "Heterogeneous\n(NVFP4+Q4_K_M)"],
     "f1": [_f1_homo, _f1_hetero],
     "bf16_ref": BF16_F1,                                     # 0.931
-    "delta": round(_f1_hetero - _f1_homo, 3),                # computed from experiment F1s
+    "delta": _safe_delta(_f1_hetero, _f1_homo),             # None-safe; computed from experiment F1s
 }
 
 # Panel (b): AdvFraud-3k robustness — full pool vs curated subset

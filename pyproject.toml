@@ -32,6 +32,9 @@ dependencies = [
     "pyyaml>=6.0",
     "transformers>=4.36",
     "matplotlib>=3.7",
+    # scipy is a runtime dependency (realeval/statistics.py, imported by claim_engine
+    # and the evidence-graph tests) — it must be core, not a paper-only extra.
+    "scipy>=1.9",
 ]
 
 [project.optional-dependencies]
@@ -42,10 +45,16 @@ test = [
 paper = [
     "flash-attn>=2.0",
     "bitsandbytes>=0.43",
-    "scipy>=1.9",
+    # peft (LoRA adapter loading in student_loader) and accelerate (device mapping in
+    # models.load_causal_lm) are required by the default real-compute path; without them
+    # exp1 crashes and the int4 path silently degrades to full precision.
+    "peft>=0.7",
+    "accelerate>=0.25",
 ]
 dev = [
-    "realeval[test,paper]",
+    # Self-reference must use the real project name, not "realeval", or
+    # `pip install -e .[dev]` resolves the wrong package from PyPI.
+    "H100_package_realeval4[test,paper]",
     "pytest-cov>=4",
     "ruff>=0.3",
 ]

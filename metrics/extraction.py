@@ -147,7 +147,10 @@ def extract_headline(short: str, result: dict[str, Any]) -> dict[str, Any]:
     if short == "exp12":
         comp = r.get("competitor_comparison_real", {})
         storage = r.get("storage_decomposition_point8", {})
-        out = {f"F1[{k}]": x.get("f1") for k, x in comp.items() if isinstance(x, dict)}
+        # Filter None (e.g. FraudFusion_pruned_INT4 has f1=None: cited, no released
+        # weights) so headline metrics don't carry null F1 entries — matches exp11.
+        out = {f"F1[{k}]": x.get("f1") for k, x in comp.items()
+               if isinstance(x, dict) and x.get("f1") is not None}
         footprints = storage.get("footprints_mb", {}) if isinstance(storage, dict) else {}
         for k, v in footprints.items():
             out[f"fp[{k}]"] = v

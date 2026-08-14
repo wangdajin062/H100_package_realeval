@@ -125,8 +125,17 @@ def log_environment(config: dict = None):
         lg.info("Model=teacher=%s student=%s", teacher, student)
     else:
         lg.info("Model=unknown")
-    seed = os.environ.get("REALEVAL_SEED", "42")
-    lg.info("Seed=%s", seed)
+    # Record the seed base actually in effect. REALEVAL_SEED is not consumed by the
+    # experiments (they use config["seed"], default 1000, via seed_base_from_config),
+    # so hard-coding "42" here misreported the reproducibility record. Prefer an explicit
+    # REALEVAL_SEED override if present, else the config seed base; per-run seeds are base+index.
+    if os.environ.get("REALEVAL_SEED"):
+        seed = os.environ["REALEVAL_SEED"]
+    elif config:
+        seed = str(config.get("seed", 1000))
+    else:
+        seed = "1000"
+    lg.info("Seed base=%s (per-run seed = base + seed_index)", seed)
     lg.info("=== End Reproduction Environment ===")
 
 

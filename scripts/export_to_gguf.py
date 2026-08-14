@@ -180,8 +180,9 @@ def main() -> int:
         return 2
 
     base_model = _resolve_base_model(source_dir, args.base_model)
+    # quant_type already carries the leading "q" (e.g. "q4_k_m"); don't prepend another.
     output_path = (Path(args.output) if args.output else
-                   source_dir.with_name(f"{source_dir.name}_q{args.quant_type}.gguf"))
+                   source_dir.with_name(f"{source_dir.name}_{args.quant_type}.gguf"))
 
     scratch = Path(tempfile.mkdtemp(prefix="gguf_merge_"))
     merged_dir = scratch / "merged"
@@ -194,7 +195,8 @@ def main() -> int:
         size_mb = output_path.stat().st_size / 1e6
         logger.info("Export completed: %s (%.1f MB)", output_path, size_mb)
         if args.keep_checkpoint:
-            kept = output_path.with_suffix("") + "_merged"
+            # Path + str is a TypeError; build the sibling name via with_name().
+            kept = output_path.with_name(output_path.stem + "_merged")
             shutil.move(str(merged_dir), str(kept))
             logger.info("Merged checkpoint kept at %s", kept)
         return 0
