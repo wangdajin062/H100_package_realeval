@@ -4,9 +4,16 @@ c.ServerApp.port = 8888
 c.ServerApp.open_browser = False
 c.ServerApp.allow_root = True
 c.ServerApp.root_dir = "/workspace"
-c.ServerApp.token = ""
+# Fail closed: require a strong token from the environment. The previous empty token
+# ('' = no auth) on a 0.0.0.0 bind left the notebook server fully open.
+import os as _os
+_jupyter_token = _os.environ.get("JUPYTER_TOKEN")
+if not _jupyter_token:
+    raise RuntimeError("JUPYTER_TOKEN must be set to a strong value before launching Jupyter.")
+c.ServerApp.token = _jupyter_token
 c.ServerApp.password = ""
-c.ServerApp.allow_origin = "*"
+# Restrict CORS to an explicit origin (default: none) instead of the wildcard "*".
+c.ServerApp.allow_origin = _os.environ.get("JUPYTER_ALLOW_ORIGIN", "")
 c.ServerApp.allow_remote_access = True
 
 # Increase buffer for large model files

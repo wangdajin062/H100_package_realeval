@@ -1,12 +1,13 @@
 """H100 RealEval API Server — FastAPI"""
 import os
+import secrets
 import subprocess
 import json
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 
@@ -18,6 +19,36 @@ app = FastAPI(
 
 WORKSPACE = Path(os.environ.get("REALEVAL_OUTPUT_ROOT", "/workspace/outputs"))
 REPO = Path("/workspace/repo")
+
+
+# ─── Auth ───
+# The API can trigger GPU jobs and serve files, so protected endpoints require a
+# bearer token. Fail CLOSED: if REALEVAL_API_TOKEN is unset the protected routes
+# refuse service rather than run wide open on 0.0.0.0.
+def require_token(
+    authorization: Optional[str] = Header(default=None),
+    x_api_token: Optional[str] = Header(default=None),
+) -> None:
+    expected = os.environ.get("REALEVAL_API_TOKEN")
+    if not expected:
+        raise HTTPException(
+            status_code=503,
+            detail="API auth not configured: set REALEVAL_API_TOKEN to enable this endpoint",
+        )
+    provided = x_api_token
+    if not provided and authorization and authorization.lower().startswith("bearer "):
+        provided = authorization[7:]
+    if not provided or not secrets.compare_digest(provided, expected):
+        raise HTTPException(status_code=401, detail="Invalid or missing API token")
+
+
+def _safe_output_path(filename: str) -> Path:
+    """Resolve *filename* under WORKSPACE, rejecting path traversal (`..`, absolute)."""
+    base = WORKSPACE.resolve()
+    target = (base / filename).resolve()
+    if target != base and base not in target.parents:
+        raise HTTPException(status_code=400, detail="Invalid path")
+    return target
 
 
 # ─── Models ───
@@ -114,7 +145,7 @@ async def gpu_status():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/experiments/run")
+@app.post("/experiments/run", dependencies=[Depends(require_token)])
 async def run_experiments(req: ExperimentRequest):
     """Trigger an experiment run."""
     if not (REPO / "experiments" / "runner.py").exists():
@@ -151,7 +182,7 @@ async def experiment_status(run_id: str):
     return StatusResponse(run_id=run_id, status="check_log", started_at=None)
 
 
-@app.get("/results")
+@app.get("/results", dependencies=[Depends(require_token)])
 async def list_results():
     """List experiment output files."""
     results = []
@@ -165,11 +196,11 @@ async def list_results():
     return {"results": sorted(results, key=lambda r: r["name"])}
 
 
-@app.get("/results/{filename:path}")
+@app.get("/results/{filename:path}", dependencies=[Depends(require_token)])
 async def download_result(filename: str):
-    """Download a specific result file."""
-    filepath = WORKSPACE / filename
-    if not filepath.exists():
+    """Download a specific result file (restricted to WORKSPACE, token-protected)."""
+    filepath = _safe_output_path(filename)
+    if not filepath.is_file():
         raise HTTPException(status_code=404, detail=f"File {filename} not found")
     return FileResponse(filepath)
 

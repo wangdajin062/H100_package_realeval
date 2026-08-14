@@ -12,6 +12,7 @@ from __future__ import annotations
 import csv
 import json
 import logging
+import os
 from pathlib import Path
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s %(message)s")
@@ -83,9 +84,12 @@ def main():
     ok = all([prep_taf28k(), prep_advfraud3k()])
     prep_chifraud()
     if ok:
-        print("\n[OK] Data files ready. Upload to RunPod:")
-        print("  scp -P 14699 data/TAF28k/taf28k.jsonl root@216.243.220.229:/workspace/data/TAF28k/")
-        print("  scp -P 14699 data/AdvFraud3k/advfraud3k.jsonl root@216.243.220.229:/workspace/data/AdvFraud3k/")
+        # Infra identifiers come from env — do not hardcode a real pod IP/port in the repo.
+        scp_target = os.environ.get("RUNPOD_SCP_TARGET", "root@<pod-ip>")
+        scp_port = os.environ.get("RUNPOD_SSH_PORT", "<port>")
+        print("\n[OK] Data files ready. Upload to RunPod (set RUNPOD_SCP_TARGET / RUNPOD_SSH_PORT):")
+        print(f"  scp -P {scp_port} data/TAF28k/taf28k.jsonl {scp_target}:/workspace/data/TAF28k/")
+        print(f"  scp -P {scp_port} data/AdvFraud3k/advfraud3k.jsonl {scp_target}:/workspace/data/AdvFraud3k/")
     else:
         print("\n[WARN] Some datasets missing. Check logs above.")
 

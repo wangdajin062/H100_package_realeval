@@ -58,7 +58,11 @@ conf = {
     'region_name': 'us-east-1',
 }
 os.makedirs('${S3_MOUNT_POINT}', exist_ok=True)
-with open('/workspace/.s3_config.json', 'w') as f:
+path = '/workspace/.s3_config.json'
+# Create 0600 BEFORE writing secrets so credentials are never briefly world-readable.
+fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+with os.fdopen(fd, 'w') as f:
     json.dump(conf, f, indent=2)
-print('[mount_s3] S3 config saved to /workspace/.s3_config.json')
+os.chmod(path, 0o600)
+print('[mount_s3] S3 config saved to /workspace/.s3_config.json (mode 0600)')
 " 2>/dev/null && echo "[mount_s3] Config written for boto3 access" || echo "[mount_s3] Python fallback failed"

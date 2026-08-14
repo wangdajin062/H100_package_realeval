@@ -1,6 +1,8 @@
 # H100 RealEval Template — CUDA 12.4 + PyTorch + Multi-Service
-# Base: nvidia/cuda 12.4.1 runtime with Ubuntu 22.04
-FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+# Base: nvidia/cuda 12.4.1 DEVEL with Ubuntu 22.04.
+# devel (not runtime) so nvcc is present — flash-attn compiles from source below
+# (--no-build-isolation); the runtime image has no nvcc and the build fails.
+FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=Asia/Shanghai \
@@ -19,10 +21,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ─── SSH setup ───
+# Key-only root login by default. RunPod (and most cloud GPU hosts) inject the
+# user's SSH public key at launch, so no password is needed — and baking one in
+# ('root:realeval') gave anyone who could reach port 22 instant root over all of
+# /workspace (data, models, S3 creds). Password auth stays DISABLED in the image.
+# To enable it for a private deployment, do it at RUNTIME from a secret, e.g. in
+# the entrypoint:  [ -n "$ROOT_PASSWORD" ] && echo "root:$ROOT_PASSWORD" | chpasswd
+#                  && sed -i 's/^#\?PasswordAuthentication .*/PasswordAuthentication yes/' /etc/ssh/sshd_config
 RUN mkdir -p /var/run/sshd \
-    && sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config \
-    && sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config \
-    && echo 'root:realeval' | chpasswd
+    && sed -i 's/#\?PermitRootLogin .*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config \
+    && sed -i 's/#\?PasswordAuthentication .*/PasswordAuthentication no/' /etc/ssh/sshd_config
 
 # ─── Working directory ───
 WORKDIR /workspace

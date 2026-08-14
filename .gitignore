@@ -87,6 +87,9 @@ docs/figure/*.pdf
 # ── IDE user settings ─────────────────────────────────────
 .vscode/settings.json
 
+# Local Claude Code session config (may contain pod IPs / ports) — never version.
+.claude/
+
 # Large data artifacts — kept on RunPod persistent volume (/workspace/data) & local disk, NOT versioned.
 data/**/*.wav
 data/**/*.npz

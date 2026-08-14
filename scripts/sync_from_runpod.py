@@ -20,8 +20,10 @@ import subprocess
 import sys
 import time
 
-POD = "mhypfkvge474n8-64411fb1@ssh.runpod.io"
-KEY = os.path.expanduser("~/.ssh/id_ed25519")
+# Pod SSH host from env — do not commit a real pod identifier. e.g.
+#   export RUNPOD_SSH_HOST=<pod-id>@ssh.runpod.io
+POD = os.environ.get("RUNPOD_SSH_HOST", "<pod-id>@ssh.runpod.io")
+KEY = os.environ.get("RUNPOD_SSH_KEY", os.path.expanduser("~/.ssh/id_ed25519"))
 CHUNK_MB = int(os.environ.get("SYNC_CHUNK_MB", "8"))   # 大文件每块二进制大小，可用环境变量覆盖
 ANSI_RE = re.compile(rb"\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07|\x1b[=>]")
 

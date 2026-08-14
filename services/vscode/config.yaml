@@ -1,7 +1,10 @@
 # code-server (VSCode) configuration for H100 RealEval
 bind-addr: 0.0.0.0:3000
 auth: password
-password: "${VSCODE_PASSWORD:-realeval}"
+# NOTE: code-server does NOT expand shell variables in this file — a literal
+# "${VSCODE_PASSWORD:-realeval}" would BE the password. Set the password via the
+# PASSWORD (or HASHED_PASSWORD) environment variable instead; with no password key
+# here, code-server reads it from the environment (or generates a random one).
 cert: false
 user-data-dir: /workspace/.vscode-server
 extensions-dir: /workspace/.vscode-server/extensions

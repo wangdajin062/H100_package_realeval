@@ -29,10 +29,12 @@ services:
       - REALEVAL_DATA_ROOT=/workspace/data
       - REALEVAL_OUTPUT_ROOT=/workspace/outputs
       - OLLAMA_MODELS=/workspace/.ollama
-      # Jupyter token (set via .env)
-      - JUPYTER_TOKEN=${JUPYTER_TOKEN:-realeval}
-      # VSCode password (set via .env)
-      - VSCODE_PASSWORD=${VSCODE_PASSWORD:-realeval}
+      # Jupyter token — REQUIRED (no weak default). `${VAR:?msg}` aborts `compose up`
+      # if unset, so services never launch with the well-known "realeval" credential.
+      - JUPYTER_TOKEN=${JUPYTER_TOKEN:?set a strong JUPYTER_TOKEN (e.g. in .env) before compose up}
+      # VSCode/code-server password — REQUIRED. code-server reads the PASSWORD env var
+      # (config.yaml no longer hardcodes it), so map VSCODE_PASSWORD -> PASSWORD here.
+      - PASSWORD=${VSCODE_PASSWORD:?set a strong VSCODE_PASSWORD (e.g. in .env) before compose up}
       # API settings
       - API_WORKERS=${API_WORKERS:-4}
     volumes:

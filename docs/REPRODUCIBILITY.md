@@ -66,7 +66,7 @@ config/
 ```bash
 # 1) RunPod 控制台启动 pod → 网页终端 tmux attach -t realeval（若需看实时 GPU/日志）
 # 2) SSH 进入（RunPod 强制 PTY）
-ssh -tt mhypfkvge474n8-64411fb1@ssh.runpod.io -i ~/.ssh/id_ed25519
+ssh -tt <pod-id>@ssh.runpod.io -i ~/.ssh/id_ed25519   # <pod-id> from the RunPod console
 
 # 3) 代码同步到最新（origin/main，含 smoke 移除 + 路径统一 + P0/P1/P2/P3 审计修复）
 cd /workspace/H100_package_realeval
