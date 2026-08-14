@@ -4,16 +4,6 @@
 > 供后续会话快速恢复上下文。记录格式见下方条目模板。
 > 约定来源：根目录 `AGENTS.md`。
 
-## 条目模板
-
-```
-## YYYY-MM-DD [会话主题]
-- 目标：本次要做什么
-- 完成：实际做了什么（文件/提交哈希）
-- 验证：测试/检查结果
-- 遗留：未完成或需注意的事项
-```
-
 ---
 
 ## 2026-08-13 深夜 [第二轮全量审计 + 修复 + 同步 GitHub]
@@ -67,3 +57,12 @@
   7. P3 半修：data.py:236 的 -1 标签 fraud 中心索引未动；privacy.py RandomState(0) 固定噪声保留；
   8. P2-13 原子写未做（serialization.py 仍 write_text 直写）。
 - 遗留：低危项——/experiments/status/{run_id} 无认证探测；template 栈内 /workspace/repo 引用残留；archive_and_clear.py --force 未接线；diagnose_v25_run.py:409 默认路径错；P2-12 错 adapter 仅 warning。
+
+## 2026-08-14 [复查修复的二次复核（506eec4 + c720f83）]
+
+- 目标：逐条核实上轮复查报告的 8 处不完整/遗漏 + 5 处低危残余是否已真实修复。
+- 完成：全部对照当前工作树代码核实（非提交信息）：
+  - 506eec4：P1-M2 数据来源断言（framework.py:135 has_local_data 提前失败）、fig8 三处 None 守卫、contract 移除 exp7 demo 字段 MEASURED 校验、fig6/fig8 误导标签修正、teacher_3b 入默认清单、run_pipeline.sh set -euo pipefail、pod ID 清除、data.py -1 过滤、gaussian_ldp 种子参数化、serialization 原子写（mkstemp+os.replace）——全部在位。
+  - c720f83：status 端点补认证、/workspace/repo 引用改齐、--force 接线、diagnose 默认路径改绝对路径、student_loader 错 variant 改返回 None 硬失败——全部在位。
+- 验证：pytest 65 passed；consistency_check exit 0；工作树干净（HEAD c720f83）。
+- 遗留：第三轮审计及其复查的所有点名项已闭环；剩余仅 MEMORY_LOG 此前声明的 P3 纯清理类（aggregation.py 零调用函数、audit.py runlog 空转）与 outputs/results 需 H100 重跑回填。
