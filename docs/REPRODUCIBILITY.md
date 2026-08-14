@@ -68,7 +68,7 @@ config/
 # 2) SSH 进入（RunPod 强制 PTY）
 ssh -tt <pod-id>@ssh.runpod.io -i ~/.ssh/id_ed25519   # <pod-id> from the RunPod console
 
-# 3) 代码同步到最新（origin/main，含 smoke 移除 + 路径统一 + P0/P1/P2/P3 审计修复）
+# 3) 代码同步到最新（origin/main，含 smoke 移除 + 路径统一 + 第三轮全量审计 P0/P1/P2/P3 全部修复）
 cd /workspace/H100_package_realeval
 git fetch origin && git checkout main && git reset --hard origin/main
 git log --oneline -1        # 应为 origin/main 最新提交
@@ -92,13 +92,13 @@ print('GPU 显存检查: 需 ≥35GB 可用')
 "
 ```
 
-### 1.5 最新验证状态（2026-08-13 本地审核）
+### 1.5 最新验证状态（2026-08-14 第三轮审计后）
 
 | 检查项 | 结果 | 说明 |
 |--------|------|------|
-| `pytest tests/ -q` | ✅ **65 passed, 1 warning** | 全量测试通过 |
-| `check_alignment.py` | ✅ **PASS** | 65 处 `_from_result` 字段全部可解析 |
-| `--validate-contract` | ✅ | 字段合约校验（H100 实测后应 PASS） |
+| `pytest tests/ -q` | ✅ **65 passed, 1 warning** | 全量测试通过（第三轮审计每批修复均验证一致） |
+| `check_alignment.py` | ⚠️ 预期 MISSING | `outputs/` 为空时 67 处 `_from_result` 报 MISSING（有实测结果后应 PASS） |
+| `--validate-contract` | ⚠️ 预期 | `outputs/` 为空时 exit 2（exp1 NON_H100 + 13 missing），H100 实测后应 PASS |
 | `consistency_check` | ⚠️ 预期 P0 | 标出 CITED/DRIFT（实测与论文声称有差距，属设计行为） |
 | `--report` | ✅ | 生成 5 个交付物（summary.csv, tables.md, Table2.tex, fig_latency_benchmark.png/.pdf） |
 | 14 个实验 `run_paper` 路径 | ✅ | 全部存在且可导入 |

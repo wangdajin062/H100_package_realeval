@@ -33,3 +33,22 @@
   - claim 评估未接入 pipeline（手动 `python -m experiments.claim_engine`），建议加 CI 干跑。
   - `claims/legacy/` + `claim_runner` 为有意保留的归档岛，复活需先写适配层。
   - 孤儿数据集 balanced600/balanced10c/chifraud.npz 未清理（低风险保留）。
+
+---
+
+## 2026-08-14 [第三轮全量审计修复 + 清理 + 同步 GitHub]
+
+- 目标：落地第三轮审计（`reports/2026-08-14_full_audit.md`）的 P0/P1/P2/P3 修复，清理孤儿副本，同步远程。
+- 完成：
+  - 应用 10 个补丁（0001~0010），合并为 6 个提交：
+    - `301dadb` 安全：P0-1（Dockerfile 弱密码）、P1-S1~S4（API 认证/路径校验/RunPod 标识/弱口令/S3 凭据 0600）、P1-O10（flash-attn 换 devel 镜像）。
+    - `e493cec` 测量/工具：P1-M1（统一切分，新增 split manifest 消除跨实验泄漏）、P1-M4（exp7 GLO 诚实 demo 标注）、P2-2/4/7/9/11/12/13/14/17/20/22。
+    - `7eab160` 运维：P1-O2/O3/O4/O6/O7/O8、P2-3、P2-24、P3 编码/打包。
+    - `63365ec` 契约文档（P2-18）+ P3 数据诚实（-1 标签、SNR None、privacy RNG 恢复、group_split 单样本类）。
+    - `e4bf17a` 清理：删 5 个孤儿副本（根级 services/ 三份 + scripts/entrypoint/healthcheck，因 build context 指向 template/）、标废 apply_all_fixes.py。
+    - `6b3d6ea` P1-O5 补 bitsandbytes 到 requirements.txt。
+  - 同步方式：git remote 由 SSH 改 HTTPS（本机凭据管理器 token），全部 push 成功。
+- 验证：每批改动均 pytest 65 passed；py/bash/json/toml 语法检查全通过。
+- 遗留：
+  - `outputs/results/` 仍为空，论文数字需 H100 重跑回填。
+  - P3 纯清理类（aggregation.py 零调用函数、audit.py runlog 空转等）未逐一处理。
