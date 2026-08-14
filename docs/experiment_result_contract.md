@@ -97,6 +97,7 @@ cd docs/figure_scripts && python generate_all.py
 | 2026-08-03 | 初始映射创建；新增 `decision_threshold` 字段 (exp1)；新增 `std` 字段 (exp2/exp11/exp14 variants/schemes/models)；`cot_max_new_tokens` 配置项；`val_frac` 校准集比例 |
 | 2026-08-05 | 重构后对齐修复：exp2 增加 `kl_task` 兼容别名；exp3 smoke 补齐 `conditions` / `layer_selection` 的 `std`；exp11 smoke 补齐 `schemes` 的 `std` / `n_seeds`；新增 `metrics/`、`runner/`、`config/`、`realeval/io/` 子包 |
 | 2026-08-13 | 文档审计修正：移除已删除的 smoke 路径相关描述；exp1 回退值更新（f1=0.7974，Fig4 锚点统一为 `None` 显式报缺）；exp5 LDP 改读 `ldp_tradeoff.eps_1.5.f1`；exp6 移除不存在的 `domain` 键；exp8 改读 `latency_detail.*.{p50_ms,p99_ms}`；exp2/exp10 variant/scale 键名修正 |
+| 2026-08-14 | 第三轮全量审计登记（本轮未修订本文档）：审计发现本文档仍有出入——§一映射总表的 Fig3 来源表（`EXP01_QUANT_QUALITY` 实为常量列表不读 exp1、`BF16_F1` 为常量不读 exp11）与 Fig7/Fig8 来源表均与代码不符、exp5 fallback 值过时（现为 full_pool=0.1238 / curated=None 显式报缺）、缺 exp4/7/9/12/13 章节。详见 [`reports/2026-08-14_full_audit.md`](../reports/2026-08-14_full_audit.md) P2-18，待后续修订 |
 
 
 ---
