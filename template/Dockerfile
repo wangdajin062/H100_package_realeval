@@ -1,3 +1,8 @@
+# DEPRECATED (2026-08-14): deployment runs on the RunPod base image
+# `runpod/pytorch:2.8.0-py3.12-cuda12.8.0-devel-ubuntu22.04` (see runpod-template.json),
+# NOT this self-built image. Kept for historical reference / self-hosted clusters only —
+# it is out of sync with the measured environment (PyTorch 2.5.1 vs 2.8.0, CUDA 12.4 vs 12.8).
+#
 # H100 RealEval Template — CUDA 12.4 + PyTorch + Multi-Service
 # Base: nvidia/cuda 12.4.1 DEVEL with Ubuntu 22.04.
 # devel (not runtime) so nvcc is present — flash-attn compiles from source below

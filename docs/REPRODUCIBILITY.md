@@ -66,6 +66,8 @@ pip install -r requirements.txt
 | scikit-learn | 1.9.0 |
 | BF16 / Flash Attn / torch.compile / NCCL | ✅ / ✅ / ✅ / ✅ |
 
+> **部署策略**：统一走 RunPod 基础镜像 `runpod/pytorch:2.8.0-py3.12-cuda12.8.0-devel-ubuntu22.04`（见 `template/runpod-template.json`）；`template/Dockerfile` + `docker-compose.yml` 的自建镜像已弃用（2026-08-14），仅作历史参考。
+
 ### 1.3 配置文件说明
 
 ```
