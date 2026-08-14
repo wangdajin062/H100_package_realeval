@@ -80,7 +80,12 @@ def fix_collator(src: str, check: bool = False) -> tuple[str, bool]:
 
     # 3. 将 Trainer 指向 _PadCollator
     before = src
-    src = re.sub(r"data_collator\s*=\s*[^,\n)]+", "data_collator=_PadCollator(tokenizer)", src)
+    # Match the WHOLE argument value: either a call with one level of parens
+    # (e.g. DataCollatorWithPadding(tokenizer, padding=True)) or a bare name.
+    # The old [^,\n)]+ stopped at the first comma inside the call and left a dangling
+    # ", padding=True)" that broke the Trainer construction.
+    src = re.sub(r"data_collator\s*=\s*[A-Za-z_][\w.]*(?:\([^()]*\))?",
+                 "data_collator=_PadCollator(tokenizer)", src)
     if src != before:
         print("[ OK ] Trainer now uses _PadCollator")
     else:

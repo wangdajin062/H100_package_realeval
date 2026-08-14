@@ -12,7 +12,15 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$SCRIPT_DIR"
+# run_all.sh ships under template/; the repo root (with cluster/, config/,
+# experiments/) is its parent. cd there so all relative paths resolve. If the
+# script has been copied to the repo root already, that parent check still lands
+# somewhere sane, so also fall back to SCRIPT_DIR when cluster/ is right here.
+if [ -d "$SCRIPT_DIR/cluster" ]; then
+    cd "$SCRIPT_DIR"
+else
+    cd "$SCRIPT_DIR/.."
+fi
 
 MODE="paper"
 DISTRIBUTED=0
@@ -54,7 +62,7 @@ echo ""
 if [ "$NOTEBOOK_ONLY" = "1" ]; then
     echo "[run_all] Starting Jupyter Lab only..."
     jupyter-lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root \
-        --ServerApp.token="${JUPYTER_TOKEN:-realeval}" \
+        --ServerApp.token="${JUPYTER_TOKEN:?set a strong JUPYTER_TOKEN before launching}" \
         --notebook-dir=/workspace
     exit 0
 fi
@@ -64,7 +72,9 @@ echo "━━━ Step 1/5: Environment Setup ━━━"
 
 if [ ! -d "venv" ] && [ ! -d "/workspace/venv" ]; then
     echo "[run_all] Creating virtual environment..."
-    python -m venv /workspace/venv
+    # --system-site-packages so the image's torch/CUDA stack is visible inside the venv
+    # (README §3.2); a plain venv has no torch and every experiment import fails.
+    python -m venv --system-site-packages /workspace/venv
 fi
 
 if [ -f /workspace/venv/bin/activate ]; then
@@ -76,7 +86,7 @@ fi
 echo "[run_all] Installing RealEval..."
 pip install -e /workspace/repo 2>/dev/null || pip install -e . 2>/dev/null || {
     echo "[run_all] WARNING: pip install -e . failed, continuing with PYTHONPATH"
-    export PYTHONPATH="${REPO_DIR:-/workspace/repo}:${PYTHONPATH}"
+    export PYTHONPATH="${REPO_DIR:-/workspace/repo}:${PYTHONPATH:-}"
 }
 
 if [ "$SETUP_ONLY" = "1" ]; then
@@ -127,7 +137,7 @@ if torch.cuda.is_available():
     for i in range(torch.cuda.device_count()):
         print(f'  GPU[{i}]:       {torch.cuda.get_device_name(i)}')
         props = torch.cuda.get_device_properties(i)
-        print(f'  Memory[{i}]:    {props.total_mem / 1024**3:.1f} GB')
+        print(f'  Memory[{i}]:    {props.total_memory / 1024**3:.1f} GB')
 " || echo "  WARNING: GPU check failed"
 
 # ── Step 4: Run experiments ──
@@ -154,7 +164,9 @@ echo "━━━ Step 5/5: Results ━━━"
 
 mkdir -p /workspace/outputs/{results,metrics,tables,figures}
 
-cat << 'RESULTEOF' > /workspace/outputs/results/summary.txt
+# Unquoted delimiter so $(date)/$MODE/$DISTRIBUTED actually expand (the quoted
+# 'RESULTEOF' wrote them as literal text).
+cat << RESULTEOF > /workspace/outputs/results/summary.txt
 H100 RealEval — QAD-MultiGuard Pipeline Results
 =================================================
 Generated: $(date)

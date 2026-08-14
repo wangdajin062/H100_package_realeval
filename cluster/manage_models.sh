@@ -53,12 +53,16 @@ manage_model() {
 }
 
 manage_model "Qwen/Qwen2.5-0.5B-Instruct" "$MODELS_ROOT/Qwen/Qwen2.5-0.5B-Instruct"
-manage_model "Qwen/Qwen2.5-0.5B"        "$MODELS_ROOT/Qwen/Qwen2.5-0.5B"
+# Qwen2-0.5B is the speculative-decoding draft (config draft_model, exp6). The old
+# list fetched Qwen2.5-0.5B (base), which no config field references.
+manage_model "Qwen/Qwen2-0.5B"            "$MODELS_ROOT/Qwen/Qwen2-0.5B"
 manage_model "openai/whisper-tiny"        "$MODELS_ROOT/openai/whisper-tiny"
 
 if [ "${STAGE_LARGE:-0}" = "1" ]; then
-    echo "  [STAGE_LARGE] $ACTION_ING 1.5B/7B for teacher-scale ablation..."
+    echo "  [STAGE_LARGE] $ACTION_ING 1.5B/3B/7B for teacher-scale ablation..."
     manage_model "Qwen/Qwen2.5-1.5B-Instruct" "$MODELS_ROOT/Qwen/Qwen2.5-1.5B-Instruct"
+    # teacher_3b (exp10) — was missing, forcing a network re-fetch at run time.
+    manage_model "Qwen/Qwen2.5-3B-Instruct"   "$MODELS_ROOT/Qwen/Qwen2.5-3B-Instruct"
     manage_model "Qwen/Qwen2.5-7B-Instruct"   "$MODELS_ROOT/Qwen/Qwen2.5-7B-Instruct"
 fi
 

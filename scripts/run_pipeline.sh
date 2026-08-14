@@ -10,7 +10,10 @@
 set -uo pipefail
 cd /workspace/H100_package_realeval
 
-export REALEVAL_DATA_ROOT=/workspace/H100_package_realeval/data
+# Data lives on the pod's persistent volume at /workspace/data (matches the Dockerfile
+# ENV and the rest of the data chain). The repo's own data/ holds only scripts/, so
+# pointing DATA_ROOT there left every loader empty.
+export REALEVAL_DATA_ROOT=/workspace/data
 export REALEVAL_MODELS_ROOT=/workspace/models
 export REALEVAL_ADAPTER_ROOT=/workspace/outputs/lora_manual
 export HF_HOME=/workspace/hf_cache

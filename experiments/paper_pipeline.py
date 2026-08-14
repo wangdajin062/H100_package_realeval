@@ -151,13 +151,13 @@ def _aggregate_and_save(
         metrics["groups"][group] = {s: extract_headline(s, all_results.get(s, {})) for s in shorts}
     if bench_summary:
         metrics["benchmark"] = bench_summary
-    (RESULTS / "metrics.json").write_text(json.dumps(metrics, indent=2, ensure_ascii=False))
+    (RESULTS / "metrics.json").write_text(json.dumps(metrics, indent=2, ensure_ascii=False), encoding="utf-8")
 
     # 效率 CSV
     raw = (bench_summary or {}).get("all_batch_sizes", {})
     if raw:
         def _csv(name: str, cols: list[tuple[str, str]]) -> None:
-            with open(RESULTS / name, "w", newline="") as f:
+            with open(RESULTS / name, "w", newline="", encoding="utf-8") as f:
                 w = csv.writer(f)
                 w.writerow([c[0] for c in cols])
                 for bs, r in sorted(raw.items()):
@@ -176,7 +176,7 @@ def _aggregate_and_save(
             comp = all_results.get(s, {}).get("computation", "-")
             md.append(f"- **{s}** ({comp}): " + ", ".join(f"{k}={v}" for k, v in ex.items()))
         md.append("")
-    (RESULTS / "paper_table.md").write_text("\n".join(md) + "\n")
+    (RESULTS / "paper_table.md").write_text("\n".join(md) + "\n", encoding="utf-8")
 
     def _latex(fname: str, title: str, header: list[str], body_rows: list[list[Any]]) -> None:
         L = ["\\begin{table}[t]", "\\centering", f"\\caption{{{title}}}",
@@ -184,7 +184,7 @@ def _aggregate_and_save(
              " & ".join(header) + " \\\\", "\\midrule"]
         L += [" & ".join(str(c) for c in row) + " \\\\" for row in body_rows]
         L += ["\\bottomrule", "\\end{tabular}", "\\end{table}"]
-        (RESULTS / "paper_tables" / fname).write_text("\n".join(L) + "\n")
+        (RESULTS / "paper_tables" / fname).write_text("\n".join(L) + "\n", encoding="utf-8")
 
     main_rows = [
         ["exp13 (fusion)", all_results.get("exp13", {}).get("computation", "-"),

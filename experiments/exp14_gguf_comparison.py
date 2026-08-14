@@ -63,7 +63,7 @@ def run(config: dict) -> dict:
             for s in range(n_seeds):
                 set_seed(seed_base_from_config(config) + s)
                 gg = gguf_backend.gguf_classify(config["models"]["student_gguf"], test_texts, test_labels)
-                gg_f1s.append(gg["f1"])
+                gg_f1s.append(gg["f1"])  # KeyError here degrades gracefully via the except below
             models["q4km_0.5b_llama_cpp"] = {
                 "f1": round(float(np.mean(gg_f1s)), 4),
                 "f1_std": multi_seed_std(gg_f1s),
@@ -71,7 +71,9 @@ def run(config: dict) -> dict:
                 "latency_ms_p50": gg.get("latency_ms_p50"),
                 "runtime": "llama_cpp", "source": "ours", "n_seeds": n_seeds,
             }
-        except gguf_backend.GGUFUnavailable as e:
+        except (gguf_backend.GGUFUnavailable, KeyError) as e:
+            # KeyError = gguf_classify returned no "f1"; degrade the same way as an
+            # unavailable backend instead of aborting the whole experiment.
             models["q4km_0.5b_llama_cpp"] = {"f1": None, "runtime": "llama_cpp", "source": "ours",
                                              "note": f"GGUF unavailable: {e}"}
         return {"computation": "h100_real_qwen", "models": models,

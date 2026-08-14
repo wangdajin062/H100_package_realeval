@@ -134,7 +134,7 @@ def print_verdicts(results: dict):
     print("=" * 60)
     for claim_id, r in results.items():
         verdict = r.get("verdict", "ERROR")
-        symbol = {"PASS": "✓", "FAIL": "✗", "UNSUPPORTED": "?"}.get(verdict, "!")
+        symbol = {"PASS": "[PASS]", "FAIL": "[FAIL]", "UNSUPPORTED": "[?]"}.get(verdict, "[!]")
         details = r.get("verdict_details", r.get("error", ""))
         print(f"  {symbol} {claim_id}: {verdict} — {details}")
     print("=" * 60)

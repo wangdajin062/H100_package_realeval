@@ -74,7 +74,7 @@ git fetch origin && git checkout main && git reset --hard origin/main
 git log --oneline -1        # 应为 origin/main 最新提交
 
 # 4) venv 存活确认（容器重启会清系统 pip，venv 在持久卷不受影响）
-/workspace/venv/bin/python -c "import torch; print(torch.cuda.device_count(), torch.version.__version__)"
+/workspace/venv/bin/python -c "import torch; print(torch.cuda.device_count(), torch.__version__)"
 
 # 5) 数据/模型确认
 ls /workspace/data /workspace/models /workspace/hf_cache

@@ -38,10 +38,14 @@ services:
       # API settings
       - API_WORKERS=${API_WORKERS:-4}
     volumes:
-      # Persistent workspace — survives container rebuilds
+      # Persistent workspace — survives container rebuilds. HF cache lives in
+      # /workspace/hf_cache inside this volume (writable, persistent).
       - workspace:/workspace
-      # Optional: mount host model cache to reuse across containers
-      - ${HOST_MODEL_CACHE:-/dev/null}:/workspace/hf_cache:ro
+      # To reuse a host model cache across containers, add a compose override, e.g.
+      # docker-compose.override.yml:
+      #   services: { realeval: { volumes: ["/host/hf_cache:/workspace/hf_cache:ro"] } }
+      # (The previous ${HOST_MODEL_CACHE:-/dev/null} default mounted the /dev/null
+      #  char device onto a directory path, so the HF cache could not be written.)
     deploy:
       resources:
         reservations:

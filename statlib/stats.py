@@ -52,8 +52,13 @@ def cohens_d(x: list[float], y: list[float]) -> dict:
     """Cohen's d effect size between two groups. |d| < 0.2: negligible, 0.5: medium, 0.8: large."""
     xa, ya = np.asarray(x), np.asarray(y)
     nx, ny = len(xa), len(ya)
+    if nx < 2 or ny < 2:
+        # ddof=1 variance is undefined for a single sample — don't return NaN, which the
+        # magnitude test below would silently label "large".
+        return {"cohens_d": None, "magnitude": "undefined",
+                "note": "need >=2 samples per group"}
     pooled_std = np.sqrt(((nx - 1) * np.var(xa, ddof=1) + (ny - 1) * np.var(ya, ddof=1)) / (nx + ny - 2))
-    if pooled_std == 0:
+    if pooled_std == 0 or not np.isfinite(pooled_std):
         return {"cohens_d": 0.0, "magnitude": "none", "note": "zero variance"}
     d = (np.mean(xa) - np.mean(ya)) / pooled_std
     mag = "negligible" if abs(d) < 0.2 else ("small" if abs(d) < 0.5 else ("medium" if abs(d) < 0.8 else "large"))

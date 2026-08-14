@@ -1,8 +1,7 @@
 #!/bin/bash
-# mount_model_cache.sh — Auto-mount HF model cache from host or network storage
-# Called by entrypoint.sh at container startup.
-
-set -e
+# mount_model_cache.sh — Auto-mount HF model cache from host or network storage.
+# MUST BE SOURCED (`. mount_model_cache.sh`), not executed: it exports HF_HOME etc.
+# for the calling shell and uses `return`. entrypoint.sh sources it at startup.
 
 CACHE_SOURCES=(
     "/host_cache/hf_cache"

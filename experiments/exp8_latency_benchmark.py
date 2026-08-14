@@ -168,6 +168,14 @@ def run(config: dict) -> dict:
             "latency_detail": latency_detail,
             "batch_benchmark": batch_benchmark,
             "all_batch_sizes": batch_benchmark,  # alias for paper_pipeline compatibility
+            # latency_detail.* times the full per-batch loop INCLUDING tokenization + the
+            # host->device copy (end-to-end); batch_benchmark.* times ONLY the model
+            # forward pass (pure compute, post-warmup). They measure different things and
+            # are NOT directly comparable — don't put them on the same axis.
+            "latency_methodology_note": (
+                "latency_detail=end-to-end (tokenize+H2D+forward); "
+                "batch_benchmark=forward-only (pure compute). Not directly comparable."
+            ),
         }
 
     return run_with_mode("exp8", config, run_paper)

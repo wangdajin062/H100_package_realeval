@@ -10,6 +10,14 @@ echo "║  Ollama   → http://____:11434                    ║"
 echo "║  API      → http://____:8000/docs                ║"
 echo "╚══════════════════════════════════════════════════╝"
 
+# Resolve the HF model cache (sets/export HF_HOME, TRANSFORMERS_CACHE, TORCH_HOME).
+# Must be SOURCED, not executed, so the exported vars reach the services below and so
+# the script's `return` is valid. (Previously it claimed to be called here but wasn't.)
+if [ -f /scripts/mount_model_cache.sh ]; then
+    # shellcheck disable=SC1091
+    source /scripts/mount_model_cache.sh || true
+fi
+
 # SSH
 /usr/sbin/sshd -D &
 
