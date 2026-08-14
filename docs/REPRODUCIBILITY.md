@@ -123,6 +123,8 @@ print('GPU 显存检查: 需 ≥35GB 可用')
 | `realeval` 核心模块 | ✅ | `real_backend`, `models`, `data`, `specdec`, `privacy`, `metrics`, `benchmark` 全部可用 |
 | 配置加载 | ✅ | `runpod_h100.yaml` 加载正常，profile=`runpod_1xH100_80GB` |
 
+> **本地测试解释器**：本地 `.venv` 缺 torch（pytest 会报 ModuleNotFoundError），`65 passed` 需用**系统 Python**（含 torch）运行；H100 pod 上则用 `/workspace/venv/bin/python`（`--system-site-packages` 复用镜像 torch 2.8）。两个解释器勿混淆。
+
 **结论：H100 上可以跑出所有结果。** 本机执行 `--paper` 正确报 `GPU 显存不足（11.8GB 可用，需要 35GB）`，这是预期的保护行为。
 
 ---
