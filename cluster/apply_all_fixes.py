@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """apply_all_fixes.py — Apply every root-cause fix in place, on the live workspace.
 
+.. deprecated:: 2026-08-14
+    The in-place fixes this script applied (group_split, student_loader wiring,
+    exp1 split) are now merged into the source tree itself. This script embeds
+    stale copies of that source; do not run it on a current checkout — it may
+    revert or shadow the merged fixes. Kept for historical reference only.
+
 Run from /workspace:
 
     python3 apply_all_fixes.py --check     # report only, change nothing
