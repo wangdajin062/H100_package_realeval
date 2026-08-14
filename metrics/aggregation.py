@@ -60,7 +60,8 @@ def aggregate_batch_benchmark_csv(
     """将 batch benchmark 字典转换为 latency/throughput/memory CSV 数据。
 
     Args:
-        batch_results: ``{batch_size: {latency_p50_ms, throughput_sps, peak_mem_mb}}``。
+        batch_results: ``{batch_size: {latency_p50_ms, latency_p90_ms, latency_p99_ms,
+            throughput_sps, peak_mem_mb}}``（p90/p99 由 exp8 逐次迭代耗时算出）。
 
     Returns:
         (latency_rows, throughput_rows, memory_rows)，每项为 (header, body) 元组

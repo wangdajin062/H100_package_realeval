@@ -50,14 +50,20 @@ def _load_jsonl(path: Path, max_samples: int | None = None) -> tuple[list[str], 
                 continue
             try:
                 obj = json.loads(line)
-                texts.append(obj.get("text", ""))
+                # Parse BOTH fields into locals before committing either, so a bad
+                # label never leaves an orphaned text behind — that would shift every
+                # subsequent label by one position (silent text↔label desync).
+                text = obj.get("text", "")
                 if "label" not in obj:
                     logger.warning("Missing 'label' field at line %d in %s — using -1 (unknown)", i, path.name)
-                    labels.append(-1)
+                    label = -1
                 else:
-                    labels.append(int(obj["label"]))
+                    label = int(obj["label"])
             except (json.JSONDecodeError, ValueError, TypeError) as e:
                 logger.warning("Skipping line %d in %s: %s", i, path.name, e)
+                continue
+            texts.append(text)
+            labels.append(label)
     
     # Validation: ensure minimum viable dataset
     if len(texts) < 10:

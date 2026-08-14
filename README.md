@@ -213,7 +213,8 @@ cd docs/figure_scripts && python generate_all.py
 
 - [`docs/REPRODUCIBILITY.md`](docs/REPRODUCIBILITY.md) — 完整复现路径
 - [`docs/experiment_result_contract.md`](docs/experiment_result_contract.md) — 字段对齐契约
-- [`reports/2026-08-13_full_audit.md`](reports/2026-08-13_full_audit.md) — 全量审计报告
+- [`reports/2026-08-14_full_audit.md`](reports/2026-08-14_full_audit.md) — 全量审计报告（第三轮，最新：安全 + 测量诚信 + 运维链路）
+- [`reports/2026-08-13_full_audit.md`](reports/2026-08-13_full_audit.md) / [`reports/2026-08-13_full_audit_round2.md`](reports/2026-08-13_full_audit_round2.md) — 全量审计报告（第一/二轮）
 
 ## 8. 许可证
 

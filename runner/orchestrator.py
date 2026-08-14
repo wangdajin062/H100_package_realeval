@@ -63,10 +63,16 @@ def run_selected(
             continue
         if resume:
             existing = _load_existing(entry.short)
-            if existing is not None:
+            # Only reuse a genuinely successful prior run. A result marked
+            # computation="failed" (see experiment_runner) must be re-run, not
+            # skipped — otherwise --resume would freeze the failure into
+            # all_experiments.json.
+            if existing is not None and str(existing.get("computation", "")) != "failed":
                 results[entry.short] = existing
                 logger.info("跳过 %s（已有结果）", entry.short)
                 continue
+            if existing is not None:
+                logger.info("重跑 %s（上次结果为 failed，不复用）", entry.short)
         logger.info("运行 %s：%s", entry.short, entry.description)
         results[entry.short] = run_experiment(entry.module, entry.short, config)
 

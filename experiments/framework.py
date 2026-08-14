@@ -28,6 +28,9 @@ class TextDataset:
     """文本分类数据集载体。"""
     texts: list[str]
     labels: list[int]
+    # True 表示该数据集来自合成回退（load_synthetic），而非真实语料。用于诚实标注，
+    # 避免"合成数据 + 真模型"结果以真实测量身份进入论文。
+    is_synthetic: bool = False
 
 
 @dataclass(frozen=True)
@@ -37,6 +40,7 @@ class DatasetSplit:
     train_labels: list[int]
     test_texts: list[str]
     test_labels: list[int]
+    is_synthetic: bool = False
 
 
 def configure_logging(level: int = logging.INFO) -> None:
@@ -65,14 +69,16 @@ def load_first_nonempty(
             logger.warning("Loader returned invalid data, trying next source: %s", exc)
             continue
         if texts:
-            return TextDataset(texts=texts, labels=labels)
+            return TextDataset(texts=texts, labels=labels, is_synthetic=False)
 
+    logger.warning("All real loaders empty/failed — FALLING BACK TO SYNTHETIC DATA "
+                   "(results are NOT real measurements; is_synthetic=True)")
     ds = synthetic_loader() or {}
     texts = list(ds.get("texts", []))
     labels = [int(x) for x in ds.get("labels", [])]
     if not texts:
         raise ExperimentRuntimeError("所有加载器（含合成）均返回空数据集")
-    return TextDataset(texts=texts, labels=labels)
+    return TextDataset(texts=texts, labels=labels, is_synthetic=True)
 
 
 def leakage_safe_split(
@@ -90,6 +96,7 @@ def leakage_safe_split(
         train_labels=[int(dataset.labels[i]) for i in train_idx],
         test_texts=[dataset.texts[i] for i in test_idx],
         test_labels=[int(dataset.labels[i]) for i in test_idx],
+        is_synthetic=dataset.is_synthetic,
     )
 
 

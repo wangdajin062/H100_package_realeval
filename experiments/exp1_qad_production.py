@@ -71,7 +71,9 @@ def run(config: dict) -> dict:
             "snr_max": round(float(np.mean(snr_maxs)), 2),
             "snr_note": "cross-seed mean; single-seed listed in *_list fields",
             "quantize": quantize,
-            "is_synthetic": False,
+            # Report the real data provenance instead of hard-coding False: if the loader
+            # chain fell back to synthetic data, this run is NOT a real measurement.
+            "is_synthetic": split.is_synthetic,
             "std": multi_seed_std(f1s),
             "n_seeds": n_seeds,
             "save_note": "seed-0 checkpoint saved (save_name='exp1_qad'); downstream loads this single weight" if n_seeds > 1 else None,

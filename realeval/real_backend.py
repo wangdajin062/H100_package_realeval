@@ -315,8 +315,12 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
             # Window parameter controls the strength of variance rescaling (rho sweep).
             # Align hidden dims for variance/OV-freeze when teacher ≠ student (exp10 hetero).
             ovf_loss = torch.tensor(0.0, device=dev)
-            t_var = t_last[..., :n_common].var(dim=0)
-            s_var = s_last[..., :n_common].var(dim=0)
+            # unbiased=False (population variance) so a trailing batch of size 1 yields 0,
+            # not NaN. With the default unbiased=True, var over a singleton dim divides by
+            # (n-1)=0 → NaN, which then propagates through OVF backward into the student
+            # weights and silently corrupts the model.
+            t_var = t_last[..., :n_common].var(dim=0, unbiased=False)
+            s_var = s_last[..., :n_common].var(dim=0, unbiased=False)
             drift_var = s_var
             if ovf_active and freeze_frac > 0:
                 k = max(1, min(int(t_var.numel() * freeze_frac), n_common))

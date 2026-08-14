@@ -102,8 +102,17 @@ def evaluate_claim(claim: dict, base_config: dict) -> dict:
         trace["evidence"] = {"node": node}
         ctx["measured_alpha"] = measured_alpha
         gamma = base_config.get("speculative_decoding", {}).get("gamma", 5)
-        ctx["speedup"] = ((1 - measured_alpha ** (gamma + 1)) / (1 - measured_alpha)
-                          if measured_alpha else None)
+        # Closed-form speculative speedup with the degenerate cases handled explicitly
+        # (Leviathan et al. 2023, Eq.1). `if measured_alpha` alone did not guard α=1.0,
+        # where 1-α=0 → ZeroDivisionError; and α≤0 is meaningless.
+        if measured_alpha is None:
+            ctx["speedup"] = None
+        elif measured_alpha >= 1.0:
+            ctx["speedup"] = float(gamma + 1)
+        elif measured_alpha <= 0.0:
+            ctx["speedup"] = 1.0
+        else:
+            ctx["speedup"] = (1 - measured_alpha ** (gamma + 1)) / (1 - measured_alpha)
 
     # Evaluate acceptance criteria -> PASS / FAIL / UNSUPPORTED
     verdicts = []
@@ -257,15 +266,27 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     summary = []
     for yml in sorted(CLAIMS.glob("claim_*.yaml")):
-        claim = yaml.safe_load(yml.read_text())
+        claim = yaml.safe_load(yml.read_text(encoding="utf-8"))
         if "experiment" not in claim:
             logger.warning("Skipping %s: legacy format (no 'experiment' key), use runner/claim_runner.py", yml.name)
             continue
         if args.claim and claim["id"] != args.claim:
             continue
-        trace = evaluate_claim(claim, base)
-        (OUT / f"{claim['id']}.json").write_text(json.dumps(trace, indent=2, ensure_ascii=False, default=str))
-        summary.append((claim["id"], trace["conclusion"], claim["hypothesis"]))
+        # Per-claim isolation: a claim that raises (e.g. pre_run_validation in a no-GPU
+        # environment) must degrade to an UNSUPPORTED trace with the error recorded — as
+        # promised by claim_03 and the engine docstring — and must NOT take down the
+        # remaining claims with an un-caught traceback.
+        try:
+            trace = evaluate_claim(claim, base)
+        except Exception as exc:  # noqa: BLE001 — surface any failure as UNSUPPORTED evidence
+            logger.warning("[%s] evaluation raised %s: %s — recording UNSUPPORTED",
+                           claim.get("id", yml.name), type(exc).__name__, exc)
+            trace = {"claim": claim.get("id", yml.name), "experiment": claim.get("experiment"),
+                     "conclusion": "UNSUPPORTED", "error": f"{type(exc).__name__}: {exc}"}
+        cid = claim.get("id", yml.stem)
+        (OUT / f"{cid}.json").write_text(
+            json.dumps(trace, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+        summary.append((cid, trace.get("conclusion", "UNSUPPORTED"), claim.get("hypothesis", "")))
 
     print("\n=== Claim verdicts (Evidence -> Conclusion) ===")
     for cid, verdict, hyp in summary:

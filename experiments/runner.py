@@ -90,17 +90,26 @@ def _handle_standalone_checks(args) -> bool:
             sys.exit(2)
         return True
 
-    if args.benchmark:
-        from realeval import benchmark
-        import torch
-        import torch.nn as nn
-        model = nn.Sequential(nn.Linear(64, 128), nn.ReLU(), nn.Linear(128, 2))
-        r = benchmark.benchmark(model, torch.randn(64), warmup=10, repeat=100, batch_sizes=(1, 16, 64))
-        s = benchmark.summary(r)
-        print("Benchmark summary:", s)
+    # --benchmark is a standalone device sanity benchmark ONLY when no experiments were
+    # requested. When combined with --exp (as cluster/launch.sh, slurm, and the API do:
+    # `--exp all --paper --resume --benchmark`), it must NOT short-circuit — the
+    # experiments run first, then the benchmark runs after them (see main()).
+    if args.benchmark and args.exp is None and args.experiments is None:
+        _run_device_benchmark()
         return True
 
     return False
+
+
+def _run_device_benchmark() -> None:
+    """Toy device throughput benchmark (nn.Linear); a GPU/runtime sanity signal."""
+    from realeval import benchmark
+    import torch
+    import torch.nn as nn
+    model = nn.Sequential(nn.Linear(64, 128), nn.ReLU(), nn.Linear(128, 2))
+    r = benchmark.benchmark(model, torch.randn(64), warmup=10, repeat=100, batch_sizes=(1, 16, 64))
+    s = benchmark.summary(r)
+    print("Benchmark summary:", s)
 
 
 def _resolve_experiment_selection(args) -> list[str]:
@@ -168,6 +177,10 @@ def main() -> int:
         aggregate=True,
     )
     logger.info("实验完成：%s", list(results.keys()))
+    # --benchmark alongside --exp: run the device benchmark AFTER experiments,
+    # instead of short-circuiting the whole run (see _handle_standalone_checks).
+    if args.benchmark:
+        _run_device_benchmark()
     logger.info("结果已保存至 outputs/results/。运行 'python -m experiments.runner --report' 生成论文表格/图像。")
     return 0
 
