@@ -84,9 +84,9 @@ elif [ -f venv/bin/activate ]; then
 fi
 
 echo "[run_all] Installing RealEval..."
-pip install -e /workspace/repo 2>/dev/null || pip install -e . 2>/dev/null || {
+pip install -e /workspace/H100_package_realeval 2>/dev/null || pip install -e . 2>/dev/null || {
     echo "[run_all] WARNING: pip install -e . failed, continuing with PYTHONPATH"
-    export PYTHONPATH="${REPO_DIR:-/workspace/repo}:${PYTHONPATH:-}"
+    export PYTHONPATH="${REPO_DIR:-/workspace/H100_package_realeval}:${PYTHONPATH:-}"
 }
 
 if [ "$SETUP_ONLY" = "1" ]; then

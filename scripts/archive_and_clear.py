@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from realeval.io.archive import archive_if_needed, build_archive_markdown, clear_outputs
+from realeval.io.archive import _has_results, archive_if_needed, build_archive_markdown, clear_outputs
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 log = logging.getLogger("archive_and_clear")
@@ -32,6 +32,11 @@ def main() -> int:
     ap.add_argument("--archive-only", action="store_true", help="仅写 Markdown，跳过清理")
     ap.add_argument("--force", action="store_true", help="即使无结果也强制执行")
     args = ap.parse_args()
+
+    # --force 接线（审计 P3：此前 --force 定义但未使用）。无结果且未指定 --force 时跳过。
+    if not args.force and not _has_results():
+        log.info("outputs/results/ 中无实验结果，未指定 --force，跳过归档与清理。")
+        return 0
 
     date_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     date_tag = datetime.now().strftime("%Y-%m-%d_%H%M%S")

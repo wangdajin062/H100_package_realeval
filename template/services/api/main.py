@@ -18,7 +18,7 @@ app = FastAPI(
 )
 
 WORKSPACE = Path(os.environ.get("REALEVAL_OUTPUT_ROOT", "/workspace/outputs"))
-REPO = Path("/workspace/repo")
+REPO = Path("/workspace/H100_package_realeval")
 
 
 # ─── Auth ───
@@ -149,7 +149,7 @@ async def gpu_status():
 async def run_experiments(req: ExperimentRequest):
     """Trigger an experiment run."""
     if not (REPO / "experiments" / "runner.py").exists():
-        raise HTTPException(status_code=400, detail="RealEval repo not found at /workspace/repo")
+        raise HTTPException(status_code=400, detail="RealEval repo not found at /workspace/H100_package_realeval")
 
     run_id = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     args = [
@@ -173,7 +173,7 @@ async def run_experiments(req: ExperimentRequest):
     return RunResponse(run_id=run_id, status="running", started_at=datetime.utcnow().isoformat())
 
 
-@app.get("/experiments/status/{run_id}")
+@app.get("/experiments/status/{run_id}", dependencies=[Depends(require_token)])
 async def experiment_status(run_id: str):
     """Check experiment run status."""
     log_file = WORKSPACE / f"run_{run_id}.log"

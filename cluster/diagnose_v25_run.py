@@ -406,7 +406,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo-root", type=Path,
                     default=Path("/workspace/H100_package_realeval"))
-    ap.add_argument("--results-dir", type=Path, default=Path("results"))
+    ap.add_argument("--results-dir", type=Path, default=Path("/workspace/H100_package_realeval/outputs/results"))
     ap.add_argument("--data-root", type=Path, default=Path("/workspace/data"))
     ap.add_argument("--target", default="Qwen/Qwen2.5-0.5B-Instruct")
     ap.add_argument("--draft",  default="Qwen/Qwen2-0.5B")

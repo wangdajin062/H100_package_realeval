@@ -81,18 +81,12 @@ def resolve_adapter(variant: str, config: dict | None = None,
     per_variant = ADAPTER_ROOT / variant
     if _is_adapter_dir(per_variant):
         return per_variant
-    # No adapter dir for this variant. Falling back to the newest checkpoint under
-    # ADAPTER_ROOT can silently attach the WRONG variant's adapter. Do it only with a
-    # loud warning so a mismatched adapter never passes unnoticed (the caller's
-    # require_assets / AssetsUnavailable handling stays in charge of hard failures).
-    fallback = _latest_checkpoint(ADAPTER_ROOT)
-    if fallback is not None:
-        logger.warning(
-            "No adapter dir for variant %r under %s; falling back to latest checkpoint %s "
-            "— verify this is the intended adapter for this variant.",
-            variant, ADAPTER_ROOT, fallback,
-        )
-    return fallback
+    # No adapter dir for this variant: return None so the caller raises instead of
+    # attaching the WRONG variant's newest checkpoint. (Falling back to the latest
+    # checkpoint here silently swapped the failure mode from "base used as finetuned"
+    # to "wrong adapter attached" — audit P2-12.)
+    logger.warning("No adapter dir for variant %r under %s; no fallback (returning None)", variant, ADAPTER_ROOT)
+    return None
 
 
 def attach_adapter(model, variant: str = "base", config: dict | None = None,
