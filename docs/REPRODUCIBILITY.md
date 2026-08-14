@@ -50,7 +50,7 @@ pip install -r requirements.txt
 | CUDA | 12.x（论文级运行需要 H100 SXM5 80GB；实测 12.8） |
 | 磁盘 | ≥ 100 GB（模型权重 + 数据集） |
 
-**RunPod H100 实测环境**（2026-08-03，pod `mhypfkvge474n8`，镜像 `runpod/pytorch:2.8.0`）：
+**RunPod H100 实测环境**（2026-08-03，镜像 `runpod/pytorch:2.8.0`）：
 
 | 组件 | 版本 |
 |------|------|

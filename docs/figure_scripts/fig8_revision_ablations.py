@@ -7,7 +7,7 @@ three new quantitative results introduced during the revision rounds.
 
   (a) Heterogeneous vs homogeneous quantization ablation        [Sec 3.2.3, M3]
   (b) AdvFraud-3k curated-subset vs full-pool robustness        [Sec 4,     M4]
-  (c) epsilon-LDP privacy-utility trade-off                     [Sec 5,     B3]
+  (c) Gaussian-noise robustness sweep (not certified DP)          [Sec 5,     B3]
 
 Data flows from experiments through paper_data (FIG8_QUANT / FIG8_ADVFRAUD /
 FIG8_LDP). Hardcoded fallbacks match paper1_en_v9.tex. Any change requires
@@ -62,7 +62,7 @@ def main():
     ax = axes[0]
     q = DATA["quant"]
     x = np.arange(len(q["labels"]))
-    bars = ax.bar(x, q["f1"], width=0.55,
+    bars = ax.bar(x, _plot_vals(q["f1"]), width=0.55,
                   color=[C_SECOND, C_PRIMARY], edgecolor="black", linewidth=0.6)
     ax.axhline(q["bf16_ref"], color=C_REF, ls="--", lw=1.0,
                label=f"BF16 baseline ({q['bf16_ref']:.3f})")
@@ -73,9 +73,10 @@ def main():
     ax.set_ylabel(r"TAF-28k $F_1$")
     ax.set_title("(a) Quantization scheme", weight="bold")
     ax.legend(loc="lower left", frameon=False)
-    ax.annotate(f"+{q['delta']:.3f}\n($p<0.05$)",
-                xy=(1, q["f1"][1]), xytext=(0.5, 0.917),
-                ha="center", fontsize=7.5, color=C_PRIMARY)
+    if q["delta"] is not None and q["f1"][1] is not None:
+        ax.annotate(f"+{q['delta']:.3f}\n($p<0.05$)",
+                    xy=(1, q["f1"][1]), xytext=(0.5, 0.917),
+                    ha="center", fontsize=7.5, color=C_PRIMARY)
 
     # ---- Panel (b): AdvFraud curated vs full pool ------------------------ #
     ax = axes[1]
@@ -93,7 +94,7 @@ def main():
     ax.set_title("(b) AdvFraud-3k: curated vs full pool", weight="bold")
     ax.legend(loc="lower left", frameon=False)
 
-    # ---- Panel (c): epsilon-LDP privacy-utility trade-off ---------------- #
+    # ---- Panel (c): Gaussian-noise robustness sweep (not certified DP) --------- #
     ax = axes[2]
     l = DATA["ldp"]
     x = np.arange(len(l["labels"]))
@@ -106,7 +107,7 @@ def main():
     ax.tick_params(axis="y", labelcolor=C_PRIMARY)
     ax.set_xticks(x)
     ax.set_xticklabels(l["labels"])
-    ax.set_title(r"(c) $\epsilon$-LDP privacy-utility", weight="bold")
+    ax.set_title(r"(c) Gaussian-noise robustness (not certified DP)", weight="bold")
 
     ax2 = ax.twinx()
     bars2 = ax2.bar(x + w / 2, l["latency"], width=w, color=C_LAT,
@@ -140,9 +141,11 @@ def main():
     print("(b) advfraud: full-pool F1 =", DATA["advfraud"]["f1"][0],
           "| curated-517 F1 =", DATA["advfraud"]["f1"][1],
           "| BF16 matched =", DATA["advfraud"]["bf16_matched"])
-    print("(c) ldp     : F1 no-LDP =", DATA["ldp"]["f1"][0],
-          "-> eps-LDP =", DATA["ldp"]["f1"][1],
-          "(drop", round(DATA["ldp"]["f1"][0] - DATA["ldp"]["f1"][1], 3), ")",
+    ldp_f0, ldp_f1 = DATA["ldp"]["f1"][0], DATA["ldp"]["f1"][1]
+    drop = round(ldp_f0 - ldp_f1, 3) if (ldp_f0 is not None and ldp_f1 is not None) else None
+    print("(c) ldp     : F1 no-LDP =", ldp_f0,
+          "-> eps-LDP =", ldp_f1,
+          "(drop", drop, ")",
           "| latency", DATA["ldp"]["latency"][0], "->", DATA["ldp"]["latency"][1], "ms")
 
 

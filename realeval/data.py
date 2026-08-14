@@ -231,6 +231,9 @@ def verification_features(labels, n_features=128, seed=42, overlap=0.9):
     """
     import numpy as np
     y = np.asarray(labels)
+    # Drop unknown labels (-1) so they are not silently indexed as the fraud class
+    # (centres[-1] == centres[1] == the fraud centre — a latent mislabel, audit P3).
+    y = y[y != -1]
     rng = np.random.RandomState(seed)
     centres = rng.randn(2, n_features) * 0.6
     X = np.stack([centres[int(t)] + rng.randn(n_features) * overlap for t in y]).astype(np.float32)
@@ -421,6 +424,29 @@ def load_text_corpus(name: str, max_samples: int | None = None) -> dict:
         logger.error("Unknown text corpus %r — available: %s", name, sorted(loader_map))
         return {"texts": [], "labels": [], "embeddings": None, "speaker_labels": None, "source": None}
     return loader(max_samples)
+
+
+def has_local_data(name: str) -> bool:
+    """Return True if the dataset's local data file(s) exist.
+
+    Used by ``pre_run_validation`` (audit P1-M2) to fail early when a real dataset's
+    files are missing instead of silently falling back to synthetic data.
+    """
+    name = str(name).strip().lower()
+    root = _data_root()
+    checks = {
+        "advfraud": [root / "AdvFraud3k" / "advfraud3k.jsonl"],
+        "advfraud3k": [root / "AdvFraud3k" / "advfraud3k.jsonl"],
+        "balanced4k": [root / "balanced4k" / "balanced4k.jsonl"],
+        "chifraud": [root / "ChiFraud" / "chifraud.jsonl"],
+        "taf28k": [root / "TAF28k" / "taf28k.jsonl", root / "TAF28k" / "taf28k.npz"],
+        "taf28k_npz": [root / "TAF28k" / "taf28k.npz"],
+        "spam11358": [root / "spam11358" / "spam11358.jsonl"],
+    }
+    paths = checks.get(name)
+    if paths is None:
+        return True  # unknown/other dataset: don't block on it
+    return any(p.exists() for p in paths)
 
 
 def load_dataset(name: str = "balanced4k", max_samples: int | None = None, **kwargs) -> dict:

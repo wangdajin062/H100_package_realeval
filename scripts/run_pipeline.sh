@@ -7,7 +7,7 @@
 #
 # 在 RunPod H100 上以 detached 方式执行，输出重定向到启动日志。
 
-set -uo pipefail
+set -euo pipefail
 cd /workspace/H100_package_realeval
 
 # Data lives on the pod's persistent volume at /workspace/data (matches the Dockerfile

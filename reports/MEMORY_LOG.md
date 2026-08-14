@@ -52,3 +52,18 @@
 - 遗留：
   - `outputs/results/` 仍为空，论文数字需 H100 重跑回填。
   - P3 纯清理类（aggregation.py 零调用函数、audit.py runlog 空转等）未逐一处理。
+
+## 2026-08-14 [第三轮审计修复复查（只读复核）]
+
+- 目标：逐项核对第三轮审计（reports/2026-08-14_full_audit.md）P0/P1/P2/P3 修复是否真实落地。
+- 完成：五路并行复核约 50 个条目，对照当前工作树实际代码（非提交信息）。基线：pytest 65 passed、consistency_check 正常、工作树干净（HEAD 7b3d750）。
+- 验证结论：关键修复全部真实落地、无虚报；发现 8 处不完整/遗漏——
+  1. P1-M2 半修：pre_run_validation 数据来源断言未实现，13/14 实验仍不记录数据来源；
+  2. fig8_revision_ablations.py:145（审计点名处）+ :65/:76 None 守卫漏修，缺结果数据态必崩；
+  3. 呈现层未跟进：contract.py:105 仍列 demo 字段为 MEASURED；fig6 "Perplexity"、fig8 "ε-LDP" 误导标签保留；
+  4. P1-O6 teacher_3b 关在 STAGE_LARGE=1 闸门内，默认部署路径不下载；
+  5. P1-O2 run_pipeline.sh 未补 set -e，依赖/下载失败仍可假成功；
+  6. P1-S2 残留：REPRODUCIBILITY.md:53 真实 pod ID mhypfkvge474n8 未清；
+  7. P3 半修：data.py:236 的 -1 标签 fraud 中心索引未动；privacy.py RandomState(0) 固定噪声保留；
+  8. P2-13 原子写未做（serialization.py 仍 write_text 直写）。
+- 遗留：低危项——/experiments/status/{run_id} 无认证探测；template 栈内 /workspace/repo 引用残留；archive_and_clear.py --force 未接线；diagnose_v25_run.py:409 默认路径错；P2-12 错 adapter 仅 warning。

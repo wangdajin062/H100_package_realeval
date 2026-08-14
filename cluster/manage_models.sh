@@ -57,12 +57,14 @@ manage_model "Qwen/Qwen2.5-0.5B-Instruct" "$MODELS_ROOT/Qwen/Qwen2.5-0.5B-Instru
 # list fetched Qwen2.5-0.5B (base), which no config field references.
 manage_model "Qwen/Qwen2-0.5B"            "$MODELS_ROOT/Qwen/Qwen2-0.5B"
 manage_model "openai/whisper-tiny"        "$MODELS_ROOT/openai/whisper-tiny"
+# teacher_3b (exp10 intermediate teacher scale, config experiments.yaml:16) — must be in
+# the DEFAULT download list: exp10 needs it and the default deploy path (setup_runpod.sh /
+# run_all.sh) does not set STAGE_LARGE, so gating it there forced a network re-fetch.
+manage_model "Qwen/Qwen2.5-3B-Instruct"   "$MODELS_ROOT/Qwen/Qwen2.5-3B-Instruct"
 
 if [ "${STAGE_LARGE:-0}" = "1" ]; then
-    echo "  [STAGE_LARGE] $ACTION_ING 1.5B/3B/7B for teacher-scale ablation..."
+    echo "  [STAGE_LARGE] $ACTION_ING 1.5B/7B for teacher-scale ablation..."
     manage_model "Qwen/Qwen2.5-1.5B-Instruct" "$MODELS_ROOT/Qwen/Qwen2.5-1.5B-Instruct"
-    # teacher_3b (exp10) — was missing, forcing a network re-fetch at run time.
-    manage_model "Qwen/Qwen2.5-3B-Instruct"   "$MODELS_ROOT/Qwen/Qwen2.5-3B-Instruct"
     manage_model "Qwen/Qwen2.5-7B-Instruct"   "$MODELS_ROOT/Qwen/Qwen2.5-7B-Instruct"
 fi
 

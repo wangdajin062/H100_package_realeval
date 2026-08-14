@@ -99,10 +99,9 @@ EXPECTED_FIELDS: dict[str, list[tuple[str, ...]]] = {
         ("pii_report",),
         ("asv_eer_pct",),
         ("speaker_id_accuracy",),
-        # Present but DEMO-only until a real embedding proj_fn is wired (see exp7
-        # glo_reconstruction_is_demo / note). Kept here as a presence check, not an
-        # endorsement that it is an independent measurement (P1-M4).
-        ("glo_reconstruction_corr",),
+        # glo_reconstruction_corr is DEMO-only (random projection, no real proj_fn) —
+        # deliberately NOT listed here so it is never validated as a MEASURED field
+        # (P1-M4). See exp7 glo_reconstruction_is_demo / note.
         ("n_speakers",),
     ],
     "exp8": [

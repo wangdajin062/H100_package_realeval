@@ -132,6 +132,19 @@ def pre_run_validation(config: dict[str, Any], exp_id: str) -> None:
         )
     logger.info("%s：模型资产检查通过", exp_id)
 
+    # P1-M2: 数据来源断言——真实数据集本地文件缺失时提前失败，避免静默回退
+    # 合成数据、结果以真实测量身份上报。
+    dataset_name = config.get("data", {}).get("dataset", "taf28k")
+    if dataset_name and str(dataset_name).strip().lower() != "synthetic":
+        from realeval import data as realeval_data
+        if not realeval_data.has_local_data(dataset_name):
+            raise ExperimentRuntimeError(
+                f"{exp_id}：数据集 {dataset_name} 本地数据不可用。"
+                "请确认数据挂载点（/workspace/data），或显式配置 data.dataset=synthetic。"
+                "（避免静默回退合成数据，审计 P1-M2）"
+            )
+    logger.info("%s：数据来源检查通过（%s）", exp_id, dataset_name)
+
 
 def run_with_mode(
     exp_id: str,

@@ -84,7 +84,7 @@ for r, v in zip(ratios, f1b):
 axP = axR.twinx()
 axP.plot(ratios, ppl, color=ps.PALETTE["secondary"], lw=1.3, ls="--",
          marker="s", ms=4, label="PPL")
-axP.set_ylabel("Perplexity (PPL)", color=ps.PALETTE["secondary"])
+axP.set_ylabel("KL-derived pseudo-PPL", color=ps.PALETTE["secondary"])
 axP.set_ylim(8.55, 8.80)
 axP.tick_params(axis="y", colors=ps.PALETTE["secondary"])
 axP.grid(False)

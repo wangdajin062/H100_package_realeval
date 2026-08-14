@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -87,6 +88,27 @@ def load_config(path: str | Path | None = None) -> dict[str, Any]:
     return _resolve_env_overrides(cfg)
 
 
+def _atomic_write(path: Path, text: str) -> None:
+    """Atomically write *text* to *path*.
+
+    Writes to a temp file in the same directory then ``os.replace`` (atomic on
+    POSIX and Windows) so a crash mid-write never leaves a truncated JSON behind
+    (audit P2-13).
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def save_results(exp_short: str, result: dict[str, Any]) -> Path:
     """将单次实验结果保存为带时间戳的 JSON 文件。
 
@@ -98,11 +120,11 @@ def save_results(exp_short: str, result: dict[str, Any]) -> Path:
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     path = get_results_dir() / f"{exp_short}_{ts}.json"
     text = json.dumps(result, ensure_ascii=False, indent=2, default=str)
-    path.write_text(text, encoding="utf-8")
+    _atomic_write(path, text)
 
     pred_dir = PREDICTIONS
     pred_dir.mkdir(parents=True, exist_ok=True)
-    (pred_dir / f"{exp_short}_{ts}.json").write_text(text, encoding="utf-8")
+    _atomic_write(pred_dir / f"{exp_short}_{ts}.json", text)
 
     logger.debug("结果已保存：%s", path)
     return path
@@ -127,9 +149,9 @@ def save_all_results(all_results: dict[str, dict[str, Any]]) -> Path:
             existing = {}
 
     merged = {**existing, **all_results}
-    ALL_EXPERIMENTS_FILE.write_text(
+    _atomic_write(
+        ALL_EXPERIMENTS_FILE,
         json.dumps(merged, ensure_ascii=False, indent=2, default=str),
-        encoding="utf-8",
     )
     logger.info("全量实验结果已写入：%s（共 %d 个实验）", ALL_EXPERIMENTS_FILE, len(merged))
     return ALL_EXPERIMENTS_FILE

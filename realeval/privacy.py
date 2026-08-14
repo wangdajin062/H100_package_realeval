@@ -172,7 +172,7 @@ def asv_eer_open_set(embeddings, speaker_labels, *, n_enroll_utt=3, seed=42,
             "protocol": "open-set (enroll/trial disjoint, cross-speaker impostor)"}
 
 
-def gaussian_ldp(X, *, epsilon=1.5, delta=1e-5, noise_multiplier=1.0, clip_bound=3.0):
+def gaussian_ldp(X, *, epsilon=1.5, delta=1e-5, noise_multiplier=1.0, clip_bound=3.0, seed=None):
     """Apply a real (epsilon, delta)-DP Gaussian mechanism to features X.
 
     The sensitivity must be DATA-INDEPENDENT for a valid DP guarantee (a data-dependent range like
@@ -185,5 +185,7 @@ def gaussian_ldp(X, *, epsilon=1.5, delta=1e-5, noise_multiplier=1.0, clip_bound
     Xc = np.clip(X, -clip_bound, clip_bound)          # data-independent clipping
     sensitivity = 2.0 * clip_bound                     # fixed L-inf sensitivity (prior bound, not data)
     noise_std = noise_multiplier * sensitivity * np.sqrt(2.0 * np.log(1.25 / delta)) / max(epsilon, 1e-6)
-    rng = np.random.RandomState(0)
+    # seed=None → use the global (non-fixed) RNG; pass a seed for reproducible noise.
+    # (A hardcoded RandomState(0) made the "noise" identical on every call — audit P3.)
+    rng = np.random.RandomState(seed) if seed is not None else np.random
     return Xc + rng.normal(0.0, noise_std, Xc.shape)
