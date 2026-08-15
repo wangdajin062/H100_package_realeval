@@ -81,3 +81,22 @@
   - **H100 实测与论文数字严重不符**（`Desktop/RunPod_H100_20260803.md`）：exp1 QAD 实测 0.7974（论文 0.916）、exp3 OVF 0.5577（论文 0.923）、exp14 Q4_K_M 0.7025（论文 0.917）、α 0.468（论文 0.78）；CoT 实测 with_cot F1=0.035（论文声称 CoT 有效，需改写为「0.5B CoT 无判别力」）。
   - **决策：实验待补跑（exp5/8/10 Pod 中断），论文暂用历史值（0.9 级），预期 F1 0.9 以上。** 补跑后需回填 paper_data.py fallback 与论文数字，并重做一致性核对。
   - paper_data.py 的 fallback 仍为旧值（0.7974/0.7025），实验补跑出 0.9+ 后需同步更新。
+
+---
+
+## 2026-08-15 [脚本 bug 修复 + 论文据实标注（Claim–Evidence 对齐）]
+
+- 目标：审计补跑脚本是否对齐论文方法/指标且无 bug，并据实标注论文中「常量当实测」的数字。
+- 完成：
+  - 脚本 bug 修复（提交 `a38a4cd`，4 个 bug）：
+    1. `test_ratio=0.2` 显式传参（exp4/9/10/11/12 共 5 处）→ 0.1，对齐 8:1:1（此前只改默认值、漏了显式调用）。
+    2. exp2 `loss_specs` 补 pure_kl 分支：原 `kl_only` 误用 `loss_fn="kl"`（CE+KL），现 `kl_only=pure_kl`、新增 `kl_task=kl` 独立分支。
+    3. exp1 显式设 `loss_fn="pure_kl"`（论文 Table 3 QAD 0.916 是纯 KL 产物）。
+    4. exp3 显式设 `loss_fn="pure_kl"`（论文 Table 4 QAD+OVF 0.923 是纯 KL+OVF）。
+  - 论文据实标注（v27.tex，4 项）：exp6 α（domain-tuned 0.86 为 cited、generic 实测 0.468）、exp7 WER（reference estimates、脚本 not_measured）、exp8 268ms（端到端估计、per-token 46.47ms 口径不同）、exp12 240MB（纯权重、实际文件 491.4MB）。
+  - 图脚本命名重构（提交 `f7c87fb`）：EXP 常量重命名对齐实际 exp 编号（EXP01_QUANT_QUALITY→PTQ_BASELINES 等 6 个）、注释 Figure 编号对齐 fig5-8 重命名。
+- 验证：pytest 65 passed；py_compile 通过；check_alignment 正常报 MISSING（outputs 空）。
+- 关键结论：**修复前补跑脚本跑的是「CE+KL + 20% test」，根本不是论文声称的「纯 KL + 8:1:1」——之前实测 0.43/0.70 的低值有一部分是方法未对齐导致。修复后补跑才真正对齐论文方法，此时数字才有意义（若仍 0.4/0.7 则论文虚报，需据实修订头条）。**
+- 遗留：
+  - 仍缺脚本：exp6 域调 draft 微调、exp7 音频重建管道（WER/PESQ/STOI/MOS 实测）、exp8 端侧延迟实测。
+  - `outputs/results/` 仍为空，补跑后需回填 paper_data fallback 与论文数字，并重做一致性核对。
