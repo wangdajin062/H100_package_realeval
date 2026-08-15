@@ -41,7 +41,8 @@ def _resolve(path: str) -> str | None:
 
 
 def load_causal_lm(path: str, *, quantize: str = None, bf16: bool = True,
-                   compile_model: bool = False, device: str = None):
+                   compile_model: bool = False, device: str = None,
+                   load_tokenizer: bool = True):
     """Load causal LM. Returns (model, tokenizer) or (None, None) (when unavailable).
 
     quantize: None | 'int4' (bitsandbytes 4-bit) | 'int8'
@@ -101,7 +102,7 @@ def load_causal_lm(path: str, *, quantize: str = None, bf16: bool = True,
         logger.warning("Unknown quantize scheme %r; loading at %s (no quantization applied)", quantize, dtype)
 
     try:
-        tok = AutoTokenizer.from_pretrained(resolved)
+        tok = AutoTokenizer.from_pretrained(resolved) if load_tokenizer else None
         model = AutoModelForCausalLM.from_pretrained(resolved, **kwargs)
         if "device_map" not in kwargs:
             model = model.to(dev)

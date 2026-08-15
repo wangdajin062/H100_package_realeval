@@ -26,7 +26,6 @@ if not _ADAPTER_ROOT_DEFAULT.is_dir() and not any(os.environ.get(m) for m in
     from realeval.io.paths import OUTDIR
     _ADAPTER_ROOT_DEFAULT = OUTDIR / "sft_checkpoints"
 ADAPTER_ROOT = Path(os.environ.get("REALEVAL_ADAPTER_ROOT", str(_ADAPTER_ROOT_DEFAULT)))
-BASE_MODEL_DEFAULT = "Qwen/Qwen2.5-0.5B-Instruct"
 
 
 def _is_adapter_dir(p: Path) -> bool:
@@ -112,40 +111,3 @@ def attach_adapter(model, variant: str = "base", config: dict | None = None,
         model = model.merge_and_unload()
         print("[student_loader] adapter merged")
     return model
-
-
-def load_student(config: dict | None = None, variant: str = "base",
-                 quantize=None, adapter_path=None, base_model=None, merge: bool = True):
-    """Load base + adapter in one call. Returns (model, tokenizer)."""
-    import torch
-    from transformers import AutoModelForCausalLM, AutoTokenizer
-
-    base_id = (base_model or (config or {}).get("models", {}).get("teacher")
-               or BASE_MODEL_DEFAULT)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-
-    kwargs = {"torch_dtype": torch.bfloat16}
-    if quantize in ("int4", "nf4"):
-        from transformers import BitsAndBytesConfig
-        kwargs["quantization_config"] = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_quant_type="nf4" if quantize == "nf4" else "fp4",
-            bnb_4bit_compute_dtype=torch.bfloat16)
-        kwargs["device_map"] = {"": 0} if device == "cuda" else "cpu"
-    elif quantize == "int8":
-        from transformers import BitsAndBytesConfig
-        kwargs["quantization_config"] = BitsAndBytesConfig(load_in_8bit=True)
-        kwargs["device_map"] = {"": 0} if device == "cuda" else "cpu"
-    elif quantize == "fp32":
-        kwargs["torch_dtype"] = torch.float32
-
-    tok = AutoTokenizer.from_pretrained(base_id)
-    if tok.pad_token is None:
-        tok.pad_token = tok.eos_token
-    model = AutoModelForCausalLM.from_pretrained(base_id, **kwargs)
-    if "device_map" not in kwargs:
-        model = model.to(device)
-
-    model = attach_adapter(model, variant, config, adapter_path, merge, quantize)
-    model.eval()
-    return model, tok

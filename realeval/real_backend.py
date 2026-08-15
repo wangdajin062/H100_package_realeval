@@ -110,11 +110,11 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
     _require(teacher is not None, "Teacher model loading failed")
     for p in teacher.parameters():
         p.requires_grad_(False)
-    teacher.eval()
+    # teacher is already in eval mode from load_causal_lm; freezing is done above.
 
     # ── Load student (quantised) ──
     student_model_id = config["models"].get("student", teacher_model_id)
-    student, _ = models.load_causal_lm(student_model_id, quantize=quantize, bf16=True)
+    student, _ = models.load_causal_lm(student_model_id, quantize=quantize, bf16=True, load_tokenizer=False)
     _require(student is not None, "Student model loading failed")
     student.train()
 

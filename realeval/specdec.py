@@ -45,7 +45,7 @@ def diagnostic_B(config: dict, texts: list[str], *, gamma=5, n_samples=20) -> di
     require_assets(models.models_available(config), "Real Qwen weights unavailable")
     target, tok = models.load_causal_lm(config["models"]["teacher"], bf16=True)
     draft_path = config["models"].get("draft_model")
-    draft, _ = models.load_causal_lm(draft_path, bf16=True)
+    draft, _ = models.load_causal_lm(draft_path, bf16=True, load_tokenizer=False)
     require_assets(target is not None and draft is not None, "draft/target loading failed")
     dev = next(target.parameters()).device
 
