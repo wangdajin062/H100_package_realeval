@@ -66,3 +66,18 @@
   - c720f83：status 端点补认证、/workspace/repo 引用改齐、--force 接线、diagnose 默认路径改绝对路径、student_loader 错 variant 改返回 None 硬失败——全部在位。
 - 验证：pytest 65 passed；consistency_check exit 0；工作树干净（HEAD c720f83）。
 - 遗留：第三轮审计及其复查的所有点名项已闭环；剩余仅 MEMORY_LOG 此前声明的 P3 纯清理类（aggregation.py 零调用函数、audit.py runlog 空转）与 outputs/results 需 H100 重跑回填。
+
+## 2026-08-15 [论文 v26→v27 重构 + ESWA 顶刊强化 + H100 实测核对]
+
+- 目标：以 v26.tex 为初稿做主线化重构，按 ESWA 顶刊标准强化，并与 H100 实测结果做 Claim–Evidence 一致性核对。
+- 完成：
+  - 论文 v25→v26→v27 修订（`C:\Users\wangd\Downloads\`，无 git）：
+    - v26：立论重构（三约束 privacy/fidelity/responsiveness ↔ 四组件）、数字修正（α→0.78/0.86、speaker 10→11、OVF 窗口 30%→20%）、消融标准步骤、诚实标注（draft 0.1B→0.5B、融合双模态）。
+    - v27：端/云区分（on-device 0.917@268ms vs cloud NVFP4+CoT 0.923）、融合四模态→双模态（w=[0.40,0.30]）、spec-dec 归位云端 CoT、删除 LoRA/4-tuple/fig4/CPU复现、数字修正（PTQ 7.1–8.5pp、57×、3 scalars）、英式拼写统一。
+    - 顶刊强化：四大维度（模态边界澄清、边云冲突仲裁、OVF 协同解析、同源蒸馏优势）+ 7 项分章节建议 + P0/P1 审稿修复（附录 A.2 收敛证明降级为「有界梯度重缩放」、LDP 降级、PIPL 弱化、fusion CV 澄清、统计检验规范、Blackwell「targeted for deployment」口径）。
+  - 图脚本序号对齐论文 v27（删 fig4、fig5–8 循环重命名），提交 `641a021`/`c863ed6`/`e694216`；融合权重对齐 2 模态（提交 `b805ff4`）。
+- 验证：v27.tex 结构配对完整（equation 13/13、figure 7/7、table 7/7）；图脚本重命名后无残留旧引用。
+- 遗留（重要）：
+  - **H100 实测与论文数字严重不符**（`Desktop/RunPod_H100_20260803.md`）：exp1 QAD 实测 0.7974（论文 0.916）、exp3 OVF 0.5577（论文 0.923）、exp14 Q4_K_M 0.7025（论文 0.917）、α 0.468（论文 0.78）；CoT 实测 with_cot F1=0.035（论文声称 CoT 有效，需改写为「0.5B CoT 无判别力」）。
+  - **决策：实验待补跑（exp5/8/10 Pod 中断），论文暂用历史值（0.9 级），预期 F1 0.9 以上。** 补跑后需回填 paper_data.py fallback 与论文数字，并重做一致性核对。
+  - paper_data.py 的 fallback 仍为旧值（0.7974/0.7025），实验补跑出 0.9+ 后需同步更新。

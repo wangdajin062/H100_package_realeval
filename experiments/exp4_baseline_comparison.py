@@ -13,7 +13,7 @@ def run(config: dict) -> dict:
         loaders=[lambda: data.load_chifraud_balanced()],
         synthetic_loader=lambda: data.load_synthetic(n=200),
     )
-    split = leakage_safe_split(ds, test_ratio=0.2, seed=42)
+    split = leakage_safe_split(ds, test_ratio=0.1, seed=42)
 
     def run_paper(config: dict) -> dict:
         from realeval import real_backend

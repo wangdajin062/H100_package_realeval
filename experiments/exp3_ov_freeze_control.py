@@ -30,6 +30,7 @@ def run(config: dict) -> dict:
             split.train_texts, split.train_labels,
             split.test_texts, split.test_labels,
             quantize="int4", apply_ov_rescaling=True,
+            loss_fn="pure_kl",   # 论文 Table 4 的 QAD+OVF 是纯 KL + OVF
             # freeze_frac/window are FUNCTION PARAMS of real_qad_distill_train, NOT read
             # from config. Must pass them as kwargs, otherwise every condition silently
             # runs the default (1.0/1.0) and the OV-Freeze ablation collapses to identical

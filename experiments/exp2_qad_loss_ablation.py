@@ -26,12 +26,11 @@ def run(config: dict) -> dict:
         n_seeds = n_seeds_from_config(abl_config, "exp2")
 
         loss_specs = [
-            ("kl_only", "kl"),
-            ("mse_only", "mse"),
-            ("ce_only", "ce"),
-            ("kl_mse_combined", "kl_mse"),
-            # kl_task removed: was identical to kl_only except for OVF toggle,
-            # which confounded loss ablation with OVF ablation (§1.1 code_review_20260803).
+            ("kl_only", "pure_kl"),          # 论文 "Pure KL (ours)"：纯 KL，无 CE 项
+            ("kl_task", "kl"),               # 论文 "KL + task reg"：CE + KL
+            ("mse_only", "mse"),             # 论文 "Logits MSE"
+            ("ce_only", "ce"),               # 论文 "Cross-entropy (QAT)"
+            ("kl_mse_combined", "kl_mse"),   # 论文 "Three-term mixture"
         ]
         variants: dict[str, dict] = {}
         for loss_name, loss_fn in loss_specs:
@@ -57,11 +56,6 @@ def run(config: dict) -> dict:
                 "std": multi_seed_std(f1s),
                 "n_seeds": n_seeds,
             }
-
-        # Backward-compatible alias: fig5 still references "kl_task" historically.
-        # It is identical to kl_only in this ablation (OVF is varied separately in exp3).
-        if "kl_only" in variants and "kl_task" not in variants:
-            variants["kl_task"] = dict(variants["kl_only"])
 
         return {"computation": "h100_real_qwen", "variants": variants}
 

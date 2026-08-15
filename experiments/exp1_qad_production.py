@@ -40,6 +40,7 @@ def run(config: dict) -> dict:
                 split.test_texts, split.test_labels,
                 quantize=quantize,
                 apply_ov_rescaling=apply_ov,
+                loss_fn="pure_kl",   # 论文主打纯 KL（Table 3 QAD 0.916 / Table 7 Pure KL）
                 save_name="exp1_qad" if s == 0 else None,
             )
             f1s.append(result["f1"])
