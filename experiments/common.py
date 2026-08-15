@@ -32,9 +32,8 @@ from experiments.framework import (
     load_first_nonempty,
 )
 from metrics.aggregation import (
-    aggregate_seed_results as _aggregate_seed_results,
+    aggregate_seed_results,
     multi_seed_std,
-    run_multi_seed,
 )
 
 logger = logging.getLogger("common")
@@ -188,19 +187,6 @@ def config_override(config: dict[str, Any], **overrides: Any) -> dict[str, Any]:
 def resolve_qad_path() -> Path:
     """解析 exp1 产出的 QAD 模型路径。"""
     return MODELS / "exp1_qad"
-
-
-def aggregate_seed_results(
-    values: list[float],
-    *,
-    ndigits: int = 4,
-) -> dict[str, Any]:
-    """聚合多 seed 标量结果，返回统一结构。
-
-    Returns:
-        ``{"mean": ..., "std": ..., "list": [...], "n_seeds": ...}``
-    """
-    return _aggregate_seed_results(values, ndigits=ndigits)
 
 
 def build_variant_result(

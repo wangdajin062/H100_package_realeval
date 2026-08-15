@@ -20,31 +20,8 @@ Exit code is non-zero if any SMOKE or DRIFT (P0) issue is found.
 from __future__ import annotations
 
 import json
-from typing import Any
 
-from realeval.io.paths import RESULTS as RESULTS_DIR
-
-_NOT_FOUND = object()
-
-
-def _dig(obj: Any, path: tuple) -> Any:
-    cur = obj
-    for key in path:
-        if not isinstance(cur, dict) or key not in cur:
-            return _NOT_FOUND
-        cur = cur[key]
-    return cur
-
-
-def _latest_result(exp_short: str) -> dict | None:
-    candidates = sorted(RESULTS_DIR.glob(f"{exp_short}_*.json"))
-    if not candidates:
-        return None
-    try:
-        return json.loads(candidates[-1].read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        # A truncated/corrupt result file must not crash the whole auditor.
-        return None
+from metrics.contract import _NOT_FOUND, _dig, _latest_result
 
 
 # Headline metrics vs the paper's claimed value: (dotted path, claimed, tol, label).

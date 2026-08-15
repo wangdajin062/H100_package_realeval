@@ -42,7 +42,13 @@ def _resolve_env_overrides(config: dict[str, Any], prefix: str = "REALEVAL_") ->
     for env_key, env_val in os.environ.items():
         if not env_key.startswith(prefix):
             continue
-        keys = env_key[len(prefix):].lower().split("__")
+        key_part = env_key[len(prefix):].lower()
+        # 只有含 `__` 的才是配置覆盖（REALEVAL_SECTION__KEY）；单下划线的
+        # 是路径类环境变量（REALEVAL_OUTPUT_ROOT / DATA_ROOT / MODELS_ROOT 等），
+        # 跳过，避免被误注入为 output_root / data_root 之类的垃圾配置键。
+        if "__" not in key_part:
+            continue
+        keys = key_part.split("__")
         d: Any = config
         for k in keys[:-1]:
             d = d.setdefault(k, {})

@@ -6,9 +6,7 @@
 from __future__ import annotations
 
 from metrics.aggregation import (
-    aggregate_batch_benchmark_csv,
     aggregate_seed_results,
-    run_multi_seed,
 )
 from metrics.contract import (
     EXPECTED_FIELDS,
@@ -27,6 +25,4 @@ __all__ = [
     "print_alignment_report",
     "extract_headline",
     "aggregate_seed_results",
-    "run_multi_seed",
-    "aggregate_batch_benchmark_csv",
 ]
