@@ -86,6 +86,7 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
     Paper pipeline (exp1/exp2/exp3/exp10): freezes a BF16 teacher, quantises the student
     to INT4/NF4 via bitsandbytes, and trains the student + classification head with
     a configurable loss function:
+      - "pure_kl": pure KL divergence only (no task CE, T=1) — paper Eq.(2), the headline objective
       - "kl" (default): CE + KL divergence loss (temperature-scaled)
       - "mse": CE + MSE loss on hidden states
       - "kl_mse": CE + KL + MSE combined (3-term hybrid)
@@ -212,7 +213,7 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
     # Actual training produces N_real batches; we map each batch to a concept step
     # in [0, concept_total_steps] so the reported values always align with Fig4.
     concept_total_steps = int(config.get("distillation", {}).get("total_steps", 2000))
-    ovf_activation_ratio = float(config.get("distillation", {}).get("ovf_activation_ratio", 0.7))
+    ovf_activation_ratio = float(config.get("distillation", {}).get("ovf_activation_ratio", 0.8))
     ovf_activation_step = int(concept_total_steps * ovf_activation_ratio)
     actual_batches_per_epoch = max(1, (len(train_texts) + max_batch - 1) // max_batch)
     actual_total_batches = epochs * actual_batches_per_epoch
@@ -299,6 +300,17 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
                     F.softmax(t_logits_head / T, dim=-1),
                     reduction="batchmean",
                 ) * (T ** 2)
+            elif loss_fn == "pure_kl":
+                # Pure KL with T=1 (paper Eq.(2)): no task CE term. This is the headline
+                # distillation objective of the paper (Table 7, F1=0.916, KL=0.005).
+                with torch.inference_mode():
+                    t_logits_head = (teacher_head(t_last) if teacher_head is not None
+                                     else head(t_last))
+                kl_loss = F.kl_div(
+                    F.log_softmax(logits, dim=-1),
+                    F.softmax(t_logits_head, dim=-1),
+                    reduction="batchmean",
+                )
 
             if loss_fn in ("mse", "kl_mse"):
                 mse_loss = F.mse_loss(s_last, t_last)
@@ -338,6 +350,8 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
             # Combined loss based on loss_fn mode
             if loss_fn == "ce":
                 loss = ce_loss                        # QAT baseline: CE only
+            elif loss_fn == "pure_kl":
+                loss = kl_loss                        # pure KL (T=1), no task CE
             elif loss_fn == "mse":
                 loss = ce_loss + mse_loss             # MSE distillation
             elif loss_fn == "kl_mse":

@@ -83,7 +83,7 @@ def load_first_nonempty(
 
 def leakage_safe_split(
     dataset: TextDataset,
-    test_ratio: float = 0.2,
+    test_ratio: float = 0.1,
     seed: int = 42,
 ) -> DatasetSplit:
     """基于分组的训练/测试分割，避免模板泄漏。"""

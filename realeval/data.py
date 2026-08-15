@@ -324,7 +324,7 @@ def _to_binary_labels(labels: list) -> list[int]:
 
 
 def prepare_sft_dataset(name_or_path: str = None, max_samples: int | None = None,
-                         test_ratio: float = 0.2, seed: int = 42):
+                         test_ratio: float = 0.1, seed: int = 42):
     """Prepare train/test splits for supervised fine-tuning from the HF bucket.
 
     If the dataset already has train/test splits (like TeleAntiFraud-bucket),
@@ -463,7 +463,7 @@ def load_dataset(name: str = "balanced4k", max_samples: int | None = None, **kwa
 def group_split(
     texts: list,
     labels: list,
-    test_ratio: float = 0.2,
+    test_ratio: float = 0.1,
     seed: int = 42,
 ) -> tuple[list[int], list[int]]:
     """Stratified (by label) train/test index split.

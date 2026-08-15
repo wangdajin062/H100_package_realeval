@@ -52,7 +52,7 @@ def load_and_split_dataset(
     config: dict[str, Any],
     default_dataset: str = "taf28k",
     default_max_samples: int | None = None,
-    test_ratio: float = 0.2,
+    test_ratio: float = 0.1,
     seed: int = 42,
     synthetic_n: int = 200,
 ) -> DatasetSplit:
@@ -113,7 +113,7 @@ def load_split_manifest(dataset_key: str) -> set[str] | None:
 
 
 def leakage_safe_indices(
-    texts: list[str], labels: list[Any], *, test_ratio: float = 0.2, seed: int = 42
+    texts: list[str], labels: list[Any], *, test_ratio: float = 0.1, seed: int = 42
 ) -> tuple[list[int], list[int]]:
     """Stratified, template-group-safe (train_idx, test_idx) — the same split exp1 uses."""
     from realeval.data import group_split
@@ -122,7 +122,7 @@ def leakage_safe_indices(
 
 def shared_test_indices(
     dataset_key: str, texts: list[str], labels: list[Any], *,
-    test_ratio: float = 0.2, seed: int = 42,
+    test_ratio: float = 0.1, seed: int = 42,
 ) -> list[int]:
     """Indices of the leakage-safe test partition for *dataset_key*.
 
@@ -142,7 +142,7 @@ def shared_test_indices(
 
 def shared_test_split(
     dataset_key: str, texts: list[str], labels: list[Any], *,
-    test_ratio: float = 0.2, seed: int = 42,
+    test_ratio: float = 0.1, seed: int = 42,
 ) -> tuple[list[str], list[Any]]:
     """(test_texts, test_labels) for the leakage-safe test partition of *dataset_key*."""
     idx = shared_test_indices(dataset_key, texts, labels, test_ratio=test_ratio, seed=seed)
