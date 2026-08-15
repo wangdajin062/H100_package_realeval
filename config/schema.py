@@ -26,8 +26,8 @@ CONFIG_SCHEMA: dict[str, tuple[str, type | tuple[type, ...], Any, bool]] = {
     "data.max_samples": ("最大采样数", (int, type(None)), 16000, False),
 
     # 训练超参
-    "training.batch_size":             ("批次大小", int, 64, True),
-    "training.learning_rate":          ("学习率", float, 5e-5, True),
+    "training.batch_size":             ("批次大小", int, 8, True),
+    "training.learning_rate":          ("学习率", float, 1e-5, True),
     "training.epochs":                 ("训练轮数", int, 5, True),
     "training.apply_ov_rescaling":     ("启用 OV-Freeze", bool, True, False),
     "training.quantize":               ("量化方案：fp16 / int8 / int4 / nf4", str, "int4", True),
@@ -41,16 +41,18 @@ CONFIG_SCHEMA: dict[str, tuple[str, type | tuple[type, ...], Any, bool]] = {
     "training.dropout":                ("分类头 dropout", float, 0.1, False),
 
     # 蒸馏参数
-    "distillation.temperature":          ("蒸馏温度", float, 2.0, True),
+    "distillation.temperature":          ("蒸馏温度", float, 1.0, True),
     "distillation.alpha_ce":             ("CE loss 权重", float, 0.5, False),
     "distillation.alpha_kl":             ("KL loss 权重", float, 0.5, False),
     "distillation.task_weight":          ("分类头 loss 权重（head LR 系数）", float, 1e-3, False),
-    "distillation.max_batch":            ("蒸馏最大批次", int, 64, False),
-    "distillation.max_seq_length":       ("最大序列长度", int, 256, False),
+    "distillation.max_batch":            ("蒸馏最大批次", int, 8, False),
+    "distillation.max_seq_length":       ("最大序列长度", int, 4096, False),
     "distillation.freeze_frac_default":  ("默认冻结比例", float, 1.0, False),
     "distillation.window_default":       ("默认窗口大小", float, 1.0, False),
     "distillation.total_steps":          ("概念步数空间（Fig4 对齐）", int, 2000, False),
-    "distillation.ovf_activation_ratio": ("OV-Freeze 激活时机", float, 0.7, False),
+    "distillation.ovf_activation_ratio": ("OV-Freeze 激活时机", float, 0.8, False),
+    "distillation.ovf_rho":              ("OV-Freeze EMA 系数 ρ", float, 0.95, False),
+    "distillation.ovf_lambda":           ("OV-Freeze 损失权重 λ", float, 0.01, False),
     "distillation.cot_max_new_tokens":   ("CoT 最大生成长度", int, 48, False),
 
     # 硬件

@@ -49,6 +49,8 @@ distillation:
   window_default: 1.0
   total_steps: 2000              # concept-step space for Fig4 alignment (OVF schedule + SNR range)
   ovf_activation_ratio: 0.8      # activate OV-Freeze at 80% of total training steps (final 20%)
+  ovf_rho: 0.95                  # OV-Freeze EMA coefficient (paper Eq.6, ρ=0.95)
+  ovf_lambda: 0.01               # OV-Freeze loss weight (paper Eq.5, λ=0.01)
   cot_max_new_tokens: 48         # max new tokens for CoT reasoning generation (exp9)
 
 hardware:

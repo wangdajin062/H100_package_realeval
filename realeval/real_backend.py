@@ -238,6 +238,7 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
     trajectory = []
     snr_values = []
     global_step = 0
+    s_var_ema = None  # EMA variance estimate for OV-Freeze (paper Eq.6, ρ=0.95)
     for epoch in range(epochs):
         for start in range(0, len(train_texts), max_batch):
             # Map actual batch index to concept step space [0, concept_total_steps)
@@ -333,15 +334,22 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
             # weights and silently corrupts the model.
             t_var = t_last[..., :n_common].var(dim=0, unbiased=False)
             s_var = s_last[..., :n_common].var(dim=0, unbiased=False)
-            drift_var = s_var
+            # EMA variance estimate (paper Eq.6, ρ=0.95)
+            ovf_rho = float(config.get("distillation", {}).get("ovf_rho", 0.95))
+            if s_var_ema is None:
+                s_var_ema = s_var
+            else:
+                s_var_ema = ovf_rho * s_var_ema + (1 - ovf_rho) * s_var
+            drift_var = s_var_ema
             if ovf_active and freeze_frac > 0:
                 k = max(1, min(int(t_var.numel() * freeze_frac), n_common))
-                # Window-weighted rescaling: stronger window → more aggressive matching
-                scale = (t_var[:k] / (s_var[:k] + 1e-9)).sqrt()
-                ovf_loss = F.mse_loss(s_var[:k] * (1 + window * (scale - 1)), t_var[:k])
+                # stop-gradient scale c_l = sg[√(σ²_BF16 / Var_EMA)] (paper Eq.8)
+                scale = (t_var[:k] / (s_var_ema[:k] + 1e-9)).sqrt().detach()
+                # L_OVF = λ Σ ‖Var_EMA − σ²_BF16‖² (paper Eq.5, λ=0.01)
+                ovf_lambda = float(config.get("distillation", {}).get("ovf_lambda", 0.01))
+                ovf_loss = ovf_lambda * F.mse_loss(s_var_ema[:k], t_var[:k])
                 # Measure drift AFTER OVF rescaling so the metric reflects variance matching:
-                # y' = y * (1 + window*(scale-1))  =>  var(y') = var(y) * (1+window*(scale-1))^2
-                drift_var = s_var.clone()
+                drift_var = s_var_ema.clone()
                 drift_var[:k] = drift_var[:k] * (1 + window * (scale - 1)) ** 2
             # Drift computed once after if/else on aligned dims (deduplicated)
             drift_val = float(
