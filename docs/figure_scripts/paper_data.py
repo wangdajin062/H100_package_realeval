@@ -229,14 +229,12 @@ while len(LATENCY_P99_MS) < 4:
     LATENCY_P99_MS.append(16)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Figure 4 : loss-convergence trace
+# Figure 4 : loss-convergence trace  (REMOVED — dropped in the v27 revision)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# fig4 是「确定性示意图」，锚点原为论文头条数字（plateau 0.045 / converged 0.016 /
-# step 1400 / SNR 18.4-18.9）。实测 SNR=3.4-4.6dB、kl≈0.32-0.35，与 fig4 写死的
-# 坐标轴（KL 0-0.055 / SNR 18.2-19.0）不兼容。按 results_20260803「SNR 改兜底→None」，
-# 这些锚点统一改为 None 显式报缺——不再用论文值冒充实验产出；真实 exp1 结果存在时仍
-# 正常读取。fig4 脚本在缺数据时会因 None 报错（预期行为）。
+# The loss-convergence figure was removed in the manuscript revision. These exp1
+# trajectory anchors are retained for traceability only; values remain None
+# (explicit missing) rather than falling back to paper headline numbers.
 LOSS_PLATEAU = _from_result("exp1", "kl_plateau", placeholder="PH_EXP1_KL_PLATEAU", fallback=None)
 LOSS_CONVERGED = _from_result("exp1", "kl_converged", placeholder="PH_EXP1_KL_CONVERGED", fallback=None)
 OVF_ACTIVATION_STEP = _from_result("exp1", "ovf_activation_step", placeholder="PH_EXP1_OVF_ACTIVATION_STEP", fallback=None)

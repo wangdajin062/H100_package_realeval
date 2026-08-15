@@ -42,8 +42,8 @@ def run(config: dict) -> dict:
             lat_ms = (time.perf_counter() - t0) / max(1, len(test_texts)) * 1000
             # Params of the decision-level fusion function (paper Table 3)
             _param_map = {
-                "softmax": 5,              # 5 scalars
-                "sigmoid": 5,              # 5 scalars
+                "softmax": 3,              # 3 scalars (2 weights + 1 bias)
+                "sigmoid": 3,              # 3 scalars (2 weights + 1 bias)
                 "transformer": 1_840_000,  # 1.84M
             }
             strategies[sname] = {"f1": result["f1"], "accuracy": result["accuracy"],

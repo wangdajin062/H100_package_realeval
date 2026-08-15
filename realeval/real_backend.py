@@ -742,8 +742,8 @@ def real_fusion_classify(config, texts, labels, audio_emb, *, quantize="int4", f
         # softmax fusion: geometric mean of the two positive-class scores
         fused_prob = np.sqrt(txt_prob_test * ac_prob_test)
     elif fusion_strategy == "sigmoid":
-        # weighted sigmoid (paper Eq.11), w*=[0.6, 0.4], b*=-0.45
-        z = 0.6 * txt_prob_test + 0.4 * ac_prob_test - 0.45
+        # weighted sigmoid (paper Eq.11), w*=[0.40, 0.30], b*=-0.45
+        z = 0.40 * txt_prob_test + 0.30 * ac_prob_test - 0.45
         fused_prob = 1.0 / (1.0 + np.exp(-z))
     else:  # "transformer"
         # learned logistic fusion (linear stand-in for the transformer fusion module)
