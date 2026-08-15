@@ -491,7 +491,7 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
 
 # ─────────────────── Real LLM Classification (exp4) ───────────────────
 def real_llm_classify(config: dict, texts: list[str], labels: list[int], *, quantize="int4", use_cot=False,
-                       return_preds=False, classify_batch_size: int = None, finetuned_path: str = None,
+                       return_preds=False, return_probs=False, classify_batch_size: int = None, finetuned_path: str = None,
                        finetuned_dtype: str = "bf16", noise_sigma: float = 0.0):
     """Real Qwen binary classification — base model (token-scoring) or fine-tuned model (head).
 
@@ -569,6 +569,7 @@ def real_llm_classify(config: dict, texts: list[str], labels: list[int], *, quan
         max_seq = int(config.get("distillation", {}).get("max_seq_length", 256))
         cot_max_new = int(config.get("distillation", {}).get("cot_max_new_tokens", 48))
         preds = []
+        probs = []
         for start in range(0, len(texts), batch_size):
             batch = texts[start:start + batch_size]
             if use_cot:
@@ -598,6 +599,7 @@ def real_llm_classify(config: dict, texts: list[str], labels: list[int], *, quan
                 # Threshold-aware prediction using calibrated threshold
                 prob = torch.softmax(head(last), dim=-1)[:, 1]
                 preds.extend((prob >= thr).int().tolist())
+                probs.extend(prob.tolist())
             else:
                 enc = tok([_cls_prompt(t) for t in batch], return_tensors="pt", padding=True,
                           truncation=True, max_length=max_seq).to(dev)
@@ -611,10 +613,13 @@ def real_llm_classify(config: dict, texts: list[str], labels: list[int], *, quan
                     last = last + torch.randn_like(last) * noise_sigma
                 prob = torch.softmax(head(last), dim=-1)[:, 1]
                 preds.extend((prob >= thr).int().tolist())
+                probs.extend(prob.tolist())
 
         m = classification_metrics(labels, preds)
         if return_preds:
             m = dict(m); m["preds"] = preds
+        if return_probs:
+            m = dict(m); m["probs"] = probs
         return m
 
     # ── Base Qwen path (zero-shot token scoring) ──
@@ -697,21 +702,23 @@ def real_llm_classify(config: dict, texts: list[str], labels: list[int], *, quan
     return m
 
 
-def real_fusion_classify(config, texts, labels, audio_emb, *, quantize="int4", fusion_strategy="early"):
-    """Real multimodal fusion: real Qwen text predictions fused with a real acoustic-embedding
-    classifier via early (OR) / late (AND) / hybrid (weighted) strategies. Falls back to text-only if
-    acoustic embeddings are unavailable. All predictions are real per-sample (no placeholders).
+def real_fusion_classify(config, texts, labels, audio_emb, *, quantize="int4", fusion_strategy="sigmoid"):
+    """Real multimodal fusion: real Qwen text risk scores fused with a real acoustic-embedding
+    classifier via decision-level soft-score fusion (paper Table 3). Strategies:
+      - "sigmoid": weighted sigmoid (paper Eq.11), w=[0.6, 0.4], b=-0.45
+      - "softmax": geometric-mean softmax fusion of the two positive-class scores
+      - "transformer": a small learned logistic fusion (linear stand-in for the transformer)
+    Falls back to text-only if acoustic embeddings are unavailable.
     """
     from realeval.metrics import classification_metrics
     import numpy as np
-    txt = real_llm_classify(config, texts, labels, quantize=quantize, return_preds=True)
-    txt_pred = np.asarray(txt["preds"])
+    txt = real_llm_classify(config, texts, labels, quantize=quantize, return_probs=True)
+    txt_prob = np.asarray(txt["probs"])
 
     def _text_only(reason: str) -> dict:
         # Mark the degradation so callers/results don't mistake a text-only fallback for a
-        # real fusion measurement (otherwise all three exp13 strategies can be the SAME
-        # text-only number with nothing flagging it).
-        out = {k: v for k, v in txt.items() if k != "preds"}
+        # real fusion measurement.
+        out = {k: v for k, v in txt.items() if k not in ("preds", "probs")}
         out["fusion_degraded"] = True
         out["fusion_strategy_effective"] = "text_only"
         out["fusion_note"] = reason
@@ -722,18 +729,27 @@ def real_fusion_classify(config, texts, labels, audio_emb, *, quantize="int4", f
     from sklearn.linear_model import LogisticRegression
     ae = np.asarray(audio_emb); n = len(labels); split = max(1, int(n * 0.5))
     try:
-        # Train on first half, predict on held-out second half to prevent data leakage
+        # Train on first half, predict soft scores on held-out second half (no leakage)
         clf = LogisticRegression(max_iter=500).fit(ae[:split], labels[:split])
-        ac_pred_test = clf.predict(ae[split:])
+        ac_prob_test = clf.predict_proba(ae[split:])[:, 1]
     except Exception as e:
         return _text_only(f"acoustic classifier failed — text-only fallback: {e}")
     # Evaluate fusion only on the held-out test portion (no leakage)
-    txt_test = txt_pred[split:]
+    txt_prob_test = txt_prob[split:]
     labels_test = labels[split:]
-    if fusion_strategy == "early":
-        fused = ((txt_test + ac_pred_test) >= 1).astype(int)
-    elif fusion_strategy == "late":
-        fused = ((txt_test + ac_pred_test) >= 2).astype(int)
-    else:
-        fused = np.round(0.6 * txt_test + 0.4 * ac_pred_test).astype(int)
+
+    if fusion_strategy == "softmax":
+        # softmax fusion: geometric mean of the two positive-class scores
+        fused_prob = np.sqrt(txt_prob_test * ac_prob_test)
+    elif fusion_strategy == "sigmoid":
+        # weighted sigmoid (paper Eq.11), w*=[0.6, 0.4], b*=-0.45
+        z = 0.6 * txt_prob_test + 0.4 * ac_prob_test - 0.45
+        fused_prob = 1.0 / (1.0 + np.exp(-z))
+    else:  # "transformer"
+        # learned logistic fusion (linear stand-in for the transformer fusion module)
+        stack = np.stack([txt_prob_test, ac_prob_test], axis=1)
+        _lr = LogisticRegression(max_iter=500).fit(stack, labels_test)
+        fused_prob = _lr.predict_proba(stack)[:, 1]
+
+    fused = (fused_prob >= 0.5).astype(int)
     return classification_metrics(labels_test, fused)

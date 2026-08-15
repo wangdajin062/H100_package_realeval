@@ -226,7 +226,7 @@ cd docs/figure_scripts && python generate_all.py
 
 | 契约字段 | 实验产出字段 | 备注 |
 |---------|-------------|------|
-| `strategies.{early_fusion,late_fusion,hybrid}.{f1,accuracy,latency_ms}` | `result["strategies"][{name}][...]` | `fusion_degraded=True` 时为纯文本回退（见 P2-2） |
+| `strategies.{softmax,sigmoid,transformer}.{f1,accuracy,latency_ms}` | `result["strategies"][{name}][...]` | `fusion_degraded=True` 时为纯文本回退（见 P2-2） |
 
 ---
 

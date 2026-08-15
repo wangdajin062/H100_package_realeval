@@ -36,7 +36,7 @@ PAPER_CLAIMS: dict[str, list[tuple]] = {
     "exp10": [(("scales", "teacher", "f1_fixed"), 0.916, 0.05, "0.5B teacher F1")],
     "exp11": [(("schemes", "int4", "f1"), 0.900, 0.05, "INT4 F1")],
     "exp12": [(("storage_decomposition_point8", "total_advantage_x"), 28.0, 4.0, "storage advantage x")],
-    "exp13": [(("strategies", "late_fusion", "f1"), 0.923, 0.03, "fusion SYSTEM F1 (headline)")],
+    "exp13": [(("strategies", "sigmoid", "f1"), 0.923, 0.03, "fusion SYSTEM F1 (headline)")],
 }
 
 # Fields that are hardcoded paper self-citations, never independent measurements.
