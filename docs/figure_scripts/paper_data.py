@@ -320,7 +320,7 @@ _layers = _get("exp3", "layer_selection") or {}
 
 # Individual F1 values from each condition/layer (not all from ov_freeze_full)
 # exp3 outputs layer_selection keys: early(0.25), mid(0.5), late(0.75), all(1.0).
-# Map them to the figure labels used by fig6_ovf_ablation.py.
+# Map them to the figure labels used by fig7_ovf_ablation.py.
 _f1_no_ovf = _r(_from_result("exp3", "conditions", "no_reg", "f1", placeholder="PH_EXP3_NO_OVF_F1", fallback=0.8047))
 _f1_ovf    = _OVF_FULL_F1   # reuse consolidated constant
 _f1_half   = _r(_from_result("exp3", "conditions", "ov_freeze_half", "f1", placeholder="PH_EXP3_OVF_HALF_F1", fallback=0.8047))
