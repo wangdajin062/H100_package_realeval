@@ -1,5 +1,5 @@
 """
-fig6_ovf_ablation.py  --  Paper Figure 6 (insertion order #6)
+fig7_ovf_ablation.py  --  Paper Figure 7 (insertion order #7)
 
 OV-Freeze ablation.
   (a) Layer selection: F1 (bars, left axis) and output-variance drift
@@ -11,8 +11,8 @@ OV-Freeze ablation.
 
 All numbers from paper_data (EXP04 / EXP10).
 
-Run:  python3 fig6_ovf_ablation.py
-Out:  fig6_ovf_ablation.png
+Run:  python3 fig7_ovf_ablation.py
+Out:  fig7_ovf_ablation.png
 """
 import numpy as np
 import matplotlib.pyplot as plt
@@ -93,11 +93,11 @@ axP.axvspan(45, 55, color=ps.PALETTE["secondary"], alpha=0.06)
 
 out = os.path.join(os.path.dirname(__file__), "..", "figure")
 os.makedirs(out, exist_ok=True)
-fig.savefig(os.path.join(out, "fig6_ovf_ablation.png"), dpi=400, bbox_inches="tight",
+fig.savefig(os.path.join(out, "fig7_ovf_ablation.png"), dpi=400, bbox_inches="tight",
             pad_inches=0.05)
-fig.savefig(os.path.join(out, "fig6_ovf_ablation.pdf"), bbox_inches="tight",
+fig.savefig(os.path.join(out, "fig7_ovf_ablation.pdf"), bbox_inches="tight",
             pad_inches=0.05)
-fig.savefig(os.path.join(out, "fig6_ovf_ablation.tiff"), dpi=400, bbox_inches="tight",
+fig.savefig(os.path.join(out, "fig7_ovf_ablation.tiff"), dpi=400, bbox_inches="tight",
             pad_inches=0.05)
 plt.close(fig)
-print(f"saved {os.path.join(out, 'fig6_ovf_ablation.png')}, .pdf and .tiff")
+print(f"saved {os.path.join(out, 'fig7_ovf_ablation.png')}, .pdf and .tiff")

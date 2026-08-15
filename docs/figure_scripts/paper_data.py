@@ -442,7 +442,7 @@ def speedup(alpha: float, gamma: int) -> float:
 # Paper-claimed reference values (self-citation / manual eval) — NOT experiment-derived.
 # Used only when the corresponding experiment hasn't produced the value yet; must not
 # be presented as independent measurements.
-_FIG8_REF = {
+_FIG5_REF = {
     "advfraud_curated_f1": 0.875,     # AdvFraud-3k curated 517-subset (manual eval)
     "advfraud_bf16_matched": 0.882,   # BF16 baseline on AdvFraud curated subset
     "ldp_eps_1_5_f1": 0.902,          # ε-LDP (ε=1.5, σ=1.0, δ=1e-5) F1 on TAF-28k
@@ -465,7 +465,7 @@ def _safe_delta(a, b, ndigits=3):
     return round(a - b, ndigits) if (a is not None and b is not None) else None
 
 
-FIG8_QUANT = {
+FIG5_QUANT = {
     "labels": ["Homogeneous\nINT4", "Heterogeneous\n(NVFP4+Q4_K_M)"],
     "f1": [_f1_homo, _f1_hetero],
     "bf16_ref": BF16_F1,                                     # 0.931
@@ -473,7 +473,7 @@ FIG8_QUANT = {
 }
 
 # Panel (b): AdvFraud-3k robustness — full pool vs curated subset
-FIG8_ADVFRAUD = {
+FIG5_ADVFRAUD = {
     "labels": ["Full pool\n(3,000)", "Curated subset\n(517)"],
     "f1": [
         _from_result("exp5", "advfraud", "full_pool", "f1", placeholder="PH_EXP5_ADVFRAUD_FULL_POOL_F1", fallback=0.1238),
@@ -482,22 +482,22 @@ FIG8_ADVFRAUD = {
     "bf16_matched": _from_result(
         "exp5", "bf16_matched_advfraud",
         placeholder="PH_EXP5_BF16_MATCHED",
-        fallback=_FIG8_REF["advfraud_bf16_matched"], cited=True,
+        fallback=_FIG5_REF["advfraud_bf16_matched"], cited=True,
     ),
 }
 
 # Panel (c): epsilon-LDP privacy-utility trade-off
 # Note: latency values are end-to-end pipeline P50 (ms/request), NOT per-sample
 # inference latency from exp8 (which measures ms/token at ~2-3 ms).
-FIG8_LDP = {
+FIG5_LDP = {
     "labels": ["No LDP\n(main results)", "$\\epsilon$-LDP\n($\\epsilon$=1.5)"],
     "f1": [
         _OVF_FULL_F1,             # best QAD+OVF (no LDP)
         _from_result("exp5", "ldp_tradeoff", "eps_1.5", "f1", placeholder="PH_EXP5_LDP_EPS_1_5_F1", fallback=None),
     ],
     "latency": [
-        _FIG8_REF["pipeline_latency_p50_ms"],
-        _FIG8_REF["pipeline_latency_ldp_ms"],
+        _FIG5_REF["pipeline_latency_p50_ms"],
+        _FIG5_REF["pipeline_latency_ldp_ms"],
     ],
 }
 

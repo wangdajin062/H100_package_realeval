@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 """
-fig8_revision_ablations.py
+fig5_revision_ablations.py
 ===========================
-Generates Figure 12 for QAD-MultiGuard v9: a three-panel figure visualising the
+Generates Figure 5 for QAD-MultiGuard v9: a three-panel figure visualising the
 three new quantitative results introduced during the revision rounds.
 
   (a) Heterogeneous vs homogeneous quantization ablation        [Sec 3.2.3, M3]
   (b) AdvFraud-3k curated-subset vs full-pool robustness        [Sec 4,     M4]
   (c) Gaussian-noise robustness sweep (not certified DP)          [Sec 5,     B3]
 
-Data flows from experiments through paper_data (FIG8_QUANT / FIG8_ADVFRAUD /
-FIG8_LDP). Hardcoded fallbacks match paper1_en_v9.tex. Any change requires
+Data flows from experiments through paper_data (FIG5_QUANT / FIG5_ADVFRAUD /
+FIG5_LDP). Hardcoded fallbacks match paper1_en_v9.tex. Any change requires
 the same change in the .tex. The script prints all plotted values at the end
 for a quick consistency check against the manuscript.
 
-Output: fig8_revision_ablations.png  (400 dpi high-resolution)
+Output: fig5_revision_ablations.png  (400 dpi high-resolution)
 """
 
 import os
@@ -23,13 +23,13 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import paper_style as ps  # shared journal-grade styling (font, palette, dpi)
-from paper_data import FIG8_QUANT, FIG8_ADVFRAUD, FIG8_LDP
+from paper_data import FIG5_QUANT, FIG5_ADVFRAUD, FIG5_LDP
 
 # Data flows from experiments through paper_data, with hardcoded fallbacks
 DATA = {
-    "quant":    FIG8_QUANT,
-    "advfraud": FIG8_ADVFRAUD,
-    "ldp":      FIG8_LDP,
+    "quant":    FIG5_QUANT,
+    "advfraud": FIG5_ADVFRAUD,
+    "ldp":      FIG5_LDP,
 }
 
 # --------------------------------------------------------------------------- #
@@ -123,11 +123,11 @@ def main():
     fig.tight_layout()
     out = os.path.join(os.path.dirname(__file__), "..", "figure")
     os.makedirs(out, exist_ok=True)
-    png = os.path.join(out, "fig8_revision_ablations.png")
-    pdf = os.path.join(out, "fig8_revision_ablations.pdf")
+    png = os.path.join(out, "fig5_revision_ablations.png")
+    pdf = os.path.join(out, "fig5_revision_ablations.pdf")
     fig.savefig(png, dpi=400, bbox_inches="tight", pad_inches=0.05)
     fig.savefig(pdf, bbox_inches="tight", pad_inches=0.05)
-    tiff = os.path.join(out, "fig8_revision_ablations.tiff")
+    tiff = os.path.join(out, "fig5_revision_ablations.tiff")
     fig.savefig(tiff, dpi=400, bbox_inches="tight", pad_inches=0.05)
     plt.close(fig)
 
