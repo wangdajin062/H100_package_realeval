@@ -9,11 +9,11 @@
 ### Figure 3 → Main Results (F1 + Recovery)
 | 图脚本变量 | paper_data 读取路径 | 实验产出字段 | 类型 | 备注 |
 |-----------|-------------------|------------|------|------|
-| EXP01_QUANT_QUALITY | （论文常量，**不读实验**） | 外部 PTQ 基线常量表（RTN/AWQ/GPTQ/SpinQuant/QuaRot/BitDistill） | list | paper_data 硬编码，非本套件测量 |
+| PTQ_BASELINES | （论文常量，**不读实验**） | 外部 PTQ 基线常量表（RTN/AWQ/GPTQ/SpinQuant/QuaRot/BitDistill） | list | paper_data 硬编码，非本套件测量 |
 | QAT_QAD_OVF | exp11.schemes.int4.{f1,std} + exp1.{f1,std} + exp3.conditions.ov_freeze_full.{f1,std} + exp14.models.q4km_0.5b_llama_cpp.{f1,std} | 各实验对应字段 | 4 行 | QAT(int4)/QAD/QAD+OVF/Q4_K_M 四行，分别来自 exp11/exp1/exp3/exp14 |
 | BF16_F1 | （论文自引用常量 0.931，**不读实验**） | — | float | BF16 ceiling，非实测 |
 
-### Figure 4 → Loss Convergence
+### ~~Figure 4 → Loss Convergence~~（已删除，v27 移除 Figure 4）
 | 图脚本变量 | paper_data 读取路径 | 实验产出字段 | 类型 |
 |-----------|-------------------|------------|------|
 | LOSS_PLATEAU | exp1.kl_plateau | exp1 → kl_plateau | float |
@@ -22,27 +22,27 @@
 | TOTAL_STEPS | exp1.total_steps | exp1 → total_steps | int |
 | SNR_RANGE | exp1.snr_min, exp1.snr_max | exp1 → snr_min, snr_max | float×2 |
 
-### Figure 5 → Loss & Teacher Ablation
+### Figure 6 → Loss & Teacher Ablation
 | 图脚本变量 | paper_data 读取路径 | 实验产出字段 |
 |-----------|-------------------|------------|
-| EXP03_LOSS_ABLATION | exp2.variants.{kl_only,mse_only,ce_only,kl_mse_combined}.{f1,kl_final,std} | exp2 → variants.{name}.{f1,kl_final,std} |
-| EXP09_TEACHER | exp10.scales.{teacher,teacher_1.5b,teacher_3b,teacher_7b}.{f1_fixed,f1_conv} | exp10 → scales.{key}.{f1_fixed,f1_conv} |
+| EXP2_LOSS_ABLATION | exp2.variants.{kl_only,mse_only,ce_only,kl_mse_combined}.{f1,kl_final,std} | exp2 → variants.{name}.{f1,kl_final,std} |
+| EXP10_TEACHER | exp10.scales.{teacher,teacher_1.5b,teacher_3b,teacher_7b}.{f1_fixed,f1_conv} | exp10 → scales.{key}.{f1_fixed,f1_conv} |
 
-### Figure 6 → OV-Freeze Ablation
+### Figure 7 → OV-Freeze Ablation
 | 图脚本变量 | paper_data 读取路径 | 实验产出字段 |
 |-----------|-------------------|------------|
-| EXP04_OVF_LAYER_ABLATION | exp3.layer_selection.{early,mid,late,all}.{f1,variance_drift_pct} | exp3 → layer_selection.{name}.{f1,variance_drift_pct} |
-| EXP10_OVF_STEP_RATIO | exp3.rho_sweep.rho_{0.0..0.5}.{f1,ppl} | exp3 → rho_sweep.{key}.{f1,ppl} |
+| EXP3_OVF_LAYER_ABLATION | exp3.layer_selection.{early,mid,late,all}.{f1,variance_drift_pct} | exp3 → layer_selection.{name}.{f1,variance_drift_pct} |
+| EXP3_OVF_STEP_RATIO | exp3.rho_sweep.rho_{0.0..0.5}.{f1,ppl} | exp3 → rho_sweep.{key}.{f1,ppl} |
 
-### Figure 7 → Speculative Decoding
+### Figure 8 → Speculative Decoding
 | 图脚本变量 | paper_data 读取路径 | 实验产出字段 |
 |-----------|-------------------|------------|
-| EXP05_SPECULATIVE | exp6.paper_reference.speculative_speedups (cited) | exp6 → paper_reference.speculative_speedups | 缺失时用内置 speedup 表 |
+| EXP6_SPECULATIVE | exp6.paper_reference.speculative_speedups (cited) | exp6 → paper_reference.speculative_speedups | 缺失时用内置 speedup 表 |
 | SPEC_ALPHA_GENERIC | exp6.diagnostic_B.h100_measured.generic（实测，>0.01 时优先）否则 exp6.paper_reference.alpha_generic (cited) | exp6 → 二者之一 | measured 优先、回退 cited |
 | SPEC_ALPHA_TUNED | exp6.paper_reference.alpha_tuned (cited) | exp6 → paper_reference.alpha_tuned |  |
 | SPEC_GAMMA_DEPLOY | exp6.paper_reference.gamma_deploy (cited) | exp6 → paper_reference.gamma_deploy |  |
 
-### Figure 8 → Revision Ablations
+### Figure 5 → Revision Ablations
 | 图脚本变量 | paper_data 读取路径 | 实验产出字段 |
 |-----------|-------------------|------------|
 | FIG8_QUANT | exp11.schemes.int4.f1（同质 INT4）+ exp3.conditions.ov_freeze_full.f1（异质 QAD+OVF）；`bf16_ref`=BF16_F1 常量 | exp11 → schemes.int4.f1；exp3 → conditions.ov_freeze_full.f1 | `delta` 由两 F1 计算 |
@@ -72,7 +72,7 @@
 1. **`paper_data.py` 加载逻辑**：先按时间戳加载 `exp*_*.json`，再补充 `all_experiments.json`，后加载者不覆盖前加载者。
 2. **阈值兼容**：`head.pt` 无 `threshold` 键时，`real_llm_classify` 回退到 `thr=0.5`（硬 argmax）。
 3. **`decision_threshold`**：exp1 QAD 蒸馏新增字段；旧版结果文件不包含此字段不影响图像脚本（仅 paper 级训后才会使用）。
-4. **`exp2.variants.kl_task` 兼容别名**：exp2 的 loss ablation 在科学上已将 `kl_task` 合并到 `kl_only`（OVF 在 exp3 中单独消融），但 `paper_data.py` 的 `EXP03_LOSS_ABLATION` 仍保留 `kl_task` 标签。实验脚本自动将 `kl_only` 复制为 `kl_task`，保证图像脚本无需修改即可读取。
+4. **`exp2.variants.kl_task` 兼容别名**：exp2 的 loss ablation 在科学上已将 `kl_task` 合并到 `kl_only`（OVF 在 exp3 中单独消融），但 `paper_data.py` 的 `EXP2_LOSS_ABLATION` 仍保留 `kl_task` 标签。实验脚本自动将 `kl_only` 复制为 `kl_task`，保证图像脚本无需修改即可读取。
 5. **`std` 字段补齐**：exp3 的 `conditions.*` / `layer_selection.*` 以及 exp11 的 `schemes.*` 在单 seed 运行时 `std` 为 `None`（与多 seed 聚合结构一致）；`None` 表示单 seed 无测量标准差。
 
 ## 四、验证命令
@@ -99,7 +99,7 @@ cd docs/figure_scripts && python generate_all.py
 | 2026-08-05 | 重构后对齐修复：exp2 增加 `kl_task` 兼容别名；exp3 smoke 补齐 `conditions` / `layer_selection` 的 `std`；exp11 smoke 补齐 `schemes` 的 `std` / `n_seeds`；新增 `metrics/`、`runner/`、`config/`、`realeval/io/` 子包 |
 | 2026-08-13 | 文档审计修正：移除已删除的 smoke 路径相关描述；exp1 回退值更新（f1=0.7974，Fig4 锚点统一为 `None` 显式报缺）；exp5 LDP 改读 `ldp_tradeoff.eps_1.5.f1`；exp6 移除不存在的 `domain` 键；exp8 改读 `latency_detail.*.{p50_ms,p99_ms}`；exp2/exp10 variant/scale 键名修正 |
 | 2026-08-14 | 第三轮审计登记（P2-18 发现）：Fig3/Fig7/Fig8 来源表与代码不符、exp5 fallback 过时、缺 exp4/7/9/12/13 章节 |
-| 2026-08-14（修订） | 按 P2-18 修订本文档：§一 Fig3 表（`EXP01_QUANT_QUALITY`/`BF16_F1` 标注为论文常量、`QAT_QAD_OVF` 明确跨 exp11/exp1/exp3/exp14）、Fig7 表（`EXP05_SPECULATIVE` 读 speculative_speedups、`SPEC_ALPHA_GENERIC` measured 优先）、Fig8 表（`FIG8_QUANT`=exp11.int4+exp3.ov_freeze_full、`FIG8_LDP` 含 exp3 no-LDP）；exp5 fallback 更新为 0.1238/None；顶部约束澄清 `paper_data.py` 为桥接层；补 exp4/7/9/12/13 契约章节 |
+| 2026-08-14（修订） | 按 P2-18 修订本文档：§一 Fig3 表（`PTQ_BASELINES`/`BF16_F1` 标注为论文常量、`QAT_QAD_OVF` 明确跨 exp11/exp1/exp3/exp14）、Fig7 表（`EXP6_SPECULATIVE` 读 speculative_speedups、`SPEC_ALPHA_GENERIC` measured 优先）、Fig8 表（`FIG8_QUANT`=exp11.int4+exp3.ov_freeze_full、`FIG8_LDP` 含 exp3 no-LDP）；exp5 fallback 更新为 0.1238/None；顶部约束澄清 `paper_data.py` 为桥接层；补 exp4/7/9/12/13 契约章节 |
 
 
 ---

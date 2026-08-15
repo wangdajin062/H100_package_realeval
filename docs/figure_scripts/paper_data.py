@@ -143,7 +143,7 @@ SAFE_QAQ_F1_ERR  = 0.006
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # PTQ baselines (external — not produced by our experiments)
-EXP01_QUANT_QUALITY = [
+PTQ_BASELINES = [
     {"key": "ptq_baseline", "name": "Plain RTN PTQ",     "f1": 0.838, "recovery": 90.0, "std": 0.011},
     {"key": "awq",          "name": "NVFP4 + AWQ",       "f1": 0.838, "recovery": 90.0, "std": 0.010},
     {"key": "gptq",         "name": "NVFP4 + GPTQ",      "f1": 0.840, "recovery": 90.2, "std": 0.010},
@@ -244,7 +244,7 @@ _snr_max = _from_result("exp1", "snr_max", placeholder="PH_EXP1_SNR_MAX", fallba
 SNR_RANGE           = (_snr_min, _snr_max)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Figure 5(a) / exp2 : loss-function ablation
+# Figure 6(a) / exp2 : loss-function ablation
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _variants = _get("exp2", "variants") or {}
@@ -259,7 +259,7 @@ def _loss_entry(vk, label, fallback_f1, fallback_kl):
     return {"loss": label, "f1": f1, "kl": kl,
             "std": raw_std if raw_std is not None else float("nan")}
 
-EXP03_LOSS_ABLATION = [
+EXP2_LOSS_ABLATION = [
     _loss_entry("kl_only",          "Pure KL\n(ours)",
                 _from_result("exp2", "variants", "kl_only", "f1", placeholder="PH_EXP2_KL_ONLY_F1", fallback=0.5577),
                 _from_result("exp2", "variants", "kl_only", "kl_final", placeholder="PH_EXP2_KL_ONLY_KL", fallback=0.34629)),
@@ -278,7 +278,7 @@ EXP03_LOSS_ABLATION = [
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Figure 5(b) / exp10 : teacher selection
+# Figure 6(b) / exp10 : teacher selection
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _scales = _get("exp10", "scales") or {}
@@ -294,7 +294,7 @@ def _teacher_entry(tk, label, tokens, fallback_f1, fallback_conv):
 # 预算 1 epoch vs 收敛 5 epoch），fig5b 脚本读取的正是这两维。旧的调优前重跑仅记录单维
 # F1，故此处 fallback 统一为 None 显式报缺（不再用论文声称值 0.896/0.877/… 冒充实测），
 # exp10 真实产出存在时正常读取双维（见 reports/CONSISTENCY_AUDIT.md §2.5/§6.4）。
-EXP09_TEACHER = [
+EXP10_TEACHER = [
     _teacher_entry("teacher",        "0.5B\n(same)", 0.5,
                    _from_result("exp10", "scales", "teacher", "f1_fixed", placeholder="PH_EXP10_T_05B_FIXED", fallback=None),
                    _from_result("exp10", "scales", "teacher", "f1_conv", placeholder="PH_EXP10_T_05B_CONV", fallback=None)),
@@ -310,7 +310,7 @@ EXP09_TEACHER = [
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Figure 6(a) / exp3 : OV-Freeze layer-selection ablation
+# Figure 7(a) / exp3 : OV-Freeze layer-selection ablation
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _cond   = _get("exp3", "conditions") or {}
@@ -338,7 +338,7 @@ _drift_early = _r(_from_result("exp3", "layer_selection", "early", "variance_dri
 _drift_mid   = _r(_from_result("exp3", "layer_selection", "mid", "variance_drift_pct", placeholder="PH_EXP3_LAYER_MID_DRIFT", fallback=None), 1)
 _drift_late  = _r(_from_result("exp3", "layer_selection", "late", "variance_drift_pct", placeholder="PH_EXP3_LAYER_LATE_DRIFT", fallback=None), 1)
 
-EXP04_OVF_LAYER_ABLATION = [
+EXP3_OVF_LAYER_ABLATION = [
     {"config": "no OVF",        "f1": _f1_no_ovf, "drift_pct": _drift_no},
     {"config": "FFN",           "f1": _f1_early,  "drift_pct": _drift_early},
     {"config": "q",             "f1": _f1_mid,    "drift_pct": _drift_mid},
@@ -349,7 +349,7 @@ EXP04_OVF_LAYER_ABLATION = [
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Figure 6(b) / exp3 rho sweep : OV-Freeze activation step-ratio
+# Figure 7(b) / exp3 rho sweep : OV-Freeze activation step-ratio
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _rho = _get("exp3", "rho_sweep") or {}
@@ -362,7 +362,7 @@ def _rho_entry(pct, rk, fallback_f1, fallback_ppl):
     }
 
 # rho_sweep（OVF 激活步比）调优后未重跑，原 fallback 为论文声称值。改为 None 显式报缺。
-EXP10_OVF_STEP_RATIO = [
+EXP3_OVF_STEP_RATIO = [
     _rho_entry( 0, "rho_0.0",
                _from_result("exp3", "rho_sweep", "rho_0.0", "f1", placeholder="PH_EXP3_RHO_00_F1", fallback=None),
                _from_result("exp3", "rho_sweep", "rho_0.0", "ppl", placeholder="PH_EXP3_RHO_00_PPL", fallback=None)),
@@ -384,7 +384,7 @@ EXP10_OVF_STEP_RATIO = [
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Figure 7 / exp6 : speculative decoding
+# Figure 8 / exp6 : speculative decoding
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # alpha values: prefer H100 measured, fall back to paper_reference, then hardcoded
@@ -401,7 +401,7 @@ SPEC_ALPHA_TUNED   = _r(_alpha_tuned)   if _alpha_tuned   else 0.86
 
 # Speculative speedup data: from exp6 paper_reference, fallback to hardcoded
 _speedups = _ref.get("speculative_speedups") or {}
-EXP05_SPECULATIVE = {
+EXP6_SPECULATIVE = {
     0.78: _speedups.get("alpha_0.78", [
         {"gamma": 3,  "h100": 2.37, "sd8g3": 2.26},
         {"gamma": 5,  "h100": 2.92, "sd8g3": 2.78},
@@ -434,7 +434,7 @@ def speedup(alpha: float, gamma: int) -> float:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Figure 8 : revision-round ablation results
+# Figure 5 : revision-round ablation results
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Paper-claimed reference values (self-citation / manual eval) — NOT experiment-derived.
@@ -506,7 +506,7 @@ FIG5_LDP = {
 if __name__ == "__main__":
     errors = []
     # Recovery consistency
-    for m in EXP01_QUANT_QUALITY:
+    for m in PTQ_BASELINES:
         expected = round(m["f1"] / BF16_F1 * 100, 1)
         if abs(expected - m["recovery"]) >= 0.06:
             errors.append(f"{m['key']}: recovery {m['recovery']} != {expected}")

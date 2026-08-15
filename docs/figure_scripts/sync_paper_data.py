@@ -123,7 +123,7 @@ def compute_updates(results: dict[str, dict]) -> dict[str, object]:
     exp3 = results.get("exp3", {})
     conditions = exp3.get("conditions", {})
     if conditions:
-        # EXP04_OVF_LAYER_ABLATION — map conditions to layer config names
+        # EXP3_OVF_LAYER_ABLATION — map conditions to layer config names
         no_reg = conditions.get("no_reg", {})
         full = conditions.get("ov_freeze_full", {})
         half = conditions.get("ov_freeze_half", {})
@@ -145,7 +145,7 @@ def compute_updates(results: dict[str, dict]) -> dict[str, object]:
     # The paper's Fig 6(b) F1/PPL curves come from actual training, not from
     # exp3.  Only variance_drift_pct is mapped here.
 
-    # ── exp2 → EXP03_LOSS_ABLATION (F1 + kl_final) ───────────────────────
+    # ── exp2 → EXP2_LOSS_ABLATION (F1 + kl_final) ───────────────────────
     exp2 = results.get("exp2", {})
     variants = exp2.get("variants", {})
     if variants:
@@ -245,32 +245,32 @@ def apply_updates(updates: dict[str, object], dry_run: bool = False) -> list[str
                         lines[i] = new_line
 
     # ── For structured data (lists of dicts), replace blocks ──────────────
-    # EXP04_OVF_LAYER_ABLATION — update drift values
+    # EXP3_OVF_LAYER_ABLATION — update drift values
     if "_EXP04_DRIFT" in updates:
         drift_updates = updates["_EXP04_DRIFT"]
         changes.extend(_update_list_of_dicts(
-            lines, "EXP04_OVF_LAYER_ABLATION", "drift_pct", drift_updates,
+            lines, "EXP3_OVF_LAYER_ABLATION", "drift_pct", drift_updates,
             key_field="config", dry_run=dry_run))
 
     if "_EXP04_F1" in updates:
         changes.extend(_update_list_of_dicts(
-            lines, "EXP04_OVF_LAYER_ABLATION", "f1",
+            lines, "EXP3_OVF_LAYER_ABLATION", "f1",
             {k: updates["_EXP04_F1"] for k in drift_updates},
             key_field="config", dry_run=dry_run))
 
-    # EXP03_LOSS_ABLATION — update F1 and/or KL values
+    # EXP2_LOSS_ABLATION — update F1 and/or KL values
     if "_EXP03_LOSS_F1" in updates:
         for label, new_f1 in updates["_EXP03_LOSS_F1"].items():
             changes.extend(_update_list_of_dicts(
-                lines, "EXP03_LOSS_ABLATION", "f1",
+                lines, "EXP2_LOSS_ABLATION", "f1",
                 {label: new_f1}, key_field="loss", dry_run=dry_run))
     if "_EXP03_LOSS_KL" in updates:
         for label, new_kl in updates["_EXP03_LOSS_KL"].items():
             changes.extend(_update_list_of_dicts(
-                lines, "EXP03_LOSS_ABLATION", "kl",
+                lines, "EXP2_LOSS_ABLATION", "kl",
                 {label: new_kl}, key_field="loss", dry_run=dry_run))
 
-    # EXP05_SPECULATIVE — update alpha-based blocks
+    # EXP6_SPECULATIVE — update alpha-based blocks
     if "SPEC_ALPHA_GENERIC" in updates:
         changes.append(f"  SPEC_ALPHA_GENERIC: → {updates['SPEC_ALPHA_GENERIC']}")
     if "SPEC_ALPHA_TUNED" in updates:

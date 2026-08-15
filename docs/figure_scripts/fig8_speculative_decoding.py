@@ -18,7 +18,7 @@ Out:  fig8_speculative_decoding.png
 import numpy as np
 import matplotlib.pyplot as plt
 import paper_style as ps
-from paper_data import (speedup, EXP05_SPECULATIVE, SPEC_ALPHA_GENERIC,
+from paper_data import (speedup, EXP6_SPECULATIVE, SPEC_ALPHA_GENERIC,
                         SPEC_ALPHA_TUNED, SPEC_GAMMA_DEPLOY)
 import os
 
@@ -59,7 +59,7 @@ axA.set_ylim(1.5, 6.5)
 axA.legend(loc="upper left", ncol=1)
 
 # --- (b) measured speedup at alpha=0.86 -----------------------------------
-rows = EXP05_SPECULATIVE[SPEC_ALPHA_TUNED]
+rows = EXP6_SPECULATIVE[SPEC_ALPHA_TUNED]
 gammas = [r["gamma"] for r in rows]
 h100 = [r["h100"] for r in rows]
 sd8 = [r["sd8g3"] for r in rows]

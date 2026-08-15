@@ -17,7 +17,7 @@ Out:  fig7_ovf_ablation.png
 import numpy as np
 import matplotlib.pyplot as plt
 import paper_style as ps
-from paper_data import EXP04_OVF_LAYER_ABLATION, EXP10_OVF_STEP_RATIO
+from paper_data import EXP3_OVF_LAYER_ABLATION, EXP3_OVF_STEP_RATIO
 import os
 
 fig, (axL, axR) = plt.subplots(1, 2, figsize=(8.6, 3.4),
@@ -25,9 +25,9 @@ fig, (axL, axR) = plt.subplots(1, 2, figsize=(8.6, 3.4),
                                         "width_ratios": [1, 1.1]})
 
 # --- (a) layer-selection ablation -----------------------------------------
-labels = [d["config"] for d in EXP04_OVF_LAYER_ABLATION]
-f1 = [d["f1"] for d in EXP04_OVF_LAYER_ABLATION]
-drift = [d["drift_pct"] for d in EXP04_OVF_LAYER_ABLATION]
+labels = [d["config"] for d in EXP3_OVF_LAYER_ABLATION]
+f1 = [d["f1"] for d in EXP3_OVF_LAYER_ABLATION]
+drift = [d["drift_pct"] for d in EXP3_OVF_LAYER_ABLATION]
 x = np.arange(len(labels))
 
 best_idx = int(np.argmax(f1))   # q,k,v,o (ours)
@@ -62,9 +62,9 @@ axL.annotate("best $F_1$ +\nlowest drift", xy=(best_idx, f1[best_idx]),
              arrowprops=dict(arrowstyle="->", color=ps.PALETTE["highlight"], lw=0.9))
 
 # --- (b) activation step-ratio --------------------------------------------
-ratios = [d["ratio_pct"] for d in EXP10_OVF_STEP_RATIO]
-f1b = [d["f1"] for d in EXP10_OVF_STEP_RATIO]
-ppl = [d["ppl"] for d in EXP10_OVF_STEP_RATIO]
+ratios = [d["ratio_pct"] for d in EXP3_OVF_STEP_RATIO]
+f1b = [d["f1"] for d in EXP3_OVF_STEP_RATIO]
+ppl = [d["ppl"] for d in EXP3_OVF_STEP_RATIO]
 best_b = int(np.argmax(f1b))     # 30%
 
 axR.plot(ratios, f1b, color=ps.PALETTE["primary"], lw=1.6, marker="o", ms=5,

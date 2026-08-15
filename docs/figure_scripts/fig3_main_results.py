@@ -18,7 +18,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import paper_style as ps
 from paper_data import (
-    BF16_F1, BF16_F1_ERR, EXP01_QUANT_QUALITY, QAT_QAD_OVF,
+    BF16_F1, BF16_F1_ERR, PTQ_BASELINES, QAT_QAD_OVF,
     SAFE_QAQ_F1, SAFE_QAQ_F1_ERR,
 )
 import os
@@ -26,7 +26,7 @@ import os
 # --- assemble the unified, ordered method list ----------------------------
 # (name, F1, recovery, F1_err, colour-key)
 methods = [("BF16 (upper)", BF16_F1, 100.0, BF16_F1_ERR, "ref")]
-for m in EXP01_QUANT_QUALITY:
+for m in PTQ_BASELINES:
     methods.append((m["name"], m["f1"], m["recovery"], m["std"], "ptq"))
 for m in QAT_QAD_OVF:
     key = "qat" if "QAT" in m["name"] else "ours"

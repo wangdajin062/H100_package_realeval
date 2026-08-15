@@ -19,17 +19,17 @@ Out:  fig6_loss_teacher_ablation.png
 import numpy as np
 import matplotlib.pyplot as plt
 import paper_style as ps
-from paper_data import EXP03_LOSS_ABLATION, EXP09_TEACHER
+from paper_data import EXP2_LOSS_ABLATION, EXP10_TEACHER
 import os
 
 fig, (axL, axR) = plt.subplots(1, 2, figsize=(7.6, 3.5),
                                gridspec_kw={"wspace": 0.47})
 
 # --- (a) loss-function ablation: F1 bars + KL bars (twin axis) -------------
-labels = [d["loss"] for d in EXP03_LOSS_ABLATION]
-f1 = [d["f1"] for d in EXP03_LOSS_ABLATION]
-kl = [d["kl"] for d in EXP03_LOSS_ABLATION]
-errs = [d["std"] for d in EXP03_LOSS_ABLATION]
+labels = [d["loss"] for d in EXP2_LOSS_ABLATION]
+f1 = [d["f1"] for d in EXP2_LOSS_ABLATION]
+kl = [d["kl"] for d in EXP2_LOSS_ABLATION]
+errs = [d["std"] for d in EXP2_LOSS_ABLATION]
 x = np.arange(len(labels))
 w = 0.40
 
@@ -64,10 +64,10 @@ axL.annotate("best $F_1$ &\nlowest KL", xy=(0 - w / 2, 0.916 + errs[0]),
              arrowprops=dict(arrowstyle="->", color=ps.PALETTE["highlight"], lw=0.9))
 
 # --- (b) teacher selection -------------------------------------------------
-tlabels = [d["teacher"] for d in EXP09_TEACHER]
-f1_fixed = [d["f1_fixed"] for d in EXP09_TEACHER]
-f1_conv = [d["f1_conv"] for d in EXP09_TEACHER]
-tokens = [d["tokens_B"] for d in EXP09_TEACHER]
+tlabels = [d["teacher"] for d in EXP10_TEACHER]
+f1_fixed = [d["f1_fixed"] for d in EXP10_TEACHER]
+f1_conv = [d["f1_conv"] for d in EXP10_TEACHER]
+tokens = [d["tokens_B"] for d in EXP10_TEACHER]
 xt = np.arange(len(tlabels))
 
 # highlight homologous 0.5B (index 0)
