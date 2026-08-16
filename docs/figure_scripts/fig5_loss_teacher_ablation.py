@@ -1,5 +1,5 @@
 """
-fig6_loss_teacher_ablation.py  --  Paper Figure 6 (insertion order #6)
+fig5_loss_teacher_ablation.py  --  Paper Figure 5 (insertion order #5)
 
 Loss-function and teacher-selection ablation.
   (a) F1 (blue bars, left axis) and KL divergence to the BF16 teacher
@@ -13,8 +13,8 @@ Loss-function and teacher-selection ablation.
 
 All numbers from paper_data (EXP03 / EXP09).
 
-Run:  python3 fig6_loss_teacher_ablation.py
-Out:  fig6_loss_teacher_ablation.png
+Run:  python3 fig5_loss_teacher_ablation.py
+Out:  fig5_loss_teacher_ablation.png
 """
 import numpy as np
 import matplotlib.pyplot as plt
@@ -91,11 +91,11 @@ for xi, tok in zip(xt, tokens):
 
 out = os.path.join(os.path.dirname(__file__), "..", "figure")
 os.makedirs(out, exist_ok=True)
-fig.savefig(os.path.join(out, "fig6_loss_teacher_ablation.png"), dpi=400, bbox_inches="tight",
+fig.savefig(os.path.join(out, "fig5_loss_teacher_ablation.png"), dpi=400, bbox_inches="tight",
             pad_inches=0.05)
-fig.savefig(os.path.join(out, "fig6_loss_teacher_ablation.pdf"), bbox_inches="tight",
+fig.savefig(os.path.join(out, "fig5_loss_teacher_ablation.pdf"), bbox_inches="tight",
             pad_inches=0.05)
-fig.savefig(os.path.join(out, "fig6_loss_teacher_ablation.tiff"), dpi=400, bbox_inches="tight",
+fig.savefig(os.path.join(out, "fig5_loss_teacher_ablation.tiff"), dpi=400, bbox_inches="tight",
             pad_inches=0.05)
 plt.close(fig)
-print(f"saved {os.path.join(out, 'fig6_loss_teacher_ablation.png')}, .pdf and .tiff")
+print(f"saved {os.path.join(out, 'fig5_loss_teacher_ablation.png')}, .pdf and .tiff")

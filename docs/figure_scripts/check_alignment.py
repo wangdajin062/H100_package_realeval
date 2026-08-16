@@ -28,10 +28,10 @@ _PAPER_DATA = _HERE / "paper_data.py"
 # 需要核对 import 的图像/列表脚本
 _FIG_SCRIPTS = [
     "fig3_main_results.py",
-    "fig5_revision_ablations.py",
-    "fig6_loss_teacher_ablation.py",
-    "fig7_ovf_ablation.py",
-    "fig8_speculative_decoding.py",
+    "fig4_revision_ablations.py",
+    "fig5_loss_teacher_ablation.py",
+    "fig6_ovf_ablation.py",
+    "fig7_speculative_decoding.py",
 ]
 
 

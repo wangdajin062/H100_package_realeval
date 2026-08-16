@@ -1,5 +1,5 @@
 """
-fig8_speculative_decoding.py  --  Paper Figure 8 (insertion order #8)
+fig7_speculative_decoding.py  --  Paper Figure 7 (insertion order #7)
 
 Speculative-decoding analysis.
   (a) Theoretical speedup curves S(alpha) = (1 - alpha^(gamma+1)) / (1 - alpha)
@@ -12,8 +12,8 @@ Speculative-decoding analysis.
 
 All numbers from paper_data (EXP05 / Table 8).
 
-Run:  python3 fig8_speculative_decoding.py
-Out:  fig8_speculative_decoding.png
+Run:  python3 fig7_speculative_decoding.py
+Out:  fig7_speculative_decoding.png
 """
 import numpy as np
 import matplotlib.pyplot as plt
@@ -97,11 +97,11 @@ for xi, (h, s) in zip(x, zip(h100, sd8)):
 
 out = os.path.join(os.path.dirname(__file__), "..", "figure")
 os.makedirs(out, exist_ok=True)
-fig.savefig(os.path.join(out, "fig8_speculative_decoding.png"), dpi=400, bbox_inches="tight",
+fig.savefig(os.path.join(out, "fig7_speculative_decoding.png"), dpi=400, bbox_inches="tight",
             pad_inches=0.05)
-fig.savefig(os.path.join(out, "fig8_speculative_decoding.pdf"), bbox_inches="tight",
+fig.savefig(os.path.join(out, "fig7_speculative_decoding.pdf"), bbox_inches="tight",
             pad_inches=0.05)
-fig.savefig(os.path.join(out, "fig8_speculative_decoding.tiff"), dpi=400, bbox_inches="tight",
+fig.savefig(os.path.join(out, "fig7_speculative_decoding.tiff"), dpi=400, bbox_inches="tight",
             pad_inches=0.05)
 plt.close(fig)
-print(f"saved {os.path.join(out, 'fig8_speculative_decoding.png')}, .pdf and .tiff")
+print(f"saved {os.path.join(out, 'fig7_speculative_decoding.png')}, .pdf and .tiff")

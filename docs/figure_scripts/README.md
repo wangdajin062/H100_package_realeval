@@ -1,6 +1,6 @@
 # QAD-MultiGuard — Paper Figure Scripts
 
-Python scripts that regenerate all eight paper figures, in **paper insertion
+Python scripts that regenerate all seven paper figures, in **paper insertion
 order**, from a single audited data source. Every numeric value has been
 cross-checked against the paper's tables and body text and the engineering
 experiment runs (EXP01–EXP10).
@@ -12,10 +12,10 @@ experiment runs (EXP01–EXP10).
 | 1 | `fig1_architecture.py`         | Three-tier edge–cloud architecture |
 | 2 | `fig2_acoustic_embedding.py`   | 128-d non-invertible *F*ᵥ construction |
 | 3 | `fig3_main_results.py`         | Main results on TAF-28k (F1 + recovery) |
-| 5 | `fig5_revision_ablations.py`   | Revision ablations (quant / AdvFraud / LDP) |
-| 6 | `fig6_loss_teacher_ablation.py`| Loss-function + teacher-selection ablation |
-| 7 | `fig7_ovf_ablation.py`         | OV-Freeze layer + step-ratio ablation |
-| 8 | `fig8_speculative_decoding.py` | Speculative-decoding speedup |
+| 4 | `fig4_revision_ablations.py`   | Revision ablations (quant / AdvFraud / LDP) |
+| 5 | `fig5_loss_teacher_ablation.py`| Loss-function + teacher-selection ablation |
+| 6 | `fig6_ovf_ablation.py`         | OV-Freeze layer + step-ratio ablation |
+| 7 | `fig7_speculative_decoding.py` | Speculative-decoding speedup |
 
 Supporting modules:
 
@@ -35,7 +35,7 @@ python3 -m experiments.runner --paper --config config/h100.yaml
 python3 docs/figure_scripts/check_alignment.py
 
 # 3. Regenerate all figures
-python3 generate_all.py        # regenerate all 8 PNGs
+python3 generate_all.py        # regenerate all 7 PNGs
 # or run any single figure:
 python3 fig3_main_results.py
 ```

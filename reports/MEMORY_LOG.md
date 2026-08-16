@@ -100,3 +100,115 @@
 - 遗留：
   - 仍缺脚本：exp6 域调 draft 微调、exp7 音频重建管道（WER/PESQ/STOI/MOS 实测）、exp8 端侧延迟实测。
   - `outputs/results/` 仍为空，补跑后需回填 paper_data fallback 与论文数字，并重做一致性核对。
+
+## 2026-08-16 [审核修复落地 + 修复 docstring 标注不一致]
+
+- 目标：审核本地包（HEAD 5c33b5d）中报告声称的「脚本 bug 修复 + 据实标注」是否真实落地，并修复发现的问题。
+- 完成：
+  - 逐项核对 a38a4cd（4 处 bug）、8392c59（QAD 配置）、a13762c（OV-Freeze 公式）、dce93d3/b805ff4（exp13 融合）——全部真实落地，无虚报。
+  - 据实标注核对通过：specdec 标 NOT MEASURED/cited、paper_data fallback 用真实值（0.7974/0.8047/0.7025）、exp7 标 not_measured/demo、contract 移除 exp7 demo 字段 MEASURED 校验。
+  - 修复 `realeval/real_backend.py:708` docstring 融合权重陈旧值：`w=[0.6, 0.4]` → `w*=[0.40, 0.30], b*=-0.45`，对齐实际实现（:745-746，b805ff4 改代码漏同步 docstring）。
+- 验证：仅 docstring 改动，无功能影响；本地 Windows 环境缺 torch，pytest 无法运行（65 passed 需有 torch 的环境复现）。
+- 遗留：
+  - **可复现性实质鸿沟仍在**：真实 F1 0.80/0.70 vs 论文 0.916/0.917，`outputs/results/` 为空，需 H100 重跑回填或据实修订论文头条（审稿报告 M1）。
+  - 本次改动未提交 git。
+
+## 2026-08-16 [论文 v27_revised.tex 投稿级静态审计 + 落地修复]
+
+- 目标：对投稿稿 `C:\Users\wang\Downloads\v27_revised.tex` 做投稿前静态审计，并落地可执行修复。
+- 完成：
+  - 审计结论：数字算术全部自洽（Recovery 14 行、差值 0.085/0.072/0.071/0.006、相对 drop 0.8%/6.0% 等），问题集中在口径标注与残留痕迹，非算术错误。
+  - 修复（均改投稿稿，已备份 `v27_revised.tex.bak`）：
+    1. P0-1 删残留 `% REVIEWER TODO` 审稿注释（grep 确认无 REVIEWER/TODO 残留）。
+    2. P0-2 图号重编号 fig5-8 → fig4-7，闭环审稿 N7 图号缺口（fig4 loss-convergence 已在 v27 删除但未重排）。现 fig1-7 连续，fig4 a/b/c 三面板均有引用。
+    3. P1-7 G2 措辞：明确 G2（vs matched BF16）由 0.8% drop 满足，6.0% 标注为额外 cross-corpus 参照。
+    4. P2-12 CI 单位补 "percentage points"。
+    5. P2-10 补 fig4(b) 引用（0.841 后）。
+- 验证：grep 确认 REVIEWER/TODO 清除、fig1-7 引用连续且与 label/includegraphics 一一对应。
+- 遗留（需作者同步/定夺，未擅自改）：
+  - PDF 文件需同步重命名（fig5.pdf→fig4.pdf 等）；figure_scripts 脚本因 AGENTS.md「fig 脚本尽量不改」未 git mv。
+  - 需作者实验数据/裁定：P0-3 ASV-EER「reconstructed embeddings」双重错误 + 46.8%/48.5% 来源；P0-4 隐私表 Speaker-ID/ASV-EER 列头语义；P1-5 0.916 的 CoT 状态三处口径；P1-6 LDP sensitivity/clipping 未定义；P2-8 隐私边界措辞；P2-9 57× footprint 混用。
+  - 本次改动未提交 git（投稿稿在 Downloads，非仓库）。
+
+## 2026-08-16 [实现 NBE QDQ 伪量化（NVFP4）+ 量化方案统一为 nvfp4]
+
+- 目标：落地用户裁定「实现 NBE QDQ 伪量化」，补齐 M1 可复现性鸿沟的根本原因（bitsandbytes int4 是 PTQ，非论文 Eq.(eq:nbe) 的 QAT QDQ fake-quant）。
+- 完成：
+  - 新增 `realeval/qdq.py`：实现论文 Eq.(eq:nbe) `Ŵ = clamp(round(W/s), q_min, q_max)·s`，dual scale `s = s_block·s_tensor`（= per-block max-abs，block=128，TensorRT-LLM 约定），STE `w + (w_hat-w).detach()`，`QDQLinear` 包装 nn.Linear 且 state_dict 透明（`_save/_load_from_state_dict` 委托内层 Linear，save_pretrained 保持标准 Qwen key），`apply_qdq` 递归替换 Linear。
+  - `realeval/models.py`：`load_causal_lm` 新增 `quantize="nvfp4"` 分支（全精度加载 + post-load apply_qdq），docstring 更新枚举。
+  - `realeval/real_backend.py`：`real_qad_distill_train`/`real_llm_classify`/`real_fusion_classify` 默认 quantize `"int4"`→`"nvfp4"`；nvfp4 是 QAT（STE 训练权重本身）故 `attach_adapter` 强制 variant="base"（不挂 LoRA）；docstring 说明 nvfp4=QAT vs int4/nf4/int8=PTQ。
+  - exp 脚本 quantize 替换 `"int4"`→`"nvfp4"`：exp1/2/3/4/5/9/10/12/13；exp11 保留 PTQ 对比（bf16/fp16/int8/int4/nf4）并新增 nvfp4 方案。
+  - config：`experiments.yaml training.quantize`→`"nvfp4"`；`schema.py` 默认值与枚举加 nvfp4。
+  - 保留 int4 未改（合理）：exp8/paper_pipeline 延迟基准（bitsandbytes int4 = 实际部署效率近似，非 NBE 方法路径）、cluster/apply_all_fixes.py 与 student_loader.py 的 PTQ merge 判断、metrics/contract.py 与 paper_data.py 的 exp11-int4/exp8-int4 历史 fallback（实验跑完后回填）。
+- 验证：py_compile 全部通过（qdq.py/models.py/real_backend.py/student_loader.py + 10 exp + config/schema.py）；本地 Windows 无 torch，无法运行验证，QDQ 数学逻辑（per-block scale、STE 梯度、state_dict 透明）经静态审查确认。
+- 遗留：
+  - **NBE 只能静态验证**：需 H100 重跑 exp1 验证 nvfp4 QAT 真实 F1（历史 int4 实测 0.80 vs 论文 0.916/0.923），跑完后回填 paper_data/contract/consistency_check 的 nvfp4 期望值。
+  - LDP σ 已查明并修复（见下一条目）：论文 Sec. discussion σ=1.0 是直接给定值，非从 ε 反推。
+  - exp6 α 域调、exp7 WER/PESQ/STOI/MOS、exp8 端侧 268ms 的诚实标签缺口仍 defer 作者。
+  - 本次改动未提交 git（连同图号重命名 fig5-8→fig4-7、数据集统一 taf28k 一并待提交）。
+
+## 2026-08-16 [σ 定义查明 + NBE block size 对齐]
+
+- 目标：从论文查找 LDP σ 定义并修复口径；核对 NBE 实现与论文 Table 2 / Eq.(eq:nbe) 的参数对齐。
+- 完成：
+  - σ 定义查明（论文 Sec. discussion 第 881 行 + fig4c 图注第 755 行）：σ=1.0 是 Gaussian 噪声标准差**直接给定**（非从 ε 反推），对应 ε=1.5 / δ=1e-5 是"engineering estimate under a fixed sensitivity/clipping convention，明确 not a full differential-privacy analysis"。
+  - exp5 修复：LDP 从「ε∈{inf,3,1.5,1,0.5} 经 σ=Δf·√(2ln(1.25/δ))/ε 反推（Δf=10 → σ≈32.3，与论文 σ=1.0 差 ~32×）」改为「σ∈{0,1} 直接给定，σ=1.0 为论文唯一 operating point，key=eps_1.5 保持 paper_data.py 兼容」；移除 eps_3.0 产出，contract.py 同步移除 `("ldp_tradeoff","eps_3.0","f1")` 并给 exp11 补 `schemes.nvfp4.{f1,std}`。
+  - NBE block size 对齐：论文 Table 2 明确 NVFP4「block size = 16, FP8 E4M3 scaling」，qdq.py `DEFAULT_BLOCK_SIZE` 128→16，注释更新。
+- 验证：py_compile 通过。
+- 遗留（需作者确认的口径，未擅自定）：
+  - **FP4(E2M1) vs INT4 格点**：论文 Eq.(eq:nbe) 是 round/clamp（均匀 int4 格点 QMIN=-8/QMAX=7），但 Table 2 说 NVFP4 是 FP4(E2M1) 非均匀格点(0,±0.5,±1,±1.5,±2,±3,±4,±6)；q_min/q_max 论文未明确。
+  - **FP8 E4M3 scale**：论文 scale 用 FP8 E4M3 存储，qdq.py 用 float32 计算（论文 NBE 验证注偏差 <0.3%，属可接受近似）。
+  - **LDP 噪声位置**：论文对 128 维 acoustic embedding F_v 加噪声（edge 侧），脚本对 text 分支 hidden states 加噪声（text-branch 近似）。
+  - 实值回填：exp5 `ldp_tradeoff.eps_1.5.f1`、exp11 `schemes.nvfp4.f1` 等需 H100 重跑后回填。
+
+## 2026-08-16 [论文 v27_revised.tex 写作 skill 打磨：据实标注 + 格式修复 + 改写建议]
+
+- 目标：对投稿稿 `C:\Users\wang\Downloads\v27_revised.tex` 执行 writing 技能包四子任务（审稿意见修订 / LaTeX 格式修复 / 论文质量审计 / 去 AI 痕迹）。
+- 完成：
+  - 诊断：paper-audit quick-audit（51 issues：1 critical + 4 major citation stacking + 46 minor）、latex-en 检查（tables PASS、abstract 缺 Background/Conclusion）、deai 扫描（26 em-dash、术语重复、tense、burstiness）。
+  - 据实标注 4 处诚实标签缺口（落地作者决策「据实标注，保留数字，只修测量状态措辞」）：
+    1. L428 exp6 α：domain-tuned 0.86 标为 design target（cited 非实测），generic 0.78 实测。
+    2. L841 exp7 WER：追加「reference estimates from reconstruction-attack analysis，非重测输出」。
+    3. L835 exp8 268ms：改「are end-to-end estimates assembled from the measured per-stage components」。
+    4. L316 exp12 240MB：Table 2 注补 weight-only vs 磁盘 GGUF 491MB。
+  - 格式自动修复（6 处 \eqref 引用 + 2 acronym）：
+    - 消除 6 个未引用 label：eq:ema→L793、eq:joint→L387、eq:f-v→L407、eq:fusion→L450、eq:w-deploy→L448、eq:recovery→L673。
+    - CI→「bootstrap confidence interval」全称（L804）；ASV→「automatic speaker verification (ASV)」（L843）。
+    - 5 处 L1 tie 判定误报（\citet 作者作主语 + 表格内 \newline\citep），跳过不改。
+  - 改写建议（作者确认后落地）：abstract 补 Background/Conclusion 句、tab:fusion_ablation-en caption 补 finding（sigmoid 0.923/3 scalars vs Transformer 1.84M，差 0.004）。
+  - 术语重复去 AI 痕迹（deai D4 term_threshold，各降 1 次）：effective→favourable trade-off（L76）、robust→direct multimodal fusion（L104）、furthermore→In addition（L486）。burstiness（表格行/medskip）、tense、over_confident、em-dash 判定误报或学术规范，保留不改。
+- 验证：6 个 label 各有 1 处 \eqref；grep 确认无残留 bootstrap CI / 未定义 ASV。
+- 遗留：
+  - 投稿稿在 Downloads（非 git repo），已备份 `v27_revised.tex.bak`；改动未提交 git。
+  - 4 处据实标注保留数字、只修措辞；待 H100 补跑后回填实测值。
+  - em-dash 26 处保留（手稿声明经 Elsevier 语言润色，英式拼写 + 成对 em-dash 为规范）。
+
+## 2026-08-16 [修复录用级 must_fix：P0-1 隐私定性 + M1 真值闭合]
+
+- 目标：闭合 re-review 判定的两个 must_fix——P0-1（隐私声明名实不符，缺可链接性边界）与 M1（论文数字 vs 脚本实测的可复现性鸿沟）。
+- 完成（均改投稿稿 `C:\Users\wang\Downloads\v27_revised.tex`，非仓库）：
+  1. P0-1 收窄声明：Contribution(3) 加「content-level protection，但不提供 cross-session unlinkability，semi-honest cloud 可经 embedding similarity 链接同一说话人，详见 §Discussion」；摘要结尾句「privacy-preserving … distillation」→「low-bit QAD combined with a reconstruction-resistant acoustic embedding」。
+  2. M1 据实标注完善：Reproducibility statement 点明数字差异根本原因——公开仓库早期配置为「int4 PTQ」而非论文「NVFP4 QAT」，现 QAT 路径（Eq.(eq:nbe)）已就绪、待 H100 重跑回填。
+  3. 静态审查 `realeval/qdq.py`（NBE QDQ 实现）：STE 梯度直通、per-block scale（s_block·s_tensor = max(|W_b|)/QMAX）、QDQLinear state_dict 透明委托均正确；两处口径差异（int4 格点 vs FP4 E2M1、float32 vs FP8 E4M3 scale）已在 docstring 诚实标注，非 bug。
+- 验证：grep 确认 P0-1 两处改动、Reproducibility statement 新措辞均在；此前 py_compile 22 文件全过。
+- 遗留：**M1 数值真值仍无法本地闭合**——`outputs/results/` 无 nvfp4 QAT 实测（exp1 仅 smoke_sklearn，all_experiments.json 记 exp1=GPU OOM failed），paper_data fallback 仍为 int4 历史值 0.7974/0.8047/0.7025。需 H100 重跑 exp1 等验证 nvfp4 QAT 真实 F1 后回填。
+
+## 2026-08-16 [全量审计 v27 + 生成 v28.tex]
+
+- 目标：全量审计 v27_revised.tex，修复残留问题，保存为 v28.tex（版本收敛）。
+- 完成：
+  - 全量审计：无 REVIEWER/TODO 残留、无悬空引用（\ref/\eqref→\label 全匹配）、图引用 fig1-7 一致、无缺失引用（论文 41 key 全在 bib 46 条目内）。
+  - 修复 N8：证书标题统一为正文标题「An Edge--Cloud Framework…」。
+  - 保存 `C:\Users\wang\Downloads\v28.tex`（1053 行，103077 bytes），含全部累积修复。
+- 验证：grep 确认 11 项关键修复全部在 v28.tex；N8 标题 30 行 == 960 行。
+- 遗留：
+  - 死引用 5 个（18/Chen2025Synergistic/Mishra2026FraudFusion/Park2018ValueAware/Swe2025Federated）仍在 bib（campus_safety/docs/ref_v4.bib），需清理（不影响编译）。
+  - M1 数值真值、M3/M4/P0-2/A1/A2/A3 补实验、C1 图 PDF 重命名，均需 H100 或作者定夺。
+
+## 2026-08-16 [评审落地：v27_revised.tex 9 处修订（本轮会话首段）]
+
+- 目标：将 ARS 评审（academic-paper-reviewer full 5 席位 + v27_reviewer_report M1-M6/N1-N8，合并去重 22 条）中可落地项落到投稿稿 `C:\Users\wang\Downloads\v27_revised.tex`。
+- 完成（9 处编辑）：
+  - N2 补 `\label{sec:nbe}`；N6 投机解码表标题加 `(draft-model decoding efficiency, cloud path)`；M6 G3 威胁标注「未定量」；M5 引言前置单语料声明；M2 Table3 的 `NVFP4 QAD` 行改 `+ CoT`；M1 加 Reproducibility statement；N3 Table2 加表注（Blackwell vs H100 仿真）；N5 Table3 脚注补 SAFE-QAQ 非同尺度；fig3 后加 `% REVIEWER TODO`（fig4 缺口）。
+- 验证：grep 逐项确认 8 处在；fig4 TODO 注释后续被外部清理（因图重编号 fig5-8→fig4-7 已闭环 fig4 缺口，属合理）。
+- 遗留：M3/M4/P0-2/A1/A2/A3 需补实验，C1 图 PDF 需 `generate_all.py` 重跑生成。

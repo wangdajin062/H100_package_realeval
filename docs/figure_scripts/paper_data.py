@@ -229,7 +229,7 @@ while len(LATENCY_P99_MS) < 4:
     LATENCY_P99_MS.append(16)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Figure 4 : loss-convergence trace  (REMOVED — dropped in the v27 revision)
+# Old Figure 4 : loss-convergence trace  (REMOVED — dropped in the v27 revision; figures renumbered)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # The loss-convergence figure was removed in the manuscript revision. These exp1
@@ -244,7 +244,7 @@ _snr_max = _from_result("exp1", "snr_max", placeholder="PH_EXP1_SNR_MAX", fallba
 SNR_RANGE           = (_snr_min, _snr_max)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Figure 6(a) / exp2 : loss-function ablation
+# Figure 5(a) / exp2 : loss-function ablation
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _variants = _get("exp2", "variants") or {}
@@ -278,7 +278,7 @@ EXP2_LOSS_ABLATION = [
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Figure 6(b) / exp10 : teacher selection
+# Figure 5(b) / exp10 : teacher selection
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _scales = _get("exp10", "scales") or {}
@@ -310,7 +310,7 @@ EXP10_TEACHER = [
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Figure 7(a) / exp3 : OV-Freeze layer-selection ablation
+# Figure 6(a) / exp3 : OV-Freeze layer-selection ablation
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _cond   = _get("exp3", "conditions") or {}
@@ -318,7 +318,7 @@ _layers = _get("exp3", "layer_selection") or {}
 
 # Individual F1 values from each condition/layer (not all from ov_freeze_full)
 # exp3 outputs layer_selection keys: early(0.25), mid(0.5), late(0.75), all(1.0).
-# Map them to the figure labels used by fig7_ovf_ablation.py.
+# Map them to the figure labels used by fig6_ovf_ablation.py.
 _f1_no_ovf = _r(_from_result("exp3", "conditions", "no_reg", "f1", placeholder="PH_EXP3_NO_OVF_F1", fallback=0.8047))
 _f1_ovf    = _OVF_FULL_F1   # reuse consolidated constant
 _f1_half   = _r(_from_result("exp3", "conditions", "ov_freeze_half", "f1", placeholder="PH_EXP3_OVF_HALF_F1", fallback=0.8047))
@@ -349,7 +349,7 @@ EXP3_OVF_LAYER_ABLATION = [
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Figure 7(b) / exp3 rho sweep : OV-Freeze activation step-ratio
+# Figure 6(b) / exp3 rho sweep : OV-Freeze activation step-ratio
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _rho = _get("exp3", "rho_sweep") or {}
@@ -384,7 +384,7 @@ EXP3_OVF_STEP_RATIO = [
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Figure 8 / exp6 : speculative decoding
+# Figure 7 / exp6 : speculative decoding
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # alpha values: prefer H100 measured, fall back to paper_reference, then hardcoded
@@ -434,13 +434,13 @@ def speedup(alpha: float, gamma: int) -> float:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Figure 5 : revision-round ablation results
+# Figure 4 : revision-round ablation results
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Paper-claimed reference values (self-citation / manual eval) — NOT experiment-derived.
 # Used only when the corresponding experiment hasn't produced the value yet; must not
 # be presented as independent measurements.
-_FIG5_REF = {
+_FIG4_REF = {
     "advfraud_curated_f1": 0.875,     # AdvFraud-3k curated 517-subset (manual eval)
     "advfraud_bf16_matched": 0.882,   # BF16 baseline on AdvFraud curated subset
     "ldp_eps_1_5_f1": 0.902,          # ε-LDP (ε=1.5, σ=1.0, δ=1e-5) F1 on TAF-28k
@@ -463,7 +463,7 @@ def _safe_delta(a, b, ndigits=3):
     return round(a - b, ndigits) if (a is not None and b is not None) else None
 
 
-FIG5_QUANT = {
+FIG4_QUANT = {
     "labels": ["Homogeneous\nINT4", "Heterogeneous\n(NVFP4+Q4_K_M)"],
     "f1": [_f1_homo, _f1_hetero],
     "bf16_ref": BF16_F1,                                     # 0.931
@@ -471,7 +471,7 @@ FIG5_QUANT = {
 }
 
 # Panel (b): AdvFraud-3k robustness — full pool vs curated subset
-FIG5_ADVFRAUD = {
+FIG4_ADVFRAUD = {
     "labels": ["Full pool\n(3,000)", "Curated subset\n(517)"],
     "f1": [
         _from_result("exp5", "advfraud", "full_pool", "f1", placeholder="PH_EXP5_ADVFRAUD_FULL_POOL_F1", fallback=0.1238),
@@ -480,22 +480,22 @@ FIG5_ADVFRAUD = {
     "bf16_matched": _from_result(
         "exp5", "bf16_matched_advfraud",
         placeholder="PH_EXP5_BF16_MATCHED",
-        fallback=_FIG5_REF["advfraud_bf16_matched"], cited=True,
+        fallback=_FIG4_REF["advfraud_bf16_matched"], cited=True,
     ),
 }
 
 # Panel (c): epsilon-LDP privacy-utility trade-off
 # Note: latency values are end-to-end pipeline P50 (ms/request), NOT per-sample
 # inference latency from exp8 (which measures ms/token at ~2-3 ms).
-FIG5_LDP = {
+FIG4_LDP = {
     "labels": ["No LDP\n(main results)", "$\\epsilon$-LDP\n($\\epsilon$=1.5)"],
     "f1": [
         _OVF_FULL_F1,             # best QAD+OVF (no LDP)
         _from_result("exp5", "ldp_tradeoff", "eps_1.5", "f1", placeholder="PH_EXP5_LDP_EPS_1_5_F1", fallback=None),
     ],
     "latency": [
-        _FIG5_REF["pipeline_latency_p50_ms"],
-        _FIG5_REF["pipeline_latency_ldp_ms"],
+        _FIG4_REF["pipeline_latency_p50_ms"],
+        _FIG4_REF["pipeline_latency_ldp_ms"],
     ],
 }
 
