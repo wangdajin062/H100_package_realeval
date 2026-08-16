@@ -22,7 +22,7 @@
 
 - **判别任务**：中文电信欺诈二分类（ChiFraud 404k 主数据集，保持 ~14.3% 自然欺诈比例）
 - **同源自蒸馏（QAD）**：BF16 教师（Qwen2.5-0.5B-Instruct）监督同架构低比特量化学生，配合 OV-Freeze 输出方差冻结正则
-- **多模态融合**：文本嵌入 + 语音特征（whisper 编码器）的 early / late / hybrid 融合（TAF-28k 转录 13,388 条）
+- **多模态融合**：文本风险分 + 声学风险分的决策级融合，对齐论文口径的三种融合头（softmax-linear / sigmoid-linear（本文）/ Transformer，见 Eq. fusion；TAF-28k 转录 13,388 条）
 - **边缘部署形态**：0.5B Q4_K_M GGUF（~240 MB）学生模型
 
 ### 2.1 14 个实验一览
@@ -41,7 +41,7 @@
 | exp10 | `exp10_teacher_scale.py`        | 教师规模：0.5B/1.5B/3B/7B                        | 0.5B 教师最优 0.8963                               |
 | exp11 | `exp11_quantization_scheme.py`  | 量化方案：fp16/int8/int4/nf4                     | int4 0.4287 最优                                   |
 | exp12 | `exp12_fraudfusion_baseline.py` | FraudFusion 竞品基线 + 存储分解                  | QAD_INT4 0.6965；总优势 30.8×                     |
-| exp13 | `exp13_fusion_strategy.py`      | 融合策略消融                                     | late_fusion 0.9275 最优                            |
+| exp13 | `exp13_fusion_strategy.py`      | 决策级融合消融（softmax/sigmoid/Transformer）    | sigmoid-linear（本文）为主口径；数值以真跑回填    |
 | exp14 | `exp14_gguf_comparison.py`      | BF16 transformers vs Q4_K_M llama.cpp            | q4km 0.7025 vs bf16 0.5853                         |
 
 数值源文件：`outputs/results/expN_{timestamp}.json` 与 `outputs/results/all_experiments.json`。

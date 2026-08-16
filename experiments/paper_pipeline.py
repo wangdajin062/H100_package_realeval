@@ -188,7 +188,7 @@ def _aggregate_and_save(
 
     main_rows = [
         ["exp13 (fusion)", all_results.get("exp13", {}).get("computation", "-"),
-         extract_headline("exp13", all_results.get("exp13", {})).get("F1[late]", "-")],
+         extract_headline("exp13", all_results.get("exp13", {})).get("F1[sigmoid_linear]", "-")],
         ["exp11 (int4)", all_results.get("exp11", {}).get("computation", "-"),
          extract_headline("exp11", all_results.get("exp11", {})).get("F1[int4]", "-")],
         ["exp1 (QAD-LLM)", all_results.get("exp1", {}).get("computation", "-"),

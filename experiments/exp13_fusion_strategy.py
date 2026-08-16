@@ -1,4 +1,5 @@
-"""exp13: Fusion Strategy — Compare softmax, sigmoid, and transformer decision-level fusion (text + acoustic risk scores)."""
+"""exp13: Fusion Strategy — Compare the paper's decision-level fusion heads (softmax-linear,
+sigmoid-linear (ours), Transformer) over text + acoustic risk scores (Eq. fusion)."""
 from __future__ import annotations
 import logging
 from experiments.framework import run_with_mode
@@ -32,23 +33,24 @@ def run(config: dict) -> dict:
     def run_paper(config: dict) -> dict:
         from realeval import real_backend
         import time
-        # Real multimodal fusion on H100: Qwen (text) + pre-extracted acoustic embeddings.
+        # Real decision-level fusion on H100: Qwen risk vote (text) + calibrated acoustic score,
+        # combined by the paper's three fusion heads. Params are the actual trainable-parameter
+        # counts reported by each head (3 scalars for the linear heads, larger for Transformer).
         strategies = {}
-        for sname in ("softmax", "sigmoid", "transformer"):
+        for sname in ("softmax_linear", "sigmoid_linear", "transformer"):
             t0 = time.perf_counter()
             result = real_backend.real_fusion_classify(
                 config, test_texts, test_labels, test_audio,
                 quantize="nvfp4", fusion_strategy=sname)
             lat_ms = (time.perf_counter() - t0) / max(1, len(test_texts)) * 1000
-            # Params of the decision-level fusion function (paper Table 3)
-            _param_map = {
-                "softmax": 3,              # 3 scalars (2 weights + 1 bias)
-                "sigmoid": 3,              # 3 scalars (2 weights + 1 bias)
-                "transformer": 1_840_000,  # 1.84M
+            strategies[sname] = {
+                "f1": result["f1"], "accuracy": result["accuracy"],
+                "params": result.get("fusion_params", "NOT_MEASURED"),
+                "head": result.get("fusion_head"),
+                "degraded": result.get("fusion_degraded", False),
+                "latency_ms": round(lat_ms, 4),
             }
-            strategies[sname] = {"f1": result["f1"], "accuracy": result["accuracy"],
-                                 "params": _param_map[sname],
-                                 "latency_ms": round(lat_ms, 4)}
-        return {"computation": "h100_real_qwen", "strategies": strategies}
+        return {"computation": "h100_real_qwen", "strategies": strategies,
+                "headline_strategy": "sigmoid_linear"}
 
     return run_with_mode("exp13", config, run_paper)

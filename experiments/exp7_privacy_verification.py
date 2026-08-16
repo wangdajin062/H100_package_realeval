@@ -6,6 +6,27 @@ from experiments.framework import load_first_nonempty, run_with_mode
 logger = logging.getLogger("exp7")
 
 
+def _load_reconstruction_assets(log):
+    """Load reference + reconstructed waveform assets for the audio-reconstruction attack, if
+    present, so the WER/PESQ/STOI/MOS harness can backfill real values. Expected optional file:
+    ``<data_root>/privacy/reconstruction.npz`` with arrays ``ref_wavs``, ``recon_wavs`` (object
+    arrays of 1-D float waveforms) and ``ref_texts`` (str array), plus optional scalar
+    ``sample_rate``. Returns None when the assets are absent (the honest sandbox state)."""
+    try:
+        import numpy as np
+        from realeval.data import _data_root
+        path = _data_root() / "privacy" / "reconstruction.npz"
+        if not path.exists():
+            return None
+        z = np.load(path, allow_pickle=True)
+        return {"ref_wavs": list(z["ref_wavs"]), "recon_wavs": list(z["recon_wavs"]),
+                "ref_texts": [str(t) for t in z["ref_texts"]],
+                "sample_rate": int(z["sample_rate"]) if "sample_rate" in z else 16000}
+    except Exception as e:  # pragma: no cover - optional asset path
+        log.info("No audio-reconstruction assets (%s); WER/PESQ/STOI/MOS remain pending.", e)
+        return None
+
+
 def run(config: dict) -> dict:
     from realeval import data
     dataset = load_first_nonempty(
@@ -42,10 +63,11 @@ def run(config: dict) -> dict:
         sid = privacy.speaker_identification(emb, spk_labels, seed=42)
         glo = privacy.glo_reconstruction_attack(emb, emb[:, :64] if emb.shape[1] >= 64 else emb, steps=50, seed=42)
         # Measurement-coverage ledger: marks which paper privacy claims are backed by real
-        # measurements here vs. which require a separate audio-reconstruction pipeline.
-        # WER / PESQ / STOI / MOS need a full TTS+ASR rebuild (obfuscated audio → decode →
-        # score); they are NOT produced by this experiment, so the paper table must either
-        # run them separately or label them "not measured / planned".
+        # measurements here vs. which require the audio-reconstruction scoring harness.
+        # WER / PESQ / STOI / MOS are scored by realeval.privacy.reconstruction_quality_metrics
+        # from reference + reconstructed waveforms; when those assets (and the audio stack:
+        # jiwer/Whisper, pesq, pystoi, SQUIM/NISQA) are present the harness backfills real
+        # values, otherwise it records exactly which metric is still pending — it never fabricates.
         # GLO reconstruction: with no real embedding function passed as proj_fn, the attack
         # runs against a RANDOM orthogonal projection — a sandbox DEMO number, not a real
         # reconstruction measurement (P1-M4). Report it honestly: keep the source note and a
@@ -54,26 +76,38 @@ def run(config: dict) -> dict:
         measured_fields = ["pii_scan", "asv_eer", "speaker_id_acc", "n_speakers"]
         if not glo_is_demo:
             measured_fields.append("glo_reconstruction_corr")
-        coverage = {
-            "measured": measured_fields,
-            "not_measured": {
-                "wer_reconstruction": "requires obfuscate→decode→WER pipeline (TODO/planned)",
-                "pesq_reconstruction": "requires audio reconstruction scoring (TODO/planned)",
-                "stoi_reconstruction": "requires audio reconstruction scoring (TODO/planned)",
-                "mos_reconstruction": "requires subjective/neural MOS scoring (TODO/planned)",
-            },
-        }
+
+        # Audio-reconstruction scoring: run the real harness if aligned waveform assets exist.
+        recon = _load_reconstruction_assets(logger)
+        if recon is not None:
+            rq = privacy.reconstruction_quality_metrics(
+                recon["ref_wavs"], recon["recon_wavs"], recon["ref_texts"],
+                sample_rate=recon.get("sample_rate", 16000))
+            measured_fields += [f"{k}" for k in rq["measured"]]
+            recon_measured = rq["measured"]
+            recon_pending = rq["not_measured"]
+        else:
+            recon_measured = {}
+            recon_pending = {
+                "wer_reconstruction": "requires reference+reconstructed waveform assets (harness ready: reconstruction_quality_metrics)",
+                "pesq_reconstruction": "requires reference+reconstructed waveform assets (harness ready)",
+                "stoi_reconstruction": "requires reference+reconstructed waveform assets (harness ready)",
+                "mos_reconstruction": "requires reference+reconstructed waveform assets + SQUIM/NISQA (harness ready)",
+            }
+        coverage = {"measured": measured_fields, "not_measured": recon_pending}
         if glo_is_demo:
             coverage["demo_only"] = {"glo_reconstruction_corr": glo.get("note")}
-        return {"computation": "h100_real_qwen", "embedding_source": embedding_source,
-                "pii_report": pii_report,
-                "asv_eer_pct": asv["asv_eer_pct"], "min_dcf": asv.get("min_dcf"),
-                "speaker_id_accuracy": sid["accuracy"],
-                "glo_reconstruction_corr": glo["mean_reconstruction_corr"],
-                "glo_reconstruction_note": glo.get("note"),
-                "glo_reconstruction_is_demo": glo_is_demo,
-                "n_speakers": sid["n_speakers"],
-                "coverage": coverage}
+        result = {"computation": "h100_real_qwen", "embedding_source": embedding_source,
+                  "pii_report": pii_report,
+                  "asv_eer_pct": asv["asv_eer_pct"], "min_dcf": asv.get("min_dcf"),
+                  "speaker_id_accuracy": sid["accuracy"],
+                  "glo_reconstruction_corr": glo["mean_reconstruction_corr"],
+                  "glo_reconstruction_note": glo.get("note"),
+                  "glo_reconstruction_is_demo": glo_is_demo,
+                  "n_speakers": sid["n_speakers"],
+                  "coverage": coverage}
+        result.update(recon_measured)
+        return result
 
 
     return run_with_mode("exp7", config, run_paper)

@@ -82,6 +82,102 @@ def glo_reconstruction_attack(embeddings, targets, steps=150, seed=0,
             else "Using real embedding function, corr reflects real reconstruction difficulty"}
 
 
+def reconstruction_quality_metrics(ref_wavs, recon_wavs, ref_texts, *, sample_rate=16000,
+                                   asr_model=None):
+    """Score the audio-reconstruction attack aligned to the paper's privacy table
+    (WER / PESQ / STOI / MOS). Given the original reference waveforms, the adversary's
+    reconstructed waveforms (decoded from the 128-d ``F_v`` embedding), and the reference
+    transcripts, this computes the four content/quality metrics that quantify how little
+    intelligible speech an attacker recovers (high WER + low PESQ/STOI/MOS = strong privacy).
+
+    This is a real scoring harness — every metric is computed from the actual waveforms with a
+    standard library — but each metric is *guarded*: if its dependency (``jiwer``/Whisper for
+    WER, ``pesq``, ``pystoi``, or a neural MOS predictor) or the required assets are missing, it
+    is reported under ``not_measured`` rather than emulated. It therefore never fabricates a
+    privacy number; it produces the paper's metrics only when the audio stack and corpus are
+    present, and otherwise records exactly which measurement is pending.
+
+    Args:
+        ref_wavs:  list of reference waveforms (1-D float arrays at ``sample_rate``).
+        recon_wavs: list of reconstructed waveforms, index-aligned to ``ref_wavs``.
+        ref_texts: reference transcripts, index-aligned, used as WER ground truth.
+        sample_rate: sampling rate of the waveforms (PESQ needs 8k/16k).
+        asr_model: optional callable(wav, sr) -> transcript; if None, Whisper is loaded lazily.
+
+    Returns:
+        dict with ``measured`` (metric -> value) and ``not_measured`` (metric -> reason).
+    """
+    import importlib.util as _u
+    n = min(len(ref_wavs), len(recon_wavs), len(ref_texts))
+    if n == 0:
+        return {"measured": {}, "not_measured": {"all": "no aligned reference/reconstructed pairs provided"}}
+    ref_wavs, recon_wavs, ref_texts = ref_wavs[:n], recon_wavs[:n], ref_texts[:n]
+    measured: dict = {}
+    not_measured: dict = {}
+
+    # --- WER: ASR the reconstruction, compare to reference transcript (jiwer) ---
+    if _u.find_spec("jiwer") is None:
+        not_measured["wer_reconstruction"] = "jiwer not installed (pip install jiwer)"
+    elif asr_model is None and _u.find_spec("whisper") is None:
+        not_measured["wer_reconstruction"] = "no ASR: pass asr_model= or install openai-whisper"
+    else:
+        try:
+            import jiwer
+            if asr_model is None:
+                import whisper
+                _m = whisper.load_model("tiny")
+                asr_model = lambda wav, sr: _m.transcribe(np.asarray(wav, dtype=np.float32))["text"]
+            hyps = [asr_model(w, sample_rate) for w in recon_wavs]
+            measured["wer_reconstruction"] = round(float(jiwer.wer(list(ref_texts), hyps)), 4)
+        except Exception as e:  # pragma: no cover - depends on optional stack
+            not_measured["wer_reconstruction"] = f"WER scoring failed: {e}"
+
+    # --- PESQ (wideband) between reference and reconstruction ---
+    if _u.find_spec("pesq") is None:
+        not_measured["pesq_reconstruction"] = "pesq not installed (pip install pesq)"
+    elif sample_rate not in (8000, 16000):
+        not_measured["pesq_reconstruction"] = f"PESQ needs 8k/16k, got {sample_rate}"
+    else:
+        try:
+            from pesq import pesq as _pesq
+            mode = "wb" if sample_rate == 16000 else "nb"
+            vals = [_pesq(sample_rate, np.asarray(r, np.float32), np.asarray(c, np.float32), mode)
+                    for r, c in zip(ref_wavs, recon_wavs)]
+            measured["pesq_reconstruction"] = round(float(np.mean(vals)), 4)
+        except Exception as e:  # pragma: no cover
+            not_measured["pesq_reconstruction"] = f"PESQ scoring failed: {e}"
+
+    # --- STOI intelligibility between reference and reconstruction ---
+    if _u.find_spec("pystoi") is None:
+        not_measured["stoi_reconstruction"] = "pystoi not installed (pip install pystoi)"
+    else:
+        try:
+            from pystoi import stoi as _stoi
+            vals = [_stoi(np.asarray(r, np.float32), np.asarray(c, np.float32), sample_rate, extended=False)
+                    for r, c in zip(ref_wavs, recon_wavs)]
+            measured["stoi_reconstruction"] = round(float(np.mean(vals)), 4)
+        except Exception as e:  # pragma: no cover
+            not_measured["stoi_reconstruction"] = f"STOI scoring failed: {e}"
+
+    # --- MOS via a neural predictor (Torchaudio SQUIM / NISQA); requires the model asset ---
+    if _u.find_spec("torchaudio") is None:
+        not_measured["mos_reconstruction"] = "no neural MOS predictor (install torchaudio SQUIM or NISQA)"
+    else:
+        try:
+            import torch, torchaudio
+            objective = torchaudio.pipelines.SQUIM_SUBJECTIVE.get_model()
+            mos_vals = []
+            for r, c in zip(ref_wavs, recon_wavs):
+                rt = torch.as_tensor(np.asarray(c, np.float32)).unsqueeze(0)
+                nmr = torch.as_tensor(np.asarray(r, np.float32)).unsqueeze(0)
+                mos_vals.append(float(objective(rt, nmr).item()))
+            measured["mos_reconstruction"] = round(float(np.mean(mos_vals)), 4)
+        except Exception as e:  # pragma: no cover
+            not_measured["mos_reconstruction"] = f"MOS scoring failed (needs SQUIM/NISQA asset): {e}"
+
+    return {"measured": measured, "not_measured": not_measured, "n_pairs": n}
+
+
 def speaker_identification(embeddings, speaker_labels, seed=42):
     """Real speaker identification: MLP on real embeddings, compute real accuracy (per-speaker hold-out)."""
     from sklearn.neural_network import MLPClassifier
