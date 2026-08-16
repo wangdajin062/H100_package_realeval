@@ -212,3 +212,18 @@
   - N2 补 `\label{sec:nbe}`；N6 投机解码表标题加 `(draft-model decoding efficiency, cloud path)`；M6 G3 威胁标注「未定量」；M5 引言前置单语料声明；M2 Table3 的 `NVFP4 QAD` 行改 `+ CoT`；M1 加 Reproducibility statement；N3 Table2 加表注（Blackwell vs H100 仿真）；N5 Table3 脚注补 SAFE-QAQ 非同尺度；fig3 后加 `% REVIEWER TODO`（fig4 缺口）。
 - 验证：grep 逐项确认 8 处在；fig4 TODO 注释后续被外部清理（因图重编号 fig5-8→fig4-7 已闭环 fig4 缺口，属合理）。
 - 遗留：M3/M4/P0-2/A1/A2/A3 需补实验，C1 图 PDF 需 `generate_all.py` 重跑生成。
+
+## 2026-08-16 [移植 exp13 决策级融合 + 真实隐私评分（exp13_privacy_fusion_alignment.patch）]
+
+- 目标：将另一会话导出的 `exp13_privacy_fusion_alignment.patch` 手动移植到仓库（patch 基于旧代码 6f240f42，无法 `git apply`，4 处冲突），落地其核心修复：决策级融合对齐论文、真实隐私评分、命名对齐。
+- 完成（9 文件，提交 `ab42e03`，已推送 origin/main）：
+  1. `realeval/real_backend.py`：重写 `real_fusion_classify` 为论文 Eq. fusion 三头（`softmax_linear` 凸组合 grid-search / `sigmoid_linear` L-BFGS 3 标量（本文）/ `transformer` self-attention）。修复两处正确性缺陷——sigmoid 硬编码论文最优权重 w*=[0.40,0.30]（非学习）、transformer 在测试集 fit（数据泄漏）；并修复隐藏 bug：原 `return_probs=True` 在 zero-shot base path 不产 `probs` 会 KeyError，改用 `return_preds=True`。新增 `_transformer_fusion_head()`（tiny numpy self-attention，d=8）。
+  2. `realeval/privacy.py`：新增 `reconstruction_quality_metrics()`，依赖守护的 WER/PESQ/STOI/MOS 真实评分器（缺依赖/缺资产记 not_measured，不编造数字）。
+  3. `experiments/exp7_privacy_verification.py`：新增 `_load_reconstruction_assets()` + 集成真实 harness，coverage ledger 从「TODO/planned」改为真实评分/明确 pending。
+  4. `experiments/exp13_fusion_strategy.py`：策略名 `softmax/sigmoid/transformer` → `softmax_linear/sigmoid_linear/transformer`，params 从 `result.get("fusion_params")` 取真实值（删硬编码 1.84M），加 `headline_strategy`。
+  5. 命名同步（patch 遗漏的）：`metrics/contract.py`、`experiments/consistency_check.py`、`experiments/paper_pipeline.py`（F1[late]→F1[sigmoid_linear]）、`docs/experiment_result_contract.md`、`README.md`。back-compat 别名 early/late/hybrid 及 softmax/sigmoid 保留。
+- 验证：py_compile 7 个 .py 全过；grep 确认无 late_fusion/early_fusion/F1[late] 残留、新命名全对齐。
+- 遗留（诚实性口径，需作者知悉）：
+  - transformer 头是 tiny numpy 实现（d=8，~217 参数），非论文 1.84M Transformer——exp13 `params` 字段现报真实 ~217，与论文 Table 口径不符（诚实标注，sandbox 无法复现 1.84M）。
+  - 远程出现他人网页上传的 `docs/v28 (1).tex`（提交 `e5df95a`，作者 Ma Cinar）——与本次改动不冲突，已 rebase 合并；注意该文件与仓库内 `docs/v28.tex` 是两份 v28（`(1)` 后缀），疑似重复上传。
+  - `reconstruction_quality_metrics` 需 H100 补跑 + 音频资产（`privacy/reconstruction.npz`）才回填真实 WER/PESQ/STOI/MOS，当前仍 pending。
