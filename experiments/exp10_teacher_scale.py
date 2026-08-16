@@ -1,4 +1,4 @@
-"""exp10: Teacher Scale — Compare Qwen-7B vs Qwen-14B vs Qwen-72B teacher."""
+"""exp10: Teacher Scale — Compare 0.5B / 1.5B / 3B / 7B teachers."""
 from __future__ import annotations
 import logging
 from experiments.framework import leakage_safe_split, load_first_nonempty, run_with_mode
@@ -49,7 +49,7 @@ def run(config: dict) -> dict:
                         fixed_config,
                         split.train_texts, split.train_labels,
                         split.test_texts, split.test_labels,
-                        quantize="int4",
+                        quantize="nvfp4",
                         teacher_model=model_id,
                     )
                     fixed_f1s.append(fixed_result["f1"])
@@ -58,7 +58,7 @@ def run(config: dict) -> dict:
                         conv_config,
                         split.train_texts, split.train_labels,
                         split.test_texts, split.test_labels,
-                        quantize="int4",
+                        quantize="nvfp4",
                         teacher_model=model_id,
                     )
                     conv_f1s.append(conv_result["f1"])

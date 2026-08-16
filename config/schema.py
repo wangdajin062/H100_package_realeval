@@ -30,7 +30,7 @@ CONFIG_SCHEMA: dict[str, tuple[str, type | tuple[type, ...], Any, bool]] = {
     "training.learning_rate":          ("学习率", float, 1e-5, True),
     "training.epochs":                 ("训练轮数", int, 5, True),
     "training.apply_ov_rescaling":     ("启用 OV-Freeze", bool, True, False),
-    "training.quantize":               ("量化方案：fp16 / int8 / int4 / nf4", str, "int4", True),
+    "training.quantize":               ("量化方案：nvfp4(NBE QDQ伪量化) / fp16 / int8 / int4 / nf4", str, "nvfp4", True),
     "training.balance_class_weight":   ("是否按类别频率加权 CE", bool, True, False),
     "training.val_frac":               ("校准集比例", float, 0.15, False),
     "training.head_hidden":            ("分类头隐藏层维度", int, 128, False),
@@ -157,7 +157,7 @@ def validate_config(config: dict[str, Any]) -> list[str]:
 
     # 枚举约束
     quantize = _get_path(config, "training.quantize")
-    if quantize is not _MISSING and quantize not in ("fp16", "int8", "int4", "nf4", "bf16", None):
+    if quantize is not _MISSING and quantize not in ("nvfp4", "fp16", "int8", "int4", "nf4", "bf16", None):
         issues.append(f"training.quantize 取值非法：{quantize}")
 
     data_source = _get_path(config, "data.source")

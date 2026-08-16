@@ -15,13 +15,13 @@ logger = logging.getLogger("exp1")
 
 
 def run(config: dict) -> dict:
-    split = load_and_split_dataset(config, default_dataset="balanced4k")
+    split = load_and_split_dataset(config, default_dataset="taf28k")
 
     def run_paper(config: dict) -> dict:
         from realeval import real_backend
         import numpy as np
 
-        quantize = config.get("training", {}).get("quantize", "int4")
+        quantize = config.get("training", {}).get("quantize", "nvfp4")
         apply_ov = config.get("training", {}).get("apply_ov_rescaling", True)
         n_seeds = n_seeds_from_config(config, "exp1")
 

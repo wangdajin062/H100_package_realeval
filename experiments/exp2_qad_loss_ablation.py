@@ -16,7 +16,7 @@ logger = logging.getLogger("exp2")
 
 
 def run(config: dict) -> dict:
-    split = load_and_split_dataset(config, default_dataset="balanced4k")
+    split = load_and_split_dataset(config, default_dataset="taf28k")
 
     def run_paper(config: dict) -> dict:
         from realeval import real_backend
@@ -44,7 +44,7 @@ def run(config: dict) -> dict:
                     abl_config,
                     split.train_texts, split.train_labels,
                     split.test_texts, split.test_labels,
-                    quantize="int4", apply_ov_rescaling=use_ovf,
+                    quantize="nvfp4", apply_ov_rescaling=use_ovf,
                     loss_fn=loss_fn,
                 )
                 f1s.append(float(result["f1"]))

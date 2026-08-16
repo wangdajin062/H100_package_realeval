@@ -45,7 +45,8 @@ def load_causal_lm(path: str, *, quantize: str = None, bf16: bool = True,
                    load_tokenizer: bool = True):
     """Load causal LM. Returns (model, tokenizer) or (None, None) (when unavailable).
 
-    quantize: None | 'int4' (bitsandbytes 4-bit) | 'int8'
+    quantize: None | 'int4' (bitsandbytes 4-bit) | 'int8' | 'nf4' |
+              'fp16' (native half) | 'nvfp4' (NBE QDQ fake-quant, QAT — paper Eq.(eq:nbe))
 
     compile_model defaults to False to honour config ``hardware.use_torch_compile: false``.
     torch.compile wraps the module (``_orig_mod.`` prefix); if a LoRA adapter is injected
@@ -77,8 +78,13 @@ def load_causal_lm(path: str, *, quantize: str = None, bf16: bool = True,
         kwargs["attn_implementation"] = "sdpa"
 
     # fp16 loads in explicit half precision (no bitsandbytes); nf4/int4/int8 use bitsandbytes.
+    # nvfp4 loads full precision then wraps Linear layers with NBE QDQ fake-quant (applied
+    # after from_pretrained below) — QAT-style, unlike bitsandbytes' PTQ-style int4/nf4.
+    nbe_qdq = quantize == "nvfp4"
     if quantize == "fp16":
         kwargs["torch_dtype"] = torch.float16
+    elif quantize == "nvfp4":
+        pass  # no quantization_config; QDQ wrappers applied post-load below
     elif quantize in ("int4", "int8", "nf4"):
         try:
             from transformers import BitsAndBytesConfig
@@ -106,6 +112,9 @@ def load_causal_lm(path: str, *, quantize: str = None, bf16: bool = True,
         model = AutoModelForCausalLM.from_pretrained(resolved, **kwargs)
         if "device_map" not in kwargs:
             model = model.to(dev)
+        if nbe_qdq:
+            from realeval.qdq import apply_qdq
+            apply_qdq(model)
         if compile_model and env["torch_compile_available"]:
             try:
                 model = torch.compile(model)

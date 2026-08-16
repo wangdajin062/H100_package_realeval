@@ -24,7 +24,7 @@ def run(config: dict) -> dict:
 
         # no-CoT: uses fine-tuned head (head(last_hidden).argmax(1)).
         direct = real_backend.real_llm_classify(
-            config, split.test_texts, split.test_labels, quantize="int4", use_cot=False,
+            config, split.test_texts, split.test_labels, quantize="nvfp4", use_cot=False,
             finetuned_path=finetuned_path,
         )
         # CoT: SAME fine-tuned model + head. The fine-tuned path now handles use_cot by
@@ -33,7 +33,7 @@ def run(config: dict) -> dict:
         # This isolates CoT as the ONLY variable (vs the old base-generate vs finetuned-head
         # confound). A null/negative effect is now a faithful CoT result.
         cot = real_backend.real_llm_classify(
-            config, split.test_texts, split.test_labels, quantize="int4", use_cot=True,
+            config, split.test_texts, split.test_labels, quantize="nvfp4", use_cot=True,
             finetuned_path=finetuned_path,
         )
         return {"computation": "h100_real_qwen",

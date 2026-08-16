@@ -16,7 +16,7 @@ logger = logging.getLogger("exp3")
 
 
 def run(config: dict) -> dict:
-    split = load_and_split_dataset(config, default_dataset="balanced4k")
+    split = load_and_split_dataset(config, default_dataset="taf28k")
 
     def _train(cfg: dict, frac: float, window: float, rho: float) -> tuple[float, float, float]:
         from realeval import real_backend
@@ -29,7 +29,7 @@ def run(config: dict) -> dict:
             overrides,
             split.train_texts, split.train_labels,
             split.test_texts, split.test_labels,
-            quantize="int4", apply_ov_rescaling=True,
+            quantize="nvfp4", apply_ov_rescaling=True,
             loss_fn="pure_kl",   # 论文 Table 4 的 QAD+OVF 是纯 KL + OVF
             # freeze_frac/window are FUNCTION PARAMS of real_qad_distill_train, NOT read
             # from config. Must pass them as kwargs, otherwise every condition silently

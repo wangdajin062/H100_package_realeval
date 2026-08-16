@@ -62,7 +62,7 @@ def run(config: dict) -> dict:
                     mixed_texts = adv_test_texts + normal_texts
                     mixed_labels = list(adv_test_labels) + [0] * len(normal_texts)
                     result = real_backend.real_llm_classify(
-                        config, mixed_texts, mixed_labels, quantize="int4",
+                        config, mixed_texts, mixed_labels, quantize="nvfp4",
                         finetuned_path=finetuned_path,
                     )
                     results[dname] = {"f1": result["f1"], "accuracy": result["accuracy"]}
@@ -71,21 +71,21 @@ def run(config: dict) -> dict:
                     curated_texts = ds["texts"][:curated_n] + normal_texts[:curated_n]
                     curated_labels = ds["labels"][:curated_n] + [0] * min(curated_n, len(normal_texts))
                     curated_result = real_backend.real_llm_classify(
-                        config, curated_texts, curated_labels, quantize="int4",
+                        config, curated_texts, curated_labels, quantize="nvfp4",
                         finetuned_path=finetuned_path,
                     )
                     results["advfraud_curated"] = {"f1": curated_result["f1"], "accuracy": curated_result["accuracy"]}
                 else:
                     adv_test_texts, adv_test_labels = shared_test_split("advfraud3k", ds["texts"], ds["labels"])
                     result = real_backend.real_llm_classify(
-                        config, adv_test_texts, adv_test_labels, quantize="int4",
+                        config, adv_test_texts, adv_test_labels, quantize="nvfp4",
                         finetuned_path=finetuned_path,
                     )
                     results[dname] = {"f1": result["f1"], "accuracy": result["accuracy"], "note": "fraud-only"}
             else:
                 test_texts, test_labels = shared_test_split(dname, ds["texts"], ds["labels"])
                 result = real_backend.real_llm_classify(
-                    config, test_texts, test_labels, quantize="int4",
+                    config, test_texts, test_labels, quantize="nvfp4",
                     finetuned_path=finetuned_path,
                 )
                 results[dname] = {"f1": result["f1"], "accuracy": result["accuracy"]}
@@ -94,7 +94,6 @@ def run(config: dict) -> dict:
                "model_source": "exp1_qad" if finetuned_path else "base_qwen"}
         if "taf28k" in results:
             out["taf28k"] = results["taf28k"]
-            out["balanced4k"] = results["taf28k"]
         if "chifraud" in results:
             out["chifraud"] = results["chifraud"]
         if "advfraud3k" in results:
@@ -104,14 +103,14 @@ def run(config: dict) -> dict:
         if "taf28k" in results and "chifraud" in results:
             cross_tc = real_backend.real_llm_classify(
                 config, datasets["chifraud"]["texts"], datasets["chifraud"]["labels"],
-                quantize="int4", finetuned_path=finetuned_path,
+                quantize="nvfp4", finetuned_path=finetuned_path,
             )
             # Evaluate the taf-trained model on TAF's held-out test set (not the full
             # corpus, which is ~80% training data) — cross_tc stays on all of ChiFraud,
             # which the model never trained on, so no leakage there.
             cross_ct = real_backend.real_llm_classify(
                 config, taf_test_texts, taf_test_labels,
-                quantize="int4", finetuned_path=finetuned_path,
+                quantize="nvfp4", finetuned_path=finetuned_path,
             )
             out["cross_taf_on_chifraud"] = {"f1": cross_tc["f1"]}
             out["cross_chifraud_on_taf"] = {"f1": cross_ct["f1"]}
@@ -122,37 +121,40 @@ def run(config: dict) -> dict:
         # CITED in metrics/contract.py. Emitted here only so consistency_check flags it as a
         # cited value; it must NEVER be presented as an independent measurement.
         out["bf16_matched_advfraud"] = 0.882
-        # ── Calibrated-noise robustness sweep (Gaussian-mechanism σ schedule) ──
-        # NOTE: this is NOT a certified (ε,δ)-DP guarantee. σ is set from the Gaussian-DP
-        # formula σ = Δf·√(2·ln(1.25/δ))/ε with an ASSUMED sensitivity Δf, but the hidden
-        # states are not actually clipped to that bound and there is no privacy-loss
-        # composition accounting — so the true sensitivity is unbounded. The measured F1-vs-σ
-        # curve is real; the ε values are a noise-schedule label, not a formal DP claim.
+        # ── LDP trade-off (paper Fig4c) ──
+        # Paper Sec. discussion defines the edge-side Gaussian mechanism DIRECTLY by its
+        # noise standard deviation σ = 1.0 (applied once to the 128-d acoustic embedding),
+        # and reports ε = 1.5 / δ = 1e-5 as an ENGINEERING ESTIMATE under a fixed
+        # sensitivity-and-clipping convention — explicitly "not a full differential-privacy
+        # analysis". σ is the primary knob; ε is a derived label. We therefore set σ
+        # directly, instead of inverting ε → σ via the Gaussian-DP formula
+        # (σ = Δf·√(2·ln(1.25/δ))/ε with an assumed Δf=10 produced σ≈32.3 for ε=1.5,
+        # contradicting the paper's σ=1.0 by ~32×).
         if taf_test_texts:
-            import math
-            # LDP sweep runs on TAF's held-out test partition (leakage-safe), same set
-            # used for the taf28k headline and cross-eval above.
+            # LDP runs on TAF's held-out test partition (leakage-safe), same set used for
+            # the taf28k headline and cross-eval above.
             ttx, tly = taf_test_texts, taf_test_labels
-            delta = 1e-5
-            sensitivity = 10.0  # 2·clip_bound=5.0
-            nf = sensitivity * math.sqrt(2.0 * math.log(1.25 / delta))
-            # noise_factor ≈ 48.45
             ldp_out = {}
-            for eps in [float("inf"), 3.0, 1.5, 1.0, 0.5]:
-                sigma = 0.0 if eps == float("inf") else nf / max(eps, 1e-6)
+            # σ=0.0 = LDP disabled (the main-results configuration); σ=1.0 = the paper's
+            # single LDP operating point (ε=1.5 is its engineering estimate, δ=1e-5).
+            # Noise is added to the hidden states before the classification head — a
+            # text-branch approximation of the paper's edge-side embedding perturbation.
+            for sigma in (0.0, 1.0):
                 r = real_backend.real_llm_classify(
-                    config, ttx, tly, quantize="int4",
+                    config, ttx, tly, quantize="nvfp4",
                     finetuned_path=finetuned_path, noise_sigma=sigma,
                 )
-                key = "no_ldp" if eps == float("inf") else f"eps_{eps}"
-                ldp_out[key] = {"epsilon": eps, "f1": r["f1"], "noise_sigma": round(sigma, 2)}
+                key = "no_ldp" if sigma == 0.0 else "eps_1.5"
+                entry = {"sigma": sigma, "f1": r["f1"]}
+                if sigma > 0.0:
+                    entry.update({"epsilon_est": 1.5, "delta": 1e-5})
+                ldp_out[key] = entry
             out["ldp_tradeoff"] = ldp_out
-            out["ldp_note"] = ("real H100 F1-vs-noise measurement via Gaussian noise on hidden "
-                               "states; epsilon is a noise-schedule label, NOT a certified "
-                               "(epsilon,delta)-DP guarantee (states are not clipped; no "
-                               "privacy-loss composition accounting)")
-            # paper_reference LDP constants removed — replaced by the real measurement above.
-            # (bf16_matched_advfraud above stays a CITED self-citation, not a measurement.)
+            out["ldp_note"] = (
+                "Gaussian noise σ applied to hidden states before the classification head; "
+                "σ=1.0 is the paper's single LDP operating point (ε=1.5 / δ=1e-5 is an "
+                "engineering estimate under a fixed sensitivity/clipping convention, NOT a "
+                "certified (ε,δ)-DP guarantee).")
         else:
             out["ldp_tradeoff"] = {"note": "TAF-28k unavailable; LDP not measured"}
 

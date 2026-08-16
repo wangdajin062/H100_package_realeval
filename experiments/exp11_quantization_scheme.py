@@ -1,4 +1,4 @@
-"""exp11: Quantization Scheme — Compare FP16, INT8, INT4, NF4."""
+"""exp11: Quantization Scheme — Compare FP16, INT8, INT4, NF4 (PTQ) vs NVFP4/NBE (QAT)."""
 from __future__ import annotations
 import logging
 from experiments.framework import leakage_safe_split, load_first_nonempty, run_with_mode
@@ -8,8 +8,9 @@ logger = logging.getLogger("exp11")
 
 def run(config: dict) -> dict:
     from realeval import data
-    # TAF-28k is audio-only (no per-sample text); text distillation uses the configured text corpus.
-    dataset_name = config.get("data", {}).get("dataset", "balanced4k")
+    # Paper main results are evaluated on TAF-28k (voice-text pairs, 28,511 samples).
+    # Text distillation uses the TAF-28k text field (taf28k.jsonl), not a separate corpus.
+    dataset_name = config.get("data", {}).get("dataset", "taf28k")
     max_samples = config.get("data", {}).get("max_samples")
     ds = load_first_nonempty(
         loaders=[lambda: data.load_dataset(dataset_name, max_samples=max_samples)],
@@ -27,12 +28,16 @@ def run(config: dict) -> dict:
         qad_path = resolve_qad_path()
         n_seeds = n_seeds_from_config(config, "exp11")
         schemes = {}
+        # bf16/fp16/int8/int4/nf4 are post-training-quantisation (PTQ) inference schemes
+        # (native dtype or bitsandbytes); nvfp4 is the paper's NBE QDQ fake-quant (QAT)
+        # headline scheme — applied only because exp1 now trains with quantize="nvfp4".
         quant_schemes = [
             ("bf16", "bf16"),
             ("fp16", "fp16"),
             ("int8", "int8"),
             ("int4", "int4"),
             ("nf4", "nf4"),
+            ("nvfp4", "nvfp4"),
         ]
         for scheme_name, quant_arg in quant_schemes:
             try:

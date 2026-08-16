@@ -22,7 +22,7 @@ def run(config: dict) -> dict:
         qad_path = resolve_qad_path()
         finetuned_path = str(qad_path) if qad_path.exists() else None
         qad = real_backend.real_llm_classify(
-            config, split.test_texts, split.test_labels, quantize="int4",
+            config, split.test_texts, split.test_labels, quantize="nvfp4",
             finetuned_path=finetuned_path,
         )
         # Storage footprints measured from actual model files on disk.

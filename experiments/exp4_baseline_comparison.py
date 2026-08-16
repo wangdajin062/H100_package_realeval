@@ -32,7 +32,7 @@ def run(config: dict) -> dict:
             algo.fit(Xtr, split.train_labels)
             m = classification_metrics(split.test_labels, algo.predict(Xte))
             baselines[name] = {"f1": m["f1"], "accuracy": m["accuracy"]}
-        q = real_backend.real_llm_classify(config, split.test_texts, split.test_labels, quantize="int4")
+        q = real_backend.real_llm_classify(config, split.test_texts, split.test_labels, quantize="nvfp4")
         baselines["qwen_base"] = {"f1": q["f1"], "accuracy": q["accuracy"]}
         return {"computation": "h100_real_qwen", "classifiers": baselines,
                 "dataset": "ChiFraud (load_chifraud_balanced); NOT TAF-28k. "

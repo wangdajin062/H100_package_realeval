@@ -20,15 +20,15 @@ models:
 
 data:
   source: auto        # data source mode: auto, taf28k, synthetic, chifraud (also configurable via REALEVAL_DATA__SOURCE env)
-  dataset: chifraud   # primary discriminative corpus (ChiFraud: 404k, ~14.3% fraud, TF-IDF ceiling 0.896). balanced4k is saturated (TF-IDF 0.997) and only a sanity set.
-  max_samples: 16000  # sample from ChiFraud, keeping the natural ~14.3% fraud imbalance
+  dataset: taf28k   # primary discriminative corpus (TAF-28k: 28,511 voice-text pairs, 8:1:1 split) — matches the paper's main-results corpus.
+  max_samples: 16000  # sample cap for TAF-28k text distillation
 
 training:
   batch_size: 8
   learning_rate: 1e-5
   epochs: 5
   apply_ov_rescaling: true
-  quantize: "int4"  # fp16, int8, int4, nf4
+  quantize: "nvfp4"  # nvfp4 (NBE QDQ fake-quant, QAT — paper Eq.(eq:nbe)), fp16, int8, int4, nf4 (PTQ)
   balance_class_weight: true  # weight the classification-head CE by inverse class frequency (fraud is the minority class)
   val_frac: 0.15               # fraction of training data held out for threshold calibration
   head_hidden: 128             # hidden dim for two-layer classification head

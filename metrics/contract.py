@@ -88,7 +88,6 @@ EXPECTED_FIELDS: dict[str, list[tuple[str, ...]]] = {
         ("advfraud", "full_pool", "f1"),
         ("advfraud", "curated", "f1"),
         ("ldp_tradeoff", "eps_1.5", "f1"),
-        ("ldp_tradeoff", "eps_3.0", "f1"),
         ("cross_taf_on_chifraud", "f1"),
         ("cross_chifraud_on_taf", "f1"),
     ],
@@ -140,6 +139,8 @@ EXPECTED_FIELDS: dict[str, list[tuple[str, ...]]] = {
         ("schemes", "fp16", "std"),
         ("schemes", "int8", "f1"),
         ("schemes", "int8", "std"),
+        ("schemes", "nvfp4", "f1"),
+        ("schemes", "nvfp4", "std"),
     ],
     "exp12": [
         ("competitor_comparison_real", "QAD_MultiGuard_INT4", "f1"),

@@ -78,14 +78,13 @@ def _best_f1_threshold(probs, labels, grid=None):
 
 def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: list[int],
                             test_texts: list[str], test_labels: list[int], *,
-                            quantize: str = "int4", apply_ov_rescaling: bool = True,
+                            quantize: str = "nvfp4", apply_ov_rescaling: bool = True,
                             freeze_frac: float = 1.0, window: float = 1.0, rho: float = 1.0,
                             loss_fn: str = "kl", teacher_model: str = None, save_name: str = None) -> dict:
     """QAD (Quantization-Aware Distillation): teacher→student KL divergence training.
 
-    Paper pipeline (exp1/exp2/exp3/exp10): freezes a BF16 teacher, quantises the student
-    to INT4/NF4 via bitsandbytes, and trains the student + classification head with
-    a configurable loss function:
+    Paper pipeline (exp1/exp2/exp3/exp10): freezes a BF16 teacher, quantises the student,
+    and trains the student + classification head with a configurable loss function:
       - "pure_kl": pure KL divergence only (no task CE, T=1) — paper Eq.(2), the headline objective
       - "kl" (default): CE + KL divergence loss (temperature-scaled)
       - "mse": CE + MSE loss on hidden states
@@ -93,7 +92,11 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
       - "ce": CE only (= QAT baseline, no distillation)
     OV-Freeze regulariser (output-variance matching) is applied on top when enabled.
 
-    teacher_model: override config["models"]["teacher"] for teacher-scale ablation (exp10).
+    quantize selects the student quantisation: "nvfp4" (NBE QDQ fake-quant, QAT —
+    the paper's headline scheme, Eq.(eq:nbe)) trains the quantised weights directly
+    via STE and attaches NO LoRA adapter; "int4"/"nf4"/"int8" are bitsandbytes PTQ and
+    use a LoRA adapter. teacher_model: override config["models"]["teacher"] for
+    teacher-scale ablation (exp10).
 
     Returns dict with trajectory, f1, accuracy, kl_final, drift_pct_final.
     Saves the QAD-trained model to outputs/models/exp1_qad/ for downstream use (exp11).
@@ -119,10 +122,12 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
     _require(student is not None, "Student model loading failed")
     student.train()
 
-    # Attach LoRA adapter if configured
+    # Attach LoRA adapter if configured. NBE (nvfp4) is QAT — the quantised weights
+    # are trained directly via STE, so there is no LoRA adapter (variant forced to
+    # "base" to avoid silently attaching the qad_ovf adapter on the wrong path).
     from realeval.student_loader import attach_adapter
-    student = attach_adapter(student, config.get("student_variant", "base"),
-                             config, quantize=quantize)
+    adapter_variant = "base" if quantize == "nvfp4" else config.get("student_variant", "base")
+    student = attach_adapter(student, adapter_variant, config, quantize=quantize)
 
     dev = next(student.parameters()).device
 
@@ -490,7 +495,7 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
 
 
 # ─────────────────── Real LLM Classification (exp4) ───────────────────
-def real_llm_classify(config: dict, texts: list[str], labels: list[int], *, quantize="int4", use_cot=False,
+def real_llm_classify(config: dict, texts: list[str], labels: list[int], *, quantize="nvfp4", use_cot=False,
                        return_preds=False, return_probs=False, classify_batch_size: int = None, finetuned_path: str = None,
                        finetuned_dtype: str = "bf16", noise_sigma: float = 0.0):
     """Real Qwen binary classification — base model (token-scoring) or fine-tuned model (head).
@@ -702,10 +707,10 @@ def real_llm_classify(config: dict, texts: list[str], labels: list[int], *, quan
     return m
 
 
-def real_fusion_classify(config, texts, labels, audio_emb, *, quantize="int4", fusion_strategy="sigmoid"):
+def real_fusion_classify(config, texts, labels, audio_emb, *, quantize="nvfp4", fusion_strategy="sigmoid"):
     """Real multimodal fusion: real Qwen text risk scores fused with a real acoustic-embedding
     classifier via decision-level soft-score fusion (paper Table 3). Strategies:
-      - "sigmoid": weighted sigmoid (paper Eq.11), w=[0.6, 0.4], b=-0.45
+      - "sigmoid": weighted sigmoid (paper Eq.11), w*=[0.40, 0.30], b*=-0.45
       - "softmax": geometric-mean softmax fusion of the two positive-class scores
       - "transformer": a small learned logistic fusion (linear stand-in for the transformer)
     Falls back to text-only if acoustic embeddings are unavailable.

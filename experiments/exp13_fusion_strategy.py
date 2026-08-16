@@ -38,7 +38,7 @@ def run(config: dict) -> dict:
             t0 = time.perf_counter()
             result = real_backend.real_fusion_classify(
                 config, test_texts, test_labels, test_audio,
-                quantize="int4", fusion_strategy=sname)
+                quantize="nvfp4", fusion_strategy=sname)
             lat_ms = (time.perf_counter() - t0) / max(1, len(test_texts)) * 1000
             # Params of the decision-level fusion function (paper Table 3)
             _param_map = {
