@@ -630,10 +630,12 @@ def real_llm_classify(config: dict, texts: list[str], labels: list[int], *, quan
     # ── Base Qwen path (zero-shot token scoring) ──
     model, tok = models.load_causal_lm(config["models"]["teacher"], quantize=quantize, bf16=True)
     _require(model is not None, "Model loading failed")
-    # Attach the tuned LoRA adapter when a student_variant is set.
+    # Attach the tuned LoRA adapter when a student_variant is set. NBE (nvfp4) is
+    # QAT — there is no LoRA adapter on that path, so force "base" exactly as the
+    # training path does; attaching qad_ovf would crash PEFT on QDQLinear modules.
     from realeval.student_loader import attach_adapter
-    model = attach_adapter(model, config.get('student_variant', 'base'),
-                           config, quantize=quantize)
+    adapter_variant = "base" if quantize == "nvfp4" else config.get("student_variant", "base")
+    model = attach_adapter(model, adapter_variant, config, quantize=quantize)
     dev = next(model.parameters()).device
 
     cot_sys = ("Think step by step about the sender, intent, and urgency cues, then decide. "

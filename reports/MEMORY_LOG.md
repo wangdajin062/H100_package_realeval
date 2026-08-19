@@ -227,3 +227,19 @@
   - transformer 头是 tiny numpy 实现（d=8，~217 参数），非论文 1.84M Transformer——exp13 `params` 字段现报真实 ~217，与论文 Table 口径不符（诚实标注，sandbox 无法复现 1.84M）。
   - 远程出现他人网页上传的 `docs/v28 (1).tex`（提交 `e5df95a`，作者 Ma Cinar）——与本次改动不冲突，已 rebase 合并；注意该文件与仓库内 `docs/v28.tex` 是两份 v28（`(1)` 后缀），疑似重复上传。
   - `reconstruction_quality_metrics` 需 H100 补跑 + 音频资产（`privacy/reconstruction.npz`）才回填真实 WER/PESQ/STOI/MOS，当前仍 pending。
+
+## 2026-08-19 [全量审计第四轮：NBE QDQ + 融合重构 + 前轮修复复核]
+
+- 目标：对 HEAD `4ff723c` 做全量审计（第三轮基线 6cbc498 之后增量 91 文件：17f568f NBE QDQ、ab42e03 融合/隐私重构、191db4a 图号重命名 + 第三轮 P0/P1 修复）。
+- 完成：报告落盘 `reports/2026-08-19_full_audit.md`。核心发现：
+  - **P0-1（新，17f568f 引入）**：`realeval/qdq.py:90-91` QDQLinear state_dict 委托 + 默认递归产生重复别名键（weight/linear.weight 共享 storage），safetensors/save_pretrained 必崩 → exp1 训练后 checkpoint 存不下、exp5/9/11/12 断链。本机 CPU 实测复现。
+  - **P1-1（迁移回归）**：nvfp4 force-base 只在训练侧；`real_backend.py:635-636` base zero-shot 路径默认 `student_variant: qad_ovf` 会对 QDQ 模型 attach LoRA → PEFT 崩/AssetsUnavailable，exp4 受阻。
+  - **P1-2**：`apply_qdq` 不跳过 lm_head（与 tied embedding 耦合），与论文 Table 2 量化范围口径不符。
+  - 前轮复核：第三轮 1 P0+15 P1 中 14 已修、P1-S4 部分修（rclone 尾巴）；测量诚信 M1/M3/M4 闭环、M2 主路径闭环（exp7 绕过断言 + exp2~14 不写 is_synthetic 残留为 P2）。
+  - P2 共 11 项，要紧的：tex 引用 figure/fig1..7.pdf 全不存在（图脚本产物带名称后缀，投稿硬伤）；consistency_check 不查 exp13 degraded 标志；exp5 LDP 仍未换裁剪版 gaussian_ldp；transformer 头 docstring 描述不属实。
+- 验证：编译 107 文件 0 错、导入 59 模块 0 失败、pytest 65 passed（系统 Python+torch）、bash -n 13/13；P0-1 本机实测复现（state_dict 4 键共享 storage、safetensors RuntimeError、strict load spurious missing）；P1-1/P2-10 主会话逐一复核证据在位。
+- 遗留：
+  - **本轮纯审计未改代码**；P0-1/P1-1/P1-2 修复建议已在报告 §九，H100 重跑前必须先修（否则 exp1 白跑后保存处崩溃）。
+  - `docs/v28 (1).tex` 与 v28.tex 逐字节重复，建议删；outputs/results 陈旧产物未归档。
+  - GPU 训练全链路、PEFT 崩溃（静态结论）、transformers 4.x 行为未实测（报告 §十）。
+  - 本次改动（新增审计报告 + 本日志）未提交 git。

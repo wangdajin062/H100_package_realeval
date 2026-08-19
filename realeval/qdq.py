@@ -60,53 +60,56 @@ def _per_block_scale(w: torch.Tensor, block_size: int) -> torch.Tensor:
 
 def fake_quant(w: torch.Tensor, block_size: int = DEFAULT_BLOCK_SIZE) -> torch.Tensor:
     """STE fake-quant (Eq.(eq:nbe)): forward returns Ŵ, gradient passes through unchanged."""
-    scale = _per_block_scale(w, block_size)
-    w32 = w.to(torch.float32)
-    q = torch.clamp(torch.round(w32 / scale), QMIN, QMAX)
-    w_hat = (q * scale).to(w.dtype)
+    with torch.no_grad():
+        scale = _per_block_scale(w, block_size)
+        w32 = w.to(torch.float32)
+        q = torch.clamp(torch.round(w32 / scale), QMIN, QMAX)
+        w_hat = (q * scale).to(w.dtype)
     return w + (w_hat - w).detach()
 
 
 class QDQLinear(nn.Module):
-    """nn.Linear wrapper that fake-quantises its weight in the forward pass.
+    """nn.Linear replacement that fake-quantises its weight in the forward pass.
 
-    State-dict transparent: ``_save_to_state_dict`` / ``_load_from_state_dict``
-    delegate to the wrapped Linear, so ``save_pretrained`` / ``load_state_dict``
-    see ``weight`` / ``bias`` keys (not ``linear.weight`` / ``linear.bias``) — a
-    QDQ-wrapped model round-trips through the same checkpoint layout as the
-    unwrapped model. A QAT-trained NBE checkpoint therefore reloads as a plain
-    Qwen checkpoint and is re-wrapped by ``apply_qdq`` at inference time.
+    State-dict transparent by construction: the wrapped Linear's ``weight`` /
+    ``bias`` Parameters are absorbed as this module's own Parameters (no
+    ``linear`` child module), so ``state_dict`` / ``save_pretrained`` /
+    ``load_state_dict`` see exactly ``weight`` / ``bias`` — a QDQ-wrapped model
+    round-trips through the same checkpoint layout as the unwrapped model. A
+    QAT-trained NBE checkpoint therefore reloads as a plain Qwen checkpoint and
+    is re-wrapped by ``apply_qdq`` at inference time.
     """
 
     def __init__(self, linear: nn.Linear, block_size: int = DEFAULT_BLOCK_SIZE):
         super().__init__()
-        self.linear = linear
+        # Absorb the Parameters instead of keeping the Linear as a child
+        # module: a child would re-register the same tensors under
+        # ``linear.weight`` / ``linear.bias``, producing duplicate alias keys
+        # that share storage and break safetensors / save_pretrained.
+        self.weight = linear.weight
+        self.bias = linear.bias
         self.block_size = block_size
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        w = fake_quant(self.linear.weight, self.block_size)
-        return F.linear(x, w, self.linear.bias)
-
-    def _save_to_state_dict(self, destination, prefix, keep_vars):
-        self.linear._save_to_state_dict(destination, prefix, keep_vars)
-
-    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
-                              missing_keys, unexpected_keys, error_msgs):
-        self.linear._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict,
-            missing_keys, unexpected_keys, error_msgs)
+        w = fake_quant(self.weight, self.block_size)
+        return F.linear(x, w, self.bias)
 
 
-def apply_qdq(module: nn.Module, block_size: int = DEFAULT_BLOCK_SIZE) -> nn.Module:
+def apply_qdq(module: nn.Module, block_size: int = DEFAULT_BLOCK_SIZE,
+              skip_names: tuple = ("lm_head",)) -> nn.Module:
     """Replace every nn.Linear in-place with a QDQLinear wrapper (mutates module).
 
-    Idempotent: already-wrapped QDQLinear leaves are skipped.
+    Idempotent: already-wrapped QDQLinear leaves are skipped. Children whose
+    attribute name is in ``skip_names`` are left untouched — by default
+    ``lm_head``, matching the NVFP4 deployment convention (TensorRT-LLM) that
+    the output projection stays in higher precision. This also avoids wrapping
+    the tied embedding matrix on models with ``tie_word_embeddings=True``.
     """
     for name, child in list(module.named_children()):
-        if isinstance(child, QDQLinear):
+        if isinstance(child, QDQLinear) or name in skip_names:
             continue
         if isinstance(child, nn.Linear):
             setattr(module, name, QDQLinear(child, block_size))
         else:
-            apply_qdq(child, block_size)
+            apply_qdq(child, block_size, skip_names)
     return module
