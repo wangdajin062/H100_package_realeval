@@ -14,11 +14,13 @@ def run(config: dict) -> dict:
     ds = data.load_taf28k(max_samples=config.get("data", {}).get("max_samples", 2000), source="multimodal")
     texts, labels = ds["texts"], ds["labels"]
     audio_emb = ds.get("embeddings")
+    is_synthetic = False
     if not texts or audio_emb is None:
         # Fall back to synthetic with both text and acoustic-style embeddings
         ds = data.load_synthetic(n=200)
         texts, labels = ds["texts"], ds["labels"]
         audio_emb = ds["embeddings"]
+        is_synthetic = True
     n = min(len(texts), len(audio_emb))
     texts, labels, audio_emb = texts[:n], labels[:n], np.asarray(audio_emb[:n])
     # Leakage-safe test partition shared with exp1/exp5/exp14 (P1-M1): one index set
@@ -51,6 +53,7 @@ def run(config: dict) -> dict:
                 "latency_ms": round(lat_ms, 4),
             }
         return {"computation": "h100_real_qwen", "strategies": strategies,
-                "headline_strategy": "sigmoid_linear"}
+                "headline_strategy": "sigmoid_linear",
+                "is_synthetic": is_synthetic}
 
     return run_with_mode("exp13", config, run_paper)

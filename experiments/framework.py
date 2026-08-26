@@ -22,6 +22,17 @@ LOG_DIR = LOGS
 
 logger = logging.getLogger("framework")
 
+# Run-scoped data-provenance record (audit P2-8): load_first_nonempty records
+# whether the dataset it returned came from the synthetic fallback, and
+# run_with_mode stamps the experiment result with it — so "synthetic data +
+# real model" can never again flow into a result file unmarked (P1-M2 residue).
+_synthetic_used: bool | None = None
+
+
+def _record_provenance(is_synthetic: bool) -> None:
+    global _synthetic_used
+    _synthetic_used = is_synthetic
+
 
 @dataclass(frozen=True)
 class TextDataset:
@@ -69,6 +80,7 @@ def load_first_nonempty(
             logger.warning("Loader returned invalid data, trying next source: %s", exc)
             continue
         if texts:
+            _record_provenance(False)
             return TextDataset(texts=texts, labels=labels, is_synthetic=False)
 
     logger.warning("All real loaders empty/failed — FALLING BACK TO SYNTHETIC DATA "
@@ -78,6 +90,7 @@ def load_first_nonempty(
     labels = [int(x) for x in ds.get("labels", [])]
     if not texts:
         raise ExperimentRuntimeError("所有加载器（含合成）均返回空数据集")
+    _record_provenance(True)
     return TextDataset(texts=texts, labels=labels, is_synthetic=True)
 
 
@@ -100,10 +113,12 @@ def leakage_safe_split(
     )
 
 
-def pre_run_validation(config: dict[str, Any], exp_id: str) -> None:
+def pre_run_validation(config: dict[str, Any], exp_id: str,
+                       required_datasets: Sequence[str] = ()) -> None:
     """H100 实验执行前的预检查。
 
-    验证项：GPU 显存是否充足、模型资产是否可用。
+    验证项：GPU 显存是否充足、模型资产是否可用、主数据集与 required_datasets
+    列出的次级数据集的本地文件是否存在。
 
     Raises:
         ExperimentRuntimeError: 任一检查不通过时抛出。
@@ -133,38 +148,56 @@ def pre_run_validation(config: dict[str, Any], exp_id: str) -> None:
     logger.info("%s：模型资产检查通过", exp_id)
 
     # P1-M2: 数据来源断言——真实数据集本地文件缺失时提前失败，避免静默回退
-    # 合成数据、结果以真实测量身份上报。
+    # 合成数据、结果以真实测量身份上报。required_datasets 让依赖次级数据集的
+    # 实验（如 exp7 的 balanced4k）同样纳入断言（审计 P2-8）。
+    from realeval import data as realeval_data
     dataset_name = config.get("data", {}).get("dataset", "taf28k")
-    if dataset_name and str(dataset_name).strip().lower() != "synthetic":
-        from realeval import data as realeval_data
-        if not realeval_data.has_local_data(dataset_name):
+    checked = []
+    for name in [dataset_name, *required_datasets]:
+        if not name or str(name).strip().lower() == "synthetic":
+            continue
+        if not realeval_data.has_local_data(name):
             raise ExperimentRuntimeError(
-                f"{exp_id}：数据集 {dataset_name} 本地数据不可用。"
+                f"{exp_id}：数据集 {name} 本地数据不可用。"
                 "请确认数据挂载点（/workspace/data），或显式配置 data.dataset=synthetic。"
                 "（避免静默回退合成数据，审计 P1-M2）"
             )
-    logger.info("%s：数据来源检查通过（%s）", exp_id, dataset_name)
+        checked.append(str(name))
+    logger.info("%s：数据来源检查通过（%s）", exp_id, ", ".join(checked) or "synthetic")
 
 
 def run_with_mode(
     exp_id: str,
     config: dict[str, Any],
     run_paper: Callable[[dict[str, Any]], dict[str, Any]],
+    required_datasets: Sequence[str] = (),
 ) -> dict[str, Any]:
     """运行真实 H100 计算路径；资产不可用时抛出 AssetsUnavailable。
 
-    预检查确保 H100 安全性后再执行高代价计算。
+    预检查确保 H100 安全性后再执行高代价计算。required_datasets 列出该实验
+    额外依赖的次级数据集（一并纳入 pre_run_validation 数据来源断言）。
     """
     from realeval.real_backend import AssetsUnavailable
 
-    pre_run_validation(config, exp_id)
-
+    global _synthetic_used
     try:
-        return ensure_result_contract(exp_id, run_paper(config))
-    except AssetsUnavailable:
+        pre_run_validation(config, exp_id, required_datasets=required_datasets)
+        result = ensure_result_contract(exp_id, run_paper(config))
+        if _synthetic_used is not None:
+            # 审计 P2-8：如实上报数据来源，合成回退不得冒充真实测量。
+            result.setdefault("is_synthetic", _synthetic_used)
+        return result
+    except (AssetsUnavailable, ExperimentRuntimeError):
+        # pre_run_validation 抛出的 ExperimentRuntimeError（数据缺失/显存不足）直接
+        # 透传，保留原始诊断信息，不重包装成"运行失败"；同时 finally 总能清空
+        # provenance 残留——审计 P3-新2：pre_run_validation 在 try 外时，其抛错会
+        # 泄漏 _synthetic_used 到下一个实验（exp13 这类不走 load_first_nonempty 的
+        # 实验会被误标 is_synthetic）。
         raise
     except Exception as exc:
         raise ExperimentRuntimeError(f"{exp_id} 运行失败：{exc}") from exc
+    finally:
+        _synthetic_used = None
 
 
 def ensure_result_contract(exp_id: str, result: dict[str, Any]) -> dict[str, Any]:

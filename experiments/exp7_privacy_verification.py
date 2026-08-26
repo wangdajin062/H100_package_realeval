@@ -110,4 +110,4 @@ def run(config: dict) -> dict:
         return result
 
 
-    return run_with_mode("exp7", config, run_paper)
+    return run_with_mode("exp7", config, run_paper, required_datasets=["balanced4k"])

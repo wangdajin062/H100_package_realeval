@@ -104,6 +104,16 @@ def attach_adapter(model, variant: str = "base", config: dict | None = None,
                 f"{ADAPTER_ROOT}. Train one (cluster/train_sft.py) or pass adapter_path.")
         return model
 
+    # QDQ-wrapped (nvfp4 QAT) models take no LoRA adapter: PEFT's dispatcher only
+    # recognises nn.Linear/bnb module types and would crash on QDQLinear with a
+    # cryptic ValueError. Reject early with an actionable message.
+    from realeval.qdq import QDQLinear
+    if any(isinstance(m, QDQLinear) for m in model.modules()):
+        raise AssetsUnavailable(
+            f"student_variant='{variant}' requested on an nvfp4 QDQ-wrapped model, "
+            "but NBE is QAT (weights trained directly via STE) and has no LoRA "
+            "adapter. Use student_variant='base' or a PTQ quantize (int4/nf4/int8).")
+
     from peft import PeftModel
     print(f"[student_loader] variant={variant} + adapter {adapter}")
     model = PeftModel.from_pretrained(model, str(adapter))
