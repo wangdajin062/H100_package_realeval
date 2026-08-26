@@ -64,7 +64,28 @@ def audit(targets: list[str] | None = None) -> dict[str, list[dict]]:
             items.append({"kind": "SMOKE", "severity": "P0",
                           "detail": f"computation={comp!r} — NOT a real H100 run"})
 
+        # 审计 P2-3 + is_synthetic：合成回退 / 降级（text-only）结果不得与论文声称值
+        # 对账——否则声学资产缺失时文本-only F1 会被当 fusion headline 与 0.923
+        # 静默 MATCH（与旧 P1-M4 同型残留）。exp13 的 degraded 标志随 result 上报，
+        # is_synthetic 由 run_with_mode 如实上报（P2-8）。
+        synthetic = bool(data.get("is_synthetic"))
+        degraded = set()
+        if exp == "exp13":
+            for sname, sval in (data.get("strategies") or {}).items():
+                if isinstance(sval, dict) and sval.get("degraded"):
+                    degraded.add(sname)
+        if synthetic:
+            items.append({"kind": "SYNTHETIC", "severity": "P0",
+                          "detail": "synthetic fallback data — NOT a real measurement; paper-claim comparison skipped"})
+        if degraded:
+            items.append({"kind": "DEGRADED", "severity": "WARN",
+                          "detail": f"strategies {sorted(degraded)} degraded (text-only) — not real fusion; comparison skipped"})
+
         for path, claimed, tol, label in PAPER_CLAIMS.get(exp, []):
+            if synthetic:
+                continue
+            if exp == "exp13" and len(path) >= 2 and path[1] in degraded:
+                continue
             val = _dig(data, path)
             dotted = ".".join(path)
             if val is _NOT_FOUND or val is None:
