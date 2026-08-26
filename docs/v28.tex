@@ -237,7 +237,7 @@ QAD-MultiGuard adopts a three-tier edge--cloud defence architecture (Figure~\ref
 
 \begin{figure}
     \centering
-    \includegraphics[width=\linewidth]{figure/fig1.pdf}
+    \includegraphics[width=\linewidth]{figure/fig1_architecture.png}
     \caption{\textit{QAD-MultiGuard} three-tier edge--cloud collaborative architecture. Raw audio, ASR transcripts, and SMS plaintext remain strictly on-device. Only the $128\text{-dimensional}$ privacy-preserving acoustic representation $\bm{F}_v$ and scalar risk scores are transmitted to the cloud infrastructure. In branch (c), only the Whisper-tiny encoder is deployed on-device, whilst the decoder module is completely omitted and no ASR transcript is generated. The $(\epsilon,\delta)$-local differential privacy ($(\epsilon,\delta)$-LDP, $\epsilon=1.5$, $\delta=10^{-5}$) mechanism is included as an optional configuration for enhanced-privacy scenarios and is omitted from the main experimental configuration (see Section~\ref{sec:discussion}).}
     \label{fig1}
 \end{figure}
@@ -390,7 +390,7 @@ Operationally, the OV-Freeze module is activated exclusively during the final 20
 
 \begin{figure}
 \centering
-\includegraphics[width=\linewidth]{figure/fig2.pdf}
+\includegraphics[width=\linewidth]{figure/fig2_acoustic_embedding.pdf}
 \caption{Schematic construction of the $128\text{-dimensional}$ privacy-preserving acoustic embedding $\bm{F}_v$. (a)~Log-Mel spectrogram representation; (b)~time-averaged MFCC representation; (c)~concatenated joint embedding $\bm{F}_v \in \mathbb{R}^{128}$ constructed from the local MFCC features and globally pooled \texttt{Whisper-tiny} encoder representations. Dual temporal aggregation compresses frame-level fine structures into compact, reconstruction-resistant statistics for downstream secure inference.}
 \label{fig2}
 \end{figure}
@@ -665,7 +665,7 @@ $^\dagger$ Temperature scaling is systematically calibrated on $100$ held-out va
 
 \begin{figure}
 \centering
-\includegraphics[width=\linewidth]{figure/fig3.pdf}
+\includegraphics[width=\linewidth]{figure/fig3_main_results.pdf}
 \caption{TAF-28k main results. $F_1$ scores (blue bars, left axis) and BF16 recovery rates (red diamonds, right axis) are reported across evaluated methods. \texttt{NVFP4} \texttt{QAD} + \texttt{OV-Freeze} achieves $F_1 = 0.923$, outperforming PTQ baselines ($F_1 \approx 0.838$) by $8.5$ points and conventional QAT ($F_1 = 0.844$) by $7.9$ points.}
 \label{fig3}
 \end{figure}
@@ -751,7 +751,7 @@ The single-source training corpus remains the primary limitation bounding broade
 
 \begin{figure}
     \centering
-    \includegraphics[width=\linewidth]{figure/fig4.pdf}
+    \includegraphics[width=\linewidth]{figure/fig4_revision_ablations.pdf}
     \caption{Supplementary ablation studies and privacy--utility trade-off evaluations. (a) Quantisation-scheme ablation on \textit{TAF-28k}: the heterogeneous dual-track scheme (\texttt{NVFP4} cloud + \texttt{Q4\_K\_M} edge, $F_1\text{-score} = 0.923$) outperforms the homogeneous \texttt{INT4} baseline ($F_1\text{-score} = 0.915$, $+0.008$ absolute improvement, $p < 0.05$), with both evaluated against the upper-bound \textit{BF16} baseline ($F_1\text{-score} = 0.931$). (b) Adversarial pool evaluation on \textit{AdvFraud-3k}: under the \texttt{QAD} + \texttt{OVF} framework, the model obtains an $F_1$-score of $0.875$ on the curated $517$-variant subset and $0.841$ over the uncurated full pool of $3{,}000$ adversarial variants; the matched \textit{BF16} baseline ($F_1\text{-score} = 0.882$) serves as the reference benchmark. (c) Local differential privacy ($(\epsilon,\delta)$-LDP) trade-off: integrating edge-side $(\epsilon,\delta)$-LDP ($\epsilon = 1.5$, $\delta = 10^{-5}$, Gaussian mechanism with $\sigma = 1.0$) results in a reduction of the \textit{TAF-28k} $F_1$-score from $0.923$ to $0.902$ ($-0.021$ points) while incurring a $3\text{~ms}$ increase in the $P_{50}$ alert latency ($268\text{--}271\text{~ms}$).}
     \label{fig4}
 \end{figure}
@@ -781,7 +781,7 @@ KL + task regularisation & $0.908 \pm 0.009$ & $0.041$ & $97.5$ \\
 
 \begin{figure}
     \centering
-    \includegraphics[width=\linewidth]{figure/fig5.pdf}
+    \includegraphics[width=\linewidth]{figure/fig5_loss_teacher_ablation.pdf}
     \caption{Ablation studies on alignment objectives and teacher scales. (a) Loss function ablation on \textit{TAF-28k}: student $F_1$-score (left axis, blue bars with variance) against KL divergence relative to the \textit{BF16} teacher (right axis, red bars). Pure Kullback--Leibler (KL) divergence achieves the best trade-off ($F_1\text{-score} = 0.916$, $\text{KL} = 0.005$), whereas the standard cross-entropy quantisation-aware training (QAT) objective exhibits a higher KL divergence ($\text{KL} = 0.311$). (b) Teacher selection: student $F_1$-score across teacher scales ($0.5\text{B}$ to $7\text{B}$) under a fixed budget of $0.5\text{B}$ tokens (orange/blue bars) versus training to empirical convergence (green bars), referenced against the homologous $0.5\text{B}$ \textit{BF16} teacher baseline (dashed line).}
     \label{fig5}
 \end{figure}
@@ -794,7 +794,7 @@ Figure~\ref{fig6}(b) ablates the OV-Freeze activation window. The final $20\%$ t
 
 \begin{figure}
     \centering
-    \includegraphics[width=\linewidth]{figure/fig6.pdf}
+    \includegraphics[width=\linewidth]{figure/fig6_ovf_ablation.pdf}
     \caption{Ablation studies on OV-Freeze configurations and activation windows. (a) Layer selection: student $F_1$-score (bars) and variance drift (red line) across diverse attention projection-layer configurations on \textit{TAF-28k}; applying the OV-Freeze mechanism to the $\{q,k,v,o\}_{\mathrm{proj}}$ layers achieves the best trade-off ($F_1\text{-score} = 0.923$), reducing the output-variance drift from $+18.2\%$ (baseline) to $+1.3\%$. (b) Activation window: student $F_1$-score and perplexity (PPL) metrics across varying temporal windows; the final $20\%$ training window (steps $1600$--$2000$) achieves the best trade-off, balancing variance correction with primary gradient compatibility.}
     \label{fig6}
 \end{figure}
@@ -826,7 +826,7 @@ Domain-tuned & $10$ & $0.86$ & $4.74\times$ & $4.51\times$ \\
 
 \begin{figure}
     \centering
-    \includegraphics[width=\linewidth]{figure/fig7.pdf}
+    \includegraphics[width=\linewidth]{figure/fig7_speculative_decoding.pdf}
     \caption{Comparison of theoretical and measured speculative decoding speedups. (a) Theoretical speedup curves derived from Eq.~\eqref{eq:speedup} across varying token acceptance rates ($\alpha$) and speculation lengths ($\gamma$), with operational configurations marked for the generic draft baseline ($\alpha = 0.78$, $\gamma = 5$) and the domain-tuned variant ($\alpha = 0.86$, $\gamma = 5$). (b) Measured wall-clock speedup metrics evaluated at a fixed acceptance rate of $\alpha = 0.86$ across diverse hardware platforms, where the deployed configuration ($\gamma = 5$) balances empiric acceleration with primary computation budgets.}
     \label{fig7}
 \end{figure}
