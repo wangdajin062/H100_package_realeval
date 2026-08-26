@@ -97,6 +97,13 @@ def reconstruction_quality_metrics(ref_wavs, recon_wavs, ref_texts, *, sample_ra
     privacy number; it produces the paper's metrics only when the audio stack and corpus are
     present, and otherwise records exactly which measurement is pending.
 
+    Known scorer bias: the default WER scorer is Whisper ``tiny``, whose Chinese
+    telephony-speech accuracy is poor — WER is inflated even for perfect
+    reconstructions. Since the paper's privacy claim reads "higher WER = stronger
+    privacy", this bias is IN FAVOUR of the claim; treat tiny-Whisper WER as an upper
+    bound and re-score with a stronger ASR (e.g. ``small``/``base`` or a Mandarin-tuned
+    model) for the H100 backfill.
+
     Args:
         ref_wavs:  list of reference waveforms (1-D float arrays at ``sample_rate``).
         recon_wavs: list of reconstructed waveforms, index-aligned to ``ref_wavs``.
@@ -125,6 +132,8 @@ def reconstruction_quality_metrics(ref_wavs, recon_wavs, ref_texts, *, sample_ra
             import jiwer
             if asr_model is None:
                 import whisper
+                # NOTE: "tiny" inflates WER on Chinese telephony speech (see docstring —
+                # the bias favours the privacy claim; re-score with a stronger ASR for backfill).
                 _m = whisper.load_model("tiny")
                 asr_model = lambda wav, sr: _m.transcribe(np.asarray(wav, dtype=np.float32))["text"]
             hyps = [asr_model(w, sample_rate) for w in recon_wavs]
