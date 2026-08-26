@@ -457,7 +457,7 @@ _f1_hetero = _OVF_FULL_F1  # QAD+OVF (heterogeneous)
 
 
 def _safe_delta(a, b, ndigits=3):
-    """b - a, or None when either operand is a显式报缺 None. Guards module-import
+    """b - a, or None when either operand is an explicit-report-missing None. Guards module-import
     time: a bare `round(None - x)` here would TypeError and take down EVERY figure
     script (exp11 int4 failure / exp14 GGUF-unavailable can make these None)."""
     return round(a - b, ndigits) if (a is not None and b is not None) else None

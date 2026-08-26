@@ -31,8 +31,8 @@ done
 # ── Step 1: Install dependencies ──
 echo "=== [1] pip install deps ==="
 python -m pip install --upgrade pip >/dev/null 2>&1 || true
-python -m pip install -q -r requirements.txt || { echo "PIP_REQ_FAILED"; }
-python -m pip install -q accelerate bitsandbytes huggingface_hub hf_transfer || { echo "PIP_EXTRA_FAILED"; }
+python -m pip install -q -r requirements.txt || { echo "PIP_REQ_FAILED"; exit 1; }
+python -m pip install -q accelerate bitsandbytes huggingface_hub hf_transfer || { echo "PIP_EXTRA_FAILED"; exit 1; }
 if [ "$TRAIN_FIRST" = "1" ]; then
     python -m pip install -q peft >/dev/null 2>&1 || echo "PIP_WARN"
 fi

@@ -5,8 +5,11 @@ QAD-MultiGuard H100 paper-validation pipeline — 一键部署的多服务 Docke
 ## 快速开始
 
 ```bash
-# 1. 配置环境变量
-cp .env.template .env
+# 1. 配置必需的环境变量（无 .env.template 模板；自行创建 .env，
+#    compose 对下列变量 fail-closed，未设置会拒绝启动）：
+#      JUPYTER_TOKEN=<强随机串>
+#      VSCODE_PASSWORD=<强随机串>
+#    建议同时设置 REALEVAL_API_TOKEN（API 服务未设置时对所有请求返回 503）。
 
 # 2. 构建并启动
 docker compose up -d

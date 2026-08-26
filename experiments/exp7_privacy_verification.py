@@ -83,7 +83,7 @@ def run(config: dict) -> dict:
             rq = privacy.reconstruction_quality_metrics(
                 recon["ref_wavs"], recon["recon_wavs"], recon["ref_texts"],
                 sample_rate=recon.get("sample_rate", 16000))
-            measured_fields += [f"{k}" for k in rq["measured"]]
+            measured_fields += [k for k in rq["measured"]]
             recon_measured = rq["measured"]
             recon_pending = rq["not_measured"]
         else:

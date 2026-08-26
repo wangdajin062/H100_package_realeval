@@ -523,7 +523,7 @@ python -m experiments.runner --exp 5,10,13 --paper --no-archive --config config/
 | 转录样本 | 13,388 条（fraud 7,177 / normal 6,211） |
 | 去重文本数 | 13,333（修复前为 1） |
 | 声学特征 | `taf28k.npz`（13,388 × 384，whisper 编码器 last_hidden_state 均值池化） |
-| 修复效果 | exp10 教师规模从坍缩（0/0.667）变为真实 F1（0.56-0.92）；exp13 late_fusion 达 F1=0.928 |
+| 修复效果 | exp10 教师规模从坍缩（0/0.667）变为真实 F1（0.56-0.92）；exp13 sigmoid_linear 达 F1=0.928 |
 
 ### 14.4 RunPod 环境要点
 

@@ -243,3 +243,23 @@
   - `docs/v28 (1).tex` 与 v28.tex 逐字节重复，建议删；outputs/results 陈旧产物未归档。
   - GPU 训练全链路、PEFT 崩溃（静态结论）、transformers 4.x 行为未实测（报告 §十）。
   - 本次改动（新增审计报告 + 本日志）未提交 git。
+
+## 2026-08-26 [审计修复落地：P0-1/P1-1/P1-2 + P2 批量（部分已被并行会话提交）]
+
+- 目标：落地 `reports/2026-08-19_full_audit.md` §九 的修复建议。
+- 完成（基线 4ff723c；期间有并行会话提交 6c40dd8..c099ff6 扫入部分改动）：
+  - **P0-1** `realeval/qdq.py`：QDQLinear 改为吸收参数（self.weight/self.bias，不留 linear 子模块），state_dict 天然单份键；safetensors/save_pretrained 断链消除。已入 HEAD。
+  - **P1-2** `qdq.py`：apply_qdq 增 skip_names=("lm_head",)，跳过输出投影（对齐 TensorRT-LLM 部署口径，避免 tied embedding 被包装）。已入 HEAD。
+  - **P1-1** `real_backend.py:633-638` base zero-shot 路径 nvfp4 强制 variant="base"（与训练侧一致）；`student_loader.py` 加 QDQ+LoRA 显式护栏（清晰报错取代 PEFT ValueError）。loader 部分已入 HEAD，real_backend 部分在工作树。
+  - **P2-8** `framework.py`：run-scoped provenance 追踪（load_first_nonempty 记录合成回退，run_with_mode 盖戳 is_synthetic + finally 复位）；pre_run_validation/run_with_mode 支持 required_datasets，exp7 挂 balanced4k。已入 HEAD（7fcbacd）。
+  - **P2-3** `consistency_check.py`：SYNTHETIC(P0)/DEGRADED(WARN) 守卫，合成/降级结果跳过论文声称对账。已入 HEAD（c099ff6）。
+  - **P2-4/5/6** `real_backend.py`：real_fusion_classify 重构——fit_data 训练集拟合（论文协议，legacy 首半自切保留兜底）、文本分支软分 P(f)/(P(f)+P(n))（return_scores，与声学软分同尺度）、三策略 fit 统一 try/except 降级；exp13 传 fit_data 并把文本推理提出策略循环（3×→2×）。在工作树。
+  - **P2-1/2/7**：transformer 头 docstring 据实改写（冻结随机特征+线性头，删 epochs/lr 死参数）、n_params 区分 total/trained（217/9）、privacy.py 标注 whisper-tiny WER 偏差方向（有利于论文结论，需更强 ASR 回填）。在工作树。
+  - **P2-10**：v28.tex 7 处图引用已被并行会话对齐脚本产物名（e8ecf81）；generate_all.py 加 figN.pdf 纸面名副本步骤作双约定兜底；`docs/v28 (1).tex`（陈旧重复，差异仅图引用旧名）已删。
+  - P3 批量：.gitignore 补 outputs/splits/、REFACTORING.md 去 --smoke、run_pipeline.sh pip 硬失败、claim_engine yaml 入 try+类型守卫、runpod_h100.yaml 死配置 int4→nvfp4、registry exp11 描述、exp5/exp7 注释、REPRODUCIBILITY 命名、template/README 环境变量说明、figure README 420→400dpi、paper_data docstring 笔误。
+- 验证：compileall 0 错、pytest 65 passed、bash -n 通过；QDQ 数值 7 项（单份键/safetensors/双向 strict 往返/bias=False/STE 直通/lm_head 跳过+tied/幂等/动态 QAT）+ tiny Qwen2 save_pretrained→reload→rewrap 全过；attach_adapter 3 例、provenance 盖戳 5 例、consistency 守卫 3 例、融合合成数据 6 例（fit_data 协议/legacy 兼容/单类降级/params 区分/缺音频降级/软分权重可比）全过；paper_data 自检 exit 0、consistency exit 1（陈旧结果，预期）。
+- 遗留：
+  - **real_backend.py / exp13 / privacy.py / 批次E 杂项未提交 git**（工作树改动，17 文件 M + 1 文件 D）；并行会话另有第五轮审计报告（a531a07）。
+  - outputs/ 陈旧产物 11 个文件：`archive_and_clear.py --dry-run` 已预览（归档 markdown 后删除 results/predictions/metrics/tables 旧文件），实际清理待确认（不可逆）。
+  - 未动项（报告中注明需联动或零影响）：exp12 结果键 QAD_MultiGuard_INT4 命名（需 contract/figure 联动）、models.py 非法 quantize 静默全精度（沿用旧模式）、privacy.py n==0 分支 n_pairs 键（无消费方）。
+  - GPU 训练全链路（修后 QAT 5 epoch 收敛 + save_pretrained 实机）仍需 H100 验证。

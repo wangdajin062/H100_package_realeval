@@ -81,13 +81,13 @@ runner.orchestrator.run_experiments()
 
 ## 4. 复现路径
 
-### 4.1 本地 smoke 验证（无需 GPU）
+### 4.1 本地验证（无需 GPU）
 
 ```bash
 cd Projects/H100_package_realeval
 
-# 运行全部 14 个实验的 smoke 路径（合成数据替代真实数据集）
-python -m experiments.runner --smoke --no-archive
+# 测试基线（smoke 路径已移除；本地验证走 pytest + 对齐/合约检查）
+python -m pytest tests/ -q
 
 # 字段对齐检查：65 处 _from_result 字段全部可解析
 python docs/figure_scripts/check_alignment.py

@@ -40,7 +40,7 @@ python3 generate_all.py        # regenerate all 7 PNGs
 python3 fig3_main_results.py
 ```
 
-Each script writes a 420-dpi PNG named after itself (e.g. `fig3_main_results.png`).
+Each script writes a 400-dpi PNG named after itself (e.g. `fig3_main_results.png`).
 
 ## Consistency guarantees
 

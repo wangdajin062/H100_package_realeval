@@ -25,7 +25,7 @@ EXPERIMENTS: list[ExperimentEntry] = [
     ExperimentEntry("exp8_latency_benchmark", "exp8", "Latency Benchmark (end-to-end wall-clock)"),
     ExperimentEntry("exp9_cot_ablation", "exp9", "CoT Ablation (chain-of-thought vs direct)"),
     ExperimentEntry("exp10_teacher_scale", "exp10", "Teacher Scale (0.5B/1.5B/3B/7B)"),
-    ExperimentEntry("exp11_quantization_scheme", "exp11", "Quantization Scheme (fp16 / int8 / int4 / nf4)"),
+    ExperimentEntry("exp11_quantization_scheme", "exp11", "Quantization Scheme (bf16 / fp16 / int8 / int4 / nf4 / nvfp4)"),
     ExperimentEntry("exp12_fraudfusion_baseline", "exp12", "FraudFusion Baseline (quantized competitor + storage decomposition)"),
     ExperimentEntry("exp13_fusion_strategy", "exp13", "Fusion Strategy (multimodal fusion ablation)"),
     ExperimentEntry("exp14_gguf_comparison", "exp14", "Multi-model same-data comparison (BF16 transformers vs Q4_K_M GGUF llama.cpp)"),

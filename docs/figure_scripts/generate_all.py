@@ -69,6 +69,22 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"  [ERROR] {e}")
 
+    # ── Publish paper-named copies (audit P2-10) ─────────────────────────
+    # The manuscript references \includegraphics{figure/figN.pdf} (bare numbers),
+    # while the scripts write figN_<name>.pdf. Copy each generated PDF to the
+    # paper-referenced name so a fresh checkout + generate_all yields a complete
+    # figure set (no manual renaming step).
+    import re
+    import shutil
+    print("\nPaper-named copies (figN.pdf):")
+    for f in sorted(_FIGURE_DIR.glob("fig*_*.pdf")):
+        m = re.match(r"(fig\d+)_", f.name)
+        if not m:
+            continue
+        dst = _FIGURE_DIR / f"{m.group(1)}.pdf"
+        shutil.copyfile(f, dst)
+        print(f"  {f.name} -> {dst.name}")
+
     # List generated figures
     print("\nGenerated figures:")
     for f in sorted(_FIGURE_DIR.glob("*")):

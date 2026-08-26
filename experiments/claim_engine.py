@@ -270,8 +270,12 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     summary = []
     for yml in sorted(CLAIMS.glob("claim_*.yaml")):
-        claim = yaml.safe_load(yml.read_text(encoding="utf-8"))
-        if "experiment" not in claim:
+        try:
+            claim = yaml.safe_load(yml.read_text(encoding="utf-8"))
+        except Exception as exc:
+            logger.warning("Skipping %s: unreadable YAML (%s: %s)", yml.name, type(exc).__name__, exc)
+            continue
+        if not isinstance(claim, dict) or "experiment" not in claim:
             logger.warning("Skipping %s: legacy format (no 'experiment' key), use runner/claim_runner.py", yml.name)
             continue
         if args.claim and claim["id"] != args.claim:

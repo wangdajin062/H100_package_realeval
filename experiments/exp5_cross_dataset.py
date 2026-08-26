@@ -35,7 +35,7 @@ def run(config: dict) -> dict:
         qad_path = resolve_qad_path()
         finetuned_path = str(qad_path) if qad_path.exists() else None
 
-        # Leakage-safe TAF-28k test partition (P1-M1): the exp1-trained int4 model is
+        # Leakage-safe TAF-28k test partition (P1-M1): the exp1-trained nvfp4 model is
         # evaluated only on exp1's held-out set, never on its training data. Reused for
         # the AdvFraud normal-sample pool, the cross-dataset eval, and the LDP sweep.
         taf_ds_all = datasets.get("taf28k", {})
