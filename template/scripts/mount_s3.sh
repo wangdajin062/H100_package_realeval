@@ -31,14 +31,16 @@ if command -v s3fs &>/dev/null; then
     return 0 2>/dev/null || exit 0
 fi
 
-# Try rclone as fallback
+# Try rclone as fallback. Credentials are passed via RCLONE_CONFIG_* env vars rather
+# than CLI flags, so they never appear in the process list (`ps aux` would expose
+# `rclone config create ... access_key_id <secret>` — audit P2-11).
 if command -v rclone &>/dev/null; then
-    rclone config create s3-storage s3 \
-        provider Other \
-        endpoint "${S3_ENDPOINT:-https://s3api-us-ne-1.runpod.io}" \
-        access_key_id "${S3_ACCESS_KEY}" \
-        secret_access_key "${S3_SECRET_KEY}" \
-        region us-east-1 2>/dev/null || true
+    export RCLONE_CONFIG_S3_STORAGE_TYPE=s3
+    export RCLONE_CONFIG_S3_STORAGE_PROVIDER=Other
+    export RCLONE_CONFIG_S3_STORAGE_ENDPOINT="${S3_ENDPOINT:-https://s3api-us-ne-1.runpod.io}"
+    export RCLONE_CONFIG_S3_STORAGE_ACCESS_KEY_ID="${S3_ACCESS_KEY}"
+    export RCLONE_CONFIG_S3_STORAGE_SECRET_ACCESS_KEY="${S3_SECRET_KEY}"
+    export RCLONE_CONFIG_S3_STORAGE_REGION=us-east-1
 
     rclone mount "s3-storage:${S3_BUCKET}" "$S3_MOUNT_POINT" \
         --allow-other --daemon 2>/dev/null && \

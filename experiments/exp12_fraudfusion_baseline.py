@@ -63,7 +63,7 @@ def run(config: dict) -> dict:
         total_x = round(quant_x * param_x, 1) if (quant_x and param_x) else None
         return {"computation": "h100_real_qwen",
                 "competitor_comparison_real": {
-                    "QAD_MultiGuard_INT4": {"f1": qad["f1"], "source": "ours"},
+                    "QAD_MultiGuard_NVFP4": {"f1": qad["f1"], "source": "ours"},
                     # FraudFusion has no released weights; marked as cite-only (no F1 compared).
                     "FraudFusion_pruned_INT4": {"f1": None, "source": "cited (no released weights)"},
                 },

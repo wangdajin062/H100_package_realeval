@@ -105,7 +105,12 @@ def load_causal_lm(path: str, *, quantize: str = None, bf16: bool = True,
         except Exception as e:
             logger.warning("bitsandbytes quantization unavailable (%s), falling back to full precision", e)
     elif quantize not in (None, "bf16", "fp32"):
-        logger.warning("Unknown quantize scheme %r; loading at %s (no quantization applied)", quantize, dtype)
+        # Unknown scheme is a configuration error, not a silently-degraded fallback:
+        # loading full precision would mask a typo (e.g. "nvfp") and emit misleading
+        # full-precision numbers (audit P3).
+        raise ValueError(
+            f"Unknown quantize scheme {quantize!r}; expected one of "
+            f"None/bf16/fp32/fp16/nvfp4/int4/int8/nf4")
 
     try:
         tok = AutoTokenizer.from_pretrained(resolved) if load_tokenizer else None

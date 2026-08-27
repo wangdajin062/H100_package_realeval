@@ -151,10 +151,12 @@ def run(config: dict) -> dict:
                 ldp_out[key] = entry
             out["ldp_tradeoff"] = ldp_out
             out["ldp_note"] = (
-                "Gaussian noise σ applied to hidden states before the classification head; "
-                "σ=1.0 is the paper's single LDP operating point (ε=1.5 / δ=1e-5 is an "
-                "engineering estimate under a fixed sensitivity/clipping convention, NOT a "
-                "certified (ε,δ)-DP guarantee).")
+                "Gaussian noise σ applied to UNCLIPPED hidden states before the "
+                "classification head; σ=1.0 is the paper's single LDP operating point. "
+                "Since the hidden states are not clipped, the sensitivity is unbounded, "
+                "so ε=1.5 / δ=1e-5 is an engineering estimate under an assumed "
+                "sensitivity/clipping convention, NOT a certified (ε,δ)-DP guarantee "
+                "(audit P2-9).")
         else:
             out["ldp_tradeoff"] = {"note": "TAF-28k unavailable; LDP not measured"}
 
