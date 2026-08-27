@@ -172,3 +172,52 @@ P1-2 复核: apply_qdq skip_names=("lm_head",) 递归传递（静态确认）
 目录漂移: REFACTORING.md 删；claim_engine→experiments/；run_pipeline→scripts/；registry→runner/
 P2-10 复核: v28.tex 引 fig1..7.pdf，docs/figure/ 仅 fig3_main_results.*
 ```
+
+---
+
+## 2026-08-27 修复落实复核 + 实验→图表数据链路审计
+
+> 基线：HEAD `64c367d`（含第五轮审计后 7 个修复提交）。本轮做两件事：①复核第五轮「未修」项在后续提交中的落实；②审计实验产出→论文图表的数据链路。
+
+### 一、第五轮「未修」项的落实复核
+
+第五轮报告（基线 `6c40dd8`）列的「未修」项，在后续 7 个提交中大部分已修复：
+
+| 审计项 | 修复提交 | 复核结果 |
+|---|---|---|
+| P2-1/2/4/5/6（融合头 docstring/params/fit口径/软分/try） | `fd584b5` | ✅ 已落地（real_fusion_classify 支持 fit_data、软分、try 包裹） |
+| P2-3（consistency_check degraded 守卫） | `c099ff6` | ✅ 已落地（SYNTHETIC/DEGRADED 守卫，跳过对账） |
+| P2-7（WER 偏差标注） | `817d1e4` | ✅ 已落地 |
+| P2-8（exp13 provenance 死代码） | `7fcbacd` | ✅ 已落地（is_synthetic 写入 result） |
+| P2-10（tex 图引用） | `e8ecf81` | ✅ 引用名对齐 fig1-7 |
+
+**本轮补修的 4 个真正残留**（提交 `ebf3cd6`）：
+
+| # | 问题 | 修复 |
+|---|---|---|
+| P2-11 | mount_s3.sh rclone 凭据用 CLI 参数（`ps aux` 可见） | 改用 `RCLONE_CONFIG_*` 环境变量 |
+| P2-9 | exp5 LDP 未裁剪（敏感度无界） | 据实强化标注「UNCLIPPED、非 DP 保证」 |
+| P3 | exp12 结果键 `QAD_MultiGuard_INT4` | → `NVFP4` |
+| P3 | models.py 非法 quantize 静默回退全精度 | → `raise ValueError` |
+
+### 二、实验产出 → 论文图表数据链路审计
+
+**结构对齐（字段名匹配）**：10 个实验的产出字段与 paper_data 读取路径全部对齐，无结构断裂（exp1~14 各字段逐项核对通过）。
+
+**口径错误（已修复 1 处，提交 `fe7026b`）**：paper_data 的「NVFP4 QAT (CE)」错用 `exp11.schemes.int4`（QAD 模型 + int4 PTQ 推理，语义是 PTQ 而非 QAT）；已改为 `exp2.variants.ce_only`（loss_fn="ce" 的 CE 训练 = 真 QAT），fallback 用实测值 0.7667（论文声称 0.844，gap 待 H100 回填）。
+
+**数据缺失**：`outputs/results/` 为空，图表当前由 fallback 常量生成，非实测。
+
+### 三、核心结论
+
+- **结构层面能支撑**：字段名 10/10 对齐，图表脚本能正确读取实验产出。
+- **口径层面已修正**：唯一的 QAT 口径错误已修复。
+- **数据层面暂不能支撑**：outputs 为空，必须 H100 重跑回填后，图表才能由真实数据生成、真正支撑论文结果。
+
+### 验证记录
+
+```
+pytest: 65 passed（同步后代码，HEAD 64c367d）
+py_compile: paper_data.py + 修复的 4 文件，0 errors
+paper_data.py 自检: all consistency self-checks pass（outputs 空 → fallback 生效，预期 MISSING）
+```
