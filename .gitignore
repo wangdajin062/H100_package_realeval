@@ -85,6 +85,13 @@ docs/figure/*.png
 docs/figure/*.pdf
 *.tiff
 
+# ── LaTeX compile artifacts (not source) ──────────────────
+docs/*.log
+docs/*.aux
+docs/*.out
+docs/*.toc
+docs/*.synctex.gz
+
 # ── IDE user settings ─────────────────────────────────────
 .vscode/settings.json
 
