@@ -165,6 +165,13 @@ PH_EXP11_INT4_F1 = _from_result(
     placeholder="PH_EXP11_INT4_F1", fallback=0.6172
 )
 # 注：exp11 int4=0.6172 为调优前 exp1_qad 的下游陈旧值（待重跑，预期 ~0.8，见 results_20260803）。
+# QAT (CE-loss) 源：exp2 的 ce_only 变体（loss_fn="ce"）才是论文 Table 3 的 "NVFP4 QAT"
+# 基线（CE 训练的量化模型），而非 exp11.schemes.int4（那是 QAD 模型 + int4 PTQ 推理，
+# 语义不同）。fallback 用实测值 0.7667（论文声称 0.844，实测/声称 gap 待 H100 重跑回填）。
+PH_EXP2_CE_ONLY_QAT_F1 = _from_result(
+    "exp2", "variants", "ce_only", "f1",
+    placeholder="PH_EXP2_CE_ONLY_QAT_F1", fallback=0.7667
+)
 PH_EXP14_Q4KM_F1 = _from_result(
     "exp14", "models", "q4km_0.5b_llama_cpp", "f1",
     placeholder="PH_EXP14_Q4KM_F1", fallback=0.7025
@@ -176,7 +183,7 @@ PH_EXP14_Q4KM_F1 = _from_result(
 _qad_f1 = PH_EXP1_F1
 _OVF_FULL_F1 = _r(PH_EXP3_OVF_FULL_F1)
 _ovf_f1   = _OVF_FULL_F1   # alias for Fig3 QAT_QAD_OVF compatibility
-_qat_f1 = PH_EXP11_INT4_F1
+_qat_f1 = PH_EXP2_CE_ONLY_QAT_F1
 
 # Error bars for the QAT/QAD rows: resolved from experiment outputs when a
 # multi-seed run provides a measured std. exp1 已产出真实 std=0.0133（5 seed）；
@@ -186,6 +193,8 @@ PH_EXP3_OVF_FULL_ERR = _from_result("exp3", "conditions", "ov_freeze_full", "std
                                     placeholder="PH_EXP3_OVF_FULL_ERR", fallback=0.006)
 PH_EXP11_INT4_ERR    = _from_result("exp11", "schemes", "int4", "std",
                                     placeholder="PH_EXP11_INT4_ERR", fallback=0.014)
+PH_EXP2_CE_ONLY_QAT_ERR = _from_result("exp2", "variants", "ce_only", "std",
+                                       placeholder="PH_EXP2_CE_ONLY_QAT_ERR", fallback=0.014)
 PH_EXP14_Q4KM_ERR    = _from_result("exp14", "models", "q4km_0.5b_llama_cpp", "std",
                                     placeholder="PH_EXP14_Q4KM_ERR", fallback=0.007)
 
@@ -195,7 +204,7 @@ def _recovery(f1):
 
 
 QAT_QAD_OVF = [
-    {"name": "NVFP4 QAT (CE)",         "f1": _qat_f1, "f1_err": PH_EXP11_INT4_ERR, "recovery": _recovery(_qat_f1)},
+    {"name": "NVFP4 QAT (CE)",         "f1": _qat_f1, "f1_err": PH_EXP2_CE_ONLY_QAT_ERR, "recovery": _recovery(_qat_f1)},
     {"name": "NVFP4 QAD",              "f1": _qad_f1, "f1_err": PH_EXP1_ERR, "recovery": _recovery(_qad_f1)},
     {"name": "NVFP4 QAD + OV-Freeze",  "f1": _ovf_f1, "f1_err": PH_EXP3_OVF_FULL_ERR, "recovery": _recovery(_ovf_f1)},
     {"name": "Q4_K_M QAD + OV-Freeze", "f1": PH_EXP14_Q4KM_F1, "f1_err": PH_EXP14_Q4KM_ERR,
