@@ -28,7 +28,8 @@ from metrics.contract import _NOT_FOUND, _dig, _latest_result
 # DRIFT here is EXPECTED for several items and is the signal to update the paper.
 PAPER_CLAIMS: dict[str, list[tuple]] = {
     "exp1":  [(("f1",), 0.916, 0.03, "QAD component F1")],
-    "exp2":  [(("variants", "kl_only", "f1"), 0.916, 0.03, "Pure-KL F1 (claimed optimal)")],
+    "exp2":  [(("variants", "kl_only", "f1"), 0.916, 0.03, "Pure-KL F1 (claimed optimal)"),
+              (("variants", "ce_only", "f1"), 0.844, 0.03, "QAT (CE) F1")],
     "exp3":  [(("conditions", "ov_freeze_full", "f1"), 0.923, 0.03, "QAD+OVF F1")],
     "exp5":  [(("taf28k", "f1"), 0.923, 0.03, "TAF-28k IID F1"),
               (("chifraud", "f1"), 0.860, 0.03, "ChiFraud OOD F1")],
