@@ -89,9 +89,9 @@
 ### S1 — 语音隐私文献谱系(should_fix)
 
 - **来源**:R2(领域)
-- **状态**:✅ **已完成(文字描述,未新增 bib key)**
+- **状态**:✅ **已完成(补引 `\citep{22}` = VoicePrivacy 2022 Challenge)**
 
-**作者回应(中文)**:§2 相关工作补 speaker anonymization 谱系演进(启发式混淆 → 形式化保证,含 $k$-anonymity in embedding space、differentially-private perturbation、Voice Privacy Challenge 框架),并显式区分 `content-level`(抗内容重建)与 `identity-level`(防跨会话链接),声明本文 scope 为 content-level。因 `ref_v4.bib` 未随仓库提交,本轮以文字描述谱系、不新增 `\citep` 编号,避免编译缺项与引用捏造。
+**作者回应(中文)**:§2 相关工作补 speaker anonymization 谱系演进(启发式混淆 → 形式化保证,含 $k$-anonymity in embedding space、differentially-private perturbation、Voice Privacy Challenge 框架),并显式区分 `content-level`(抗内容重建)与 `identity-level`(防跨会话链接),声明本文 scope 为 content-level。引用层面,`ref_v4.bib` 中的 `{22}` 即 VoicePrivacy 2022 Challenge Evaluation Plan(Tomashenko et al., 2022),已在谱系文字处补 `\citep{22}`;同时将 `ref_v4.bib` 归入仓库 `docs/` 目录,解决此前 bib 缺失导致的编译缺项。
 
 **英文回应(可粘贴)**:
 
@@ -145,6 +145,7 @@
 ## 文件位置
 
 - 修订稿:`docs/v29.tex`(就地修订)
+- 参考文献库:`docs/ref_v4.bib`(本轮补入库)
 - 本轮评审报告:`docs/v29_review.md`
 - 本轮修订说明:`reports/v29_response_to_reviewers_round2.md`
 - 前轮响应(回应 v28 评审):`reports/v29_response_to_reviewers.md`、`reports/v29_revision_letter_EN.md`
