@@ -127,6 +127,19 @@
 
 ---
 
+## 附加修订(引用精确性)
+
+### X1 — x-vector 引用错位修正
+
+- **性质**:既有引用问题(非 v29_review.md 意见),审阅 bib 时发现
+- **状态**:✅ **已完成**
+
+**问题**:§2 原句 `\citet{22} proposed x-vector substitution as an early approach for acoustic identity obfuscation` 中,`{22}` 实际为 VoicePrivacy 2022 Challenge Evaluation Plan(评估框架),并非「提出 x-vector」的原始论文。
+
+**修正**:新增 `@inproceedings{snyder2018xvectors}`(Snyder et al., ICASSP 2018, DOI 10.1109/ICASSP.2018.8461375,x-vector 原始出处),并将该句改为 `\citet{snyder2018xvectors} introduced x-vectors for speaker recognition, which were subsequently adapted as an early approach for acoustic identity obfuscation`。`{22}`(VoicePrivacy 2022)保留在正确的引用位置(§5 voice-anonymisation literature 与 §2 Voice Privacy Challenge framework)。
+
+---
+
 ## 修订状态总览
 
 | 意见 | Severity | 状态 | 说明 |
