@@ -491,7 +491,7 @@ A：不会。每次运行前归档功能会清理旧文件，保留归档 Markdo
 | 缺口 | 现状 | 补齐方式 |
 |---|---|---|
 | ChiFraud 文本 | ✅ **已补齐**（2026-08-31，从官方 HF 本地快照复制三个 CSV，见下） | `chifraud.jsonl` 已生成（404,109 条） |
-| TAF-28k 音频 | `TAF28k/audio/` 空（无 mp3），转录无法从零重建 | gated 源 `huggingface-cli download JimmyMa99/TeleAntiFraud --repo-type dataset`（需 HF 授权），见 `download_taf28k_audio.sh` |
+| TAF-28k 音频 | `TAF28k/audio/` 空（无 mp3），转录无法从零重建 | 公开镜像 `wangdajin062/TeleAntiFraud-bucket` 的 `audio.zip`（12.7GB，无需 gated 授权），见 `download_taf28k_audio.sh` |
 | `taf28k.jsonl` | 当前 4,400 条来自 `binary_classification/`（4000 train + 400 test，`text`=指令模板），非转录文本 | 补齐音频后重跑 `transcribe_taf28k.py`，从 sft 的 13,388 条 fraud/normal 样本转录 |
 
 **本地实测现状**（数据完整性核查）：
