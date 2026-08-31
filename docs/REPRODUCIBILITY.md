@@ -484,6 +484,25 @@ A：不会。每次运行前归档功能会清理旧文件，保留归档 Markdo
 
 > **背景**：TAF-28k 是**音频分类数据集**——其 `taf28k.jsonl` 中每条的 `text` 是同一段音频分析指令模板，真实的 fraud/normal 信号在音频文件里。若直接用该文本做分类，模型学不到任何区分（去重后仅 1 个唯一文本，结果坍缩为单类预测）。`whisper-tiny` 虽在模型清单中，但代码从未调用——这是数据引用逻辑缺口。
 
+### 14.0 数据缺口与补齐（2026-08-31 数据审计）
+
+本地 `data/` 快照（`data.zip` 解压）与论文声称的完整数据链之间存在三个缺口，均需外部数据补齐（`data/**` 已 gitignore，数据文件不进版本库）：
+
+| 缺口 | 现状 | 补齐方式 |
+|---|---|---|
+| ChiFraud 文本 | ✅ **已补齐**（2026-08-31，从官方 HF 本地快照复制三个 CSV，见下） | `chifraud.jsonl` 已生成（404,109 条） |
+| TAF-28k 音频 | `TAF28k/audio/` 空（无 mp3），转录无法从零重建 | gated 源 `huggingface-cli download JimmyMa99/TeleAntiFraud --repo-type dataset`（需 HF 授权），见 `download_taf28k_audio.sh` |
+| `taf28k.jsonl` | 当前 4,400 条来自 `binary_classification/`（4000 train + 400 test，`text`=指令模板），非转录文本 | 补齐音频后重跑 `transcribe_taf28k.py`，从 sft 的 13,388 条 fraud/normal 样本转录 |
+
+**本地实测现状**（数据完整性核查）：
+
+- sft 源数据基本完整：train_1 13,561 + train_2 13,586 + test 6,807 ≈ 33,954 条；其中 fraud 7,177 + normal 6,211 = **13,388 条二分类样本**，与 §14.3 的转录规模一致。
+- `sft/train_1.jsonl` 末尾截断 1 行（zip 内即缺，`transcribe_taf28k.py` 已 try/except 逐行容错，不影响主体）。
+- ChiFraud 官方许可为 **CC BY-NC 4.0**（非商业），下载前需确认使用合规。
+- ✅ **ChiFraud 文本已补齐**：三个 CSV 已就位（train 192,267 / t2022 96,289 / t2023 115,553 逻辑行），`chifraud.jsonl` 生成 **404,109 条**（fraud 57,905 / normal 346,204，11 类齐全，二分类欺诈占比 14.3%）。
+- ⚠️ **sha 错位记录**：`dataset/metadata.json` 的三个 sha256 字段与实际文件名**循环错位**（实测 train=`fc7cacab…`、t2022=`25469871…`、t2023=`9775352b…`，metadata 却分别声称 `25469871…`/`9775352b…`/`fc7cacab…`）。官方 `train_eval.py` 按文件名使用（t2022=eval、t2023=test），文件名语义是权威的，故按文件名对齐、**未做 sha 重命名**；`download_chifraud.sh` 的校验和已改为实测值。官方 `datasets_metadata.json` 声称 411,434 条系 `wc -l` 把 text 字段内换行误算为样本所致，DictReader 逻辑样本为 404,109。
+- `spam11358`（11,358 条）、`AdvFraud3k`（2,119 条）、`balanced4k`（4,000 条）在本地快照中已齐全，可正常加载。
+
 ### 14.1 修复链路
 
 ```
