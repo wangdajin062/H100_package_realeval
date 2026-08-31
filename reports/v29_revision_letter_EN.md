@@ -14,7 +14,7 @@ We thank you for the thorough and constructive review of our manuscript. We have
 
 ## Summary of Changes
 
-The revised manuscript (i) converges the headline claims to the controlled-environment evidence boundary (abstract, highlights, conclusion), (ii) states the novelty boundary of the contribution explicitly, and (iii) further qualifies the SAFE-QAQ comparison at the point of use. Reproducibility backfill (R1) and the additional LoRA/Adapter baseline (R4) require H100 re-runs; their status is reported below.
+The revised manuscript (i) converges the headline claims to the controlled-environment evidence boundary (abstract, highlights, conclusion), (ii) states the novelty boundary of the contribution explicitly, (iii) further qualifies the SAFE-QAQ comparison at the point of use, and (iv) reports standardised effect sizes (Cohen's h) for the key gains, downgrades the pilot deployment to future work, and discloses the speaker-identification power limitation. Reproducibility backfill (R1) and the additional LoRA/Adapter baseline (R4) require H100 re-runs; their status is reported below.
 
 ---
 
@@ -64,10 +64,10 @@ The 2.1× figure is already qualified as an isolated compute-kernel throughput m
 
 ### S1–S4 — Suggested revisions
 
-- **S1 (effect size for the +0.007 F₁ OV-Freeze gain).** Planned — we will add a standardised effect size alongside the existing 95% CI ([+0.31, +1.08] pp, L505) to justify the practical significance.
-- **S2 (field/pilot evidence).** Planned — the Discussion (L898) already notes a planned pilot deployment; if a pilot is not feasible within the revision window, we will explicitly downgrade it to future work.
+- **S1 (effect size for the +0.007 F₁ OV-Freeze gain).** Done — following the reviewer's escalation of this point in the second round, we now report standardised effect sizes (Cohen's h on the arcsine-transformed probability scale) alongside the 95% CI: the OV-Freeze gain (0.916 → 0.923) yields h ≈ 0.02, the heterogeneous-quantisation gain (0.915 → 0.923) yields h ≈ 0.03, and the LDP-induced degradation (0.923 → 0.902) yields h ≈ 0.07 — all below the conventional h = 0.20 "small" threshold (L505). The main-results paragraph (L681) reports the gain consistently as evidence of faithful distillation rather than a practically large accuracy improvement.
+- **S2 (field/pilot evidence).** Done — the Discussion (L898) now explicitly downgrades the pilot deployment to future work, stating it "has not been completed within the scope of this study."
 - **S3 (privacy-embedding ablation).** Planned — we will disentangle the Whisper-tiny information bottleneck from the MFCC+pooling design in accounting for WER ≥ 0.95.
-- **S4 (power analysis for speaker identification).** Planned — we will add a sample-size/power analysis for the 11-speaker closed-set result (8.3% vs. 9.1% chance baseline).
+- **S4 (power analysis for speaker identification).** Done — §Privacy (L853) now discloses the statistical-power limitation of the 11-speaker closed-set result, reading the below-chance accuracy (8.3% vs. 9.1% chance baseline) as preliminary evidence of privacy rather than a formal, adequately-powered negative result.
 
 ---
 

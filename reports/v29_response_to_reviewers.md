@@ -11,7 +11,7 @@
 
 ## 总述(Summary of Changes)
 
-本次修订针对综合决策意见的 **R1–R4(必须修改)** 与 **S1–S4(建议修改)** 进行。已落地的文本修订聚焦于 **R2(主张收敛)** 与 **R4(新颖性边界声明)**,共 5 处,均在 `v29.tex`(`v28.tex` 原版保留)。**R1(可复现性回填)** 与 **S1–S4** 属实验层面,已在文中 `§Reproducibility statement` 预先承诺或标注为 planned,无法以文本修改闭合。
+本次修订针对综合决策意见的 **R1–R4(必须修改)** 与 **S1–S4(建议修改)** 进行。已落地的文本修订聚焦于 **R2(主张收敛)**、**R3(对比公平性)**、**R4(新颖性边界声明)** 与 **S1/S2/S4(效应量、pilot 降级、功效披露)**,均在 `v29.tex`(`v28.tex` 原版保留)。**R1(可复现性回填)** 与 **S3(隐私嵌入消融)** 属实验层面,已在文中 `§Reproducibility statement` 预先承诺或标注为 planned,无法以文本修改闭合。其中 **S1(效应量)** 在第二轮评审(`docs/v29_review.md`)中被升级为 R3(Major),已在 L505 以 Cohen's h 闭合,并在主结果段 L681 同步收敛;**S2** 以「pilot 降级为 future work」闭合;**S4** 以「功效限制披露」闭合。
 
 ---
 
@@ -87,19 +87,19 @@
 
 ### S1 — OV-Freeze 效应量论证(should_fix)
 
-- **状态**:⏳ planned。为 +0.007 F₁ 增益补充效应量 + CI(现有 95% CI `[+0.31, +1.08]` 个百分点已报告于 L505),需追加标准化效应量(如 Cohen's d)并论证实质重要性。
+- **状态**:✅ **已完成**(在第二轮评审中被升级为 R3 Major,以 Cohen's h 闭合)。§Experiments 统计段(L505)已追加标准化效应量(Cohen's h,arcsine 变换概率尺度):OV-Freeze 增益(0.916→0.923)$h \approx 0.02$、异构量化增益(0.915→0.923)$h \approx 0.03$、LDP 诱导退化(0.923→0.902)$h \approx 0.07$,均低于常规 small 阈值($h=0.20$),如实反映「统计显著、效应量小」。主结果段(L681)同步收敛,将该增益表述为「faithful distillation 的证据」而非「实际大幅精度提升」。
 
 ### S2 — field/pilot 证据或降级(should_fix)
 
-- **状态**:⏳ planned / 已在正文预置。Discussion(L898)已写 `a planned pilot deployment`;若 pilot 短期不可得,将在下一轮把该句显式降级为 future work。
+- **状态**:✅ **已完成**。Discussion(L898)已将 pilot 显式降级为 future work:`A pilot deployment in a real telecommunication-fraud setting is identified as future work (Table~\ref{tab1}) and has not been completed within the scope of this study.`
 
 ### S3 — 隐私嵌入消融(consider)
 
-- **状态**:⏳ planned。分离 Whisper-tiny 信息瓶颈 vs MFCC+池化设计对 WER≥0.95 的各自贡献。
+- **状态**:⏳ planned。分离 Whisper-tiny 信息瓶颈 vs MFCC+池化设计对 WER≥0.95 的各自贡献(属新实验,非文本可闭合)。
 
 ### S4 — 说话人识别功效分析(consider)
 
-- **状态**:⏳ planned。为 11-speaker 闭集下 8.3% vs 9.1% 的「低于机会」结论补样本量/功效分析。
+- **状态**:✅ **已完成(据实保留「preliminary」措辞)**。§Privacy(L853)已追加统计功效限制披露:11-speaker 闭集小样本限制了对弱生物特征泄漏的检测功效,故 8.3%(vs 9.1% 随机基线)应解读为「privacy 的初步证据」而非「形式化、功效充足的阴性结论」。
 
 ---
 
@@ -111,10 +111,10 @@
 | R2 主张收敛 | Major | ✅ 已完成 | L76 / L83–84 / L909 |
 | R3 对比公平性 | Major | ✅ 已完成 | Table 3 脚注(L665)+ L684 |
 | R4 新颖性边界 | Major | 🟡 部分完成 | L147(基线待补) |
-| S1 效应量 | should_fix | ⏳ planned | — |
-| S2 field 证据 | should_fix | ⏳ planned | Discussion(L898) |
+| S1 效应量 | should_fix | ✅ 已完成 | L505(Cohen's h)+ L681 |
+| S2 field 证据 | should_fix | ✅ 已完成 | Discussion(L898) |
 | S3 隐私消融 | consider | ⏳ planned | — |
-| S4 功效分析 | consider | ⏳ planned | — |
+| S4 功效分析 | consider | ✅ 已完成 | §Privacy(L853) |
 
 ---
 
