@@ -13,7 +13,8 @@
 # 用法（三选一）:
 #   1) 公开镜像 bucket（推荐，无需 HF 登录/授权）:
 #        bash download_taf28k_audio.sh --bucket
-#      （默认经 hf-mirror.com 国内镜像；若在境外可设 MIRROR=0 直连 huggingface.co）
+#      - 国内/镜像场景走 hf-mirror.com（默认）。
+#      - RunPod / 境外直连 huggingface.co 更快：MIRROR=0 bash download_taf28k_audio.sh --bucket
 #   2) 官方 gated 源（备用，需 HF 登录 + 网页授权）:
 #        pip install -U huggingface_hub
 #        huggingface-cli login
@@ -25,16 +26,18 @@
 set -euo pipefail
 
 BUCKET="wangdajin062/TeleAntiFraud-bucket"
-DEST=/workspace/data/TAF28k/audio
+ROOT=/workspace/data/TAF28k
+DEST="$ROOT/audio"          # 最终音频目录（zip 内 audio/ 前缀解压至此）
 TMP=/tmp/taf28k_audio_dl
 MIRROR="${MIRROR:-1}"
 
 if [ $# -lt 1 ]; then
   cat >&2 <<'EOF'
-==> 无参数。TAF-28k 音频有两种获取方式：
+==> 无参数。TAF-28k 音频获取方式：
 
   [推荐·公开镜像] bash download_taf28k_audio.sh --bucket
       （wangdajin062/TeleAntiFraud-bucket 公开 bucket，audio.zip 12.7GB，无需授权）
+      RunPod/境外直连：MIRROR=0 bash download_taf28k_audio.sh --bucket
 
   [官方 gated] huggingface-cli login 后：
       huggingface-cli download JimmyMa99/TeleAntiFraud \
@@ -45,6 +48,34 @@ EOF
   exit 2
 fi
 
+# 解压 zip 到 $ROOT，使内容落在 $DEST（若 zip 无 audio/ 前缀则手工归位）。
+unpack_to_root() {
+  local zip="$1"
+  mkdir -p "$ROOT"
+  if command -v unzip >/dev/null 2>&1; then
+    unzip -q -o "$zip" -d "$ROOT"
+  else
+    python - "$zip" "$ROOT" <<'PY'
+import sys, zipfile
+zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])
+PY
+  fi
+  # zip 内为 audio/ 前缀布局 → 已是 $DEST
+  if [ -d "$DEST" ]; then
+    return 0
+  fi
+  # 无前缀兜底：把 $ROOT 下散落的 mp3 归入 $DEST
+  mkdir -p "$DEST"
+  find "$ROOT" -maxdepth 1 -name '*.mp3' -exec mv -t "$DEST" {} + 2>/dev/null || true
+}
+
+report() {
+  local n
+  n=$(find "$DEST" -name '*.mp3' 2>/dev/null | wc -l)
+  echo "==> 音频数量: $n"
+  echo "==> 示例: $(find "$DEST" -name '*.mp3' 2>/dev/null | head -2)"
+}
+
 if [ "$1" = "--bucket" ]; then
   if [ "$MIRROR" = "1" ]; then
     BASE="https://hf-mirror.com"
@@ -54,18 +85,11 @@ if [ "$1" = "--bucket" ]; then
   URL="$BASE/buckets/$BUCKET/resolve/audio.zip"
   echo "==> 下载公开 bucket audio.zip（12.7GB）: $URL"
   mkdir -p "$TMP"
-  curl -fL --retry 3 -o "$TMP/audio.zip" "$URL"
-  echo "==> 解压到 $DEST"
-  mkdir -p "$DEST"
-  (cd "$TMP" && unzip -q audio.zip)
-  # audio.zip 内为 audio/ 前缀布局
-  if [ -d "$TMP/audio" ]; then
-    cp -r "$TMP/audio/"* "$DEST/"
-  else
-    cp -r "$TMP/"* "$DEST/" 2>/dev/null || true
-  fi
-  echo "==> 音频数量: $(find "$DEST" -name '*.mp3' | wc -l)"
-  echo "==> 示例: $(find "$DEST" -name '*.mp3' | head -2)"
+  curl -fL -C - --retry 3 --retry-delay 5 -o "$TMP/audio.zip" "$URL"
+  echo "==> 解压到 $ROOT（最终 $DEST）"
+  unpack_to_root "$TMP/audio.zip"
+  rm -f "$TMP/audio.zip"
+  report
   echo DONE
   exit 0
 fi
@@ -73,19 +97,17 @@ fi
 URL="$1"
 mkdir -p "$TMP"
 echo "==> 下载 $URL"
+ZIP="$TMP/audio_manual.zip"
 case "$URL" in
   *.tar.gz|*.tgz) curl -sSL "$URL" -o "$TMP/audio.tar.gz" && tar -xzf "$TMP/audio.tar.gz" -C "$TMP" ;;
-  *.zip)          curl -sSL "$URL" -o "$TMP/audio.zip" && (cd "$TMP" && unzip -q audio.zip) ;;
+  *.zip)          curl -sSL -C - --retry 3 "$URL" -o "$ZIP" && unpack_to_root "$ZIP" && rm -f "$ZIP" ;;
   *.tar)          curl -sSL "$URL" -o "$TMP/audio.tar" && tar -xf "$TMP/audio.tar" -C "$TMP" ;;
   *)              echo "未知格式（支持 .tar.gz/.zip/.tar），请提供压缩包 URL" >&2; exit 2 ;;
 esac
-echo "==> 移动音频到 $DEST"
-mkdir -p "$DEST"
+# .tar* 分支仍走 /tmp 解压 → 归位
 if [ -d "$TMP/audio" ]; then
-  cp -r "$TMP/audio/"* "$DEST/"
-else
-  cp -r "$TMP/"* "$DEST/" 2>/dev/null || true
+  mkdir -p "$ROOT"
+  cp -r "$TMP/audio" "$DEST" 2>/dev/null || true
 fi
-echo "==> 音频数量: $(find "$DEST" -name '*.mp3' | wc -l)"
-echo "==> 示例目录: $(find "$DEST" -name '*.mp3' | head -2)"
+report
 echo DONE
