@@ -62,9 +62,54 @@ class TestData:
     def test_load_taf28k_missing(self):
         from realeval.data import load_taf28k
         ds = load_taf28k(max_samples=10)
-        # Missing local TAF-28k falls back to HF bucket or synthetic; source may be None,
-        # 'jsonl', or 'hf_bucket_fallback' depending on network/authorization.
-        assert ds["source"] in (None, "jsonl", "hf_bucket_fallback", "synthetic")
+        # 缺失本地 TAF-28k 时诚实返回空；HF_BUCKET 是 bucket 类型（load_dataset 无法加载），
+        # 不再 fallback synthetic（审计 P0-3）。本地存在 taf28k.jsonl 时 source 为 'jsonl'。
+        assert ds["source"] in (None, "jsonl", "hf_bucket_fallback")
+
+    def test_load_hf_bucket_no_synthetic_fallback(self):
+        from realeval.data import load_hf_bucket
+        # bucket 类型仓库无法用 load_dataset 加载 → 必须返回空，绝不伪造 synthetic（审计 P0-3）。
+        ds = load_hf_bucket("wangdajin062/TeleAntiFraud-bucket", split="train", max_samples=10)
+        assert ds["source"] is None
+        assert ds["texts"] == []
+        assert ds["labels"] == []
+
+    def test_has_local_data_taf28k_instruction_template_rejected(self, tmp_path):
+        """taf28k.jsonl 是指令模板坏数据（唯一文本 <100）时 has_local_data 返回 False（审计 P1-2）。"""
+        import json
+        import realeval.data as rdata
+        taf = tmp_path / "TAF28k"
+        taf.mkdir()
+        jl = taf / "taf28k.jsonl"
+        # 同一段指令模板重复（binary_classification 旧数据，无类别信号）
+        jl.write_text("\n".join(
+            json.dumps({"text": "根据听到的音频内容，分析该通话是否涉及诈骗。", "label": 0})
+            for _ in range(4400)
+        ), encoding="utf-8")
+        saved = rdata.DATA
+        try:
+            rdata.DATA = tmp_path
+            assert rdata.has_local_data("taf28k") is False
+        finally:
+            rdata.DATA = saved
+
+    def test_has_local_data_taf28k_real_transcription_accepted(self, tmp_path):
+        """taf28k.jsonl 是真实转录（唯一文本足够多）时 has_local_data 返回 True。"""
+        import json
+        import realeval.data as rdata
+        taf = tmp_path / "TAF28k"
+        taf.mkdir()
+        jl = taf / "taf28k.jsonl"
+        jl.write_text("\n".join(
+            json.dumps({"text": f"transcript_{i}", "label": i % 2})
+            for i in range(200)
+        ), encoding="utf-8")
+        saved = rdata.DATA
+        try:
+            rdata.DATA = tmp_path
+            assert rdata.has_local_data("taf28k") is True
+        finally:
+            rdata.DATA = saved
 
     def test_load_taf28k_max_samples_truncation(self, tmp_path):
         import json

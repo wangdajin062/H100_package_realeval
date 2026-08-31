@@ -65,8 +65,15 @@ def run(config: dict) -> dict:
                         config, mixed_texts, mixed_labels, quantize="nvfp4",
                         finetuned_path=finetuned_path,
                     )
-                    results[dname] = {"f1": result["f1"], "accuracy": result["accuracy"]}
+                    results[dname] = {"f1": result["f1"], "accuracy": result["accuracy"],
+                                      "n_samples": n_adv,
+                                      "note": f"本地 AdvFraud 总样本 {n_adv} 条（非论文声称 3,000）"}
 
+                    # 注意（audit P1-1）：本地 AdvFraud 数据为 2,119 条（119 S1–S8 对抗改写 +
+                    # 2,000 novel_template），非论文声称的 3,000 条；且 review_status 全为
+                    # pending、无人工过滤标注。「curated 517」取前 517 条作占位近似，并非
+                    # 论文所述「人工过滤排除语法损坏/生成痕迹」的高质量子集——待数据补齐
+                    # 并人工复核后再回填真实 curated 子集。
                     curated_n = min(517, n_adv)
                     curated_texts = ds["texts"][:curated_n] + normal_texts[:curated_n]
                     curated_labels = ds["labels"][:curated_n] + [0] * min(curated_n, len(normal_texts))
@@ -74,7 +81,11 @@ def run(config: dict) -> dict:
                         config, curated_texts, curated_labels, quantize="nvfp4",
                         finetuned_path=finetuned_path,
                     )
-                    results["advfraud_curated"] = {"f1": curated_result["f1"], "accuracy": curated_result["accuracy"]}
+                    results["advfraud_curated"] = {
+                        "f1": curated_result["f1"], "accuracy": curated_result["accuracy"],
+                        "note": "占位近似：本地数据无人工过滤标注（review_status 全 pending），"
+                                "前 517 条非论文所述人工过滤子集。",
+                    }
                 else:
                     adv_test_texts, adv_test_labels = shared_test_split("advfraud3k", ds["texts"], ds["labels"])
                     result = real_backend.real_llm_classify(

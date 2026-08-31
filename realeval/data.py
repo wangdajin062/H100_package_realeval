@@ -129,16 +129,18 @@ def load_taf28k(max_samples: int | None = None, source: str = "auto") -> dict:
                         "embeddings": embeddings[:n], "speaker_labels": spk[:n], "source": "multimodal"}
             return {"texts": [], "labels": labels_npz.tolist(),
                     "embeddings": embeddings, "speaker_labels": spk, "source": "npz"}
-    # Fallback: try loading from HF bucket when local data is missing
-    logger.warning("TAF-28k not found at %s — trying HF bucket fallback", _data_root() / "TAF28k")
+    # Fallback: try HF repo when local data is missing. Note: HF_BUCKET 是 bucket 类型
+    # （Xet 文件存储），load_dataset 无法加载，故此 fallback 会诚实返回空而非伪造数据；
+    # 补齐方式见 data/scripts/download_taf28k_audio.sh + transcribe_taf28k.py。
+    logger.warning("TAF-28k not found at %s — trying HF fallback (bucket 类型不可直接 load_dataset)", _data_root() / "TAF28k")
     try:
         hf_data = load_hf_bucket(HF_BUCKET, split="train", max_samples=max_samples)
         if hf_data["texts"]:
-            logger.info("Loaded %d samples from HF bucket as TAF28k fallback", len(hf_data["texts"]))
+            logger.info("Loaded %d samples from HF repo as TAF28k fallback", len(hf_data["texts"]))
             hf_data["source"] = "hf_bucket_fallback"
             return hf_data
     except Exception as e:
-        logger.warning("HF bucket fallback also failed: %s", e)
+        logger.warning("HF fallback also failed: %s", e)
     return {"texts": [], "labels": [], "embeddings": None, "speaker_labels": None, "source": None}
 
 
@@ -292,8 +294,14 @@ def load_hf_bucket(name_or_path: str = None, split: str = "train",
         return {"texts": texts, "labels": labels, "embeddings": embeddings,
                 "speaker_labels": speaker_labels, "source": f"hf:{repo}"}
     except Exception as e:
-        logger.warning("HF bucket load failed (%s), falling back to synthetic: %s", repo, e)
-        return load_synthetic(n=max_samples or 200)
+        # 绝不 fallback synthetic：数据缺失必须诚实报缺失，绝不伪造复现结果（REPRODUCIBILITY.md 铁律）。
+        # HF_BUCKET 是 bucket 类型（Xet 文件存储），load_dataset 无法加载；bucket 需先用
+        # data/scripts/download_taf28k_audio.sh 下载 audio.zip 并转录（§14 数据修复链）。
+        logger.error(
+            "HF 数据加载失败（%s）：%s。bucket 类型仓库无法用 load_dataset 直接加载，"
+            "请先补齐本地 data/（见 data/scripts/download_taf28k_audio.sh）。返回空数据，不伪造 synthetic。",
+            repo, e)
+        return {"texts": [], "labels": [], "embeddings": None, "speaker_labels": None, "source": None}
 
 
 def _to_binary_labels(labels: list) -> list[int]:
@@ -426,11 +434,39 @@ def load_text_corpus(name: str, max_samples: int | None = None) -> dict:
     return loader(max_samples)
 
 
+def _taf28k_jsonl_has_real_text(root: Path) -> bool:
+    """TAF-28k 的 taf28k.jsonl 需为真实转录文本才算就位（audit P1-2）。
+
+    binary_classification 生成的旧 jsonl 每行 ``text`` 是同一段音频分析指令模板，
+    去重后仅 1 个唯一文本（无类别信号）；真实转录（transcribe_taf28k.py 产出）
+    有 13,333 个唯一文本。以唯一文本数区分二者。
+    """
+    path = root / "TAF28k" / "taf28k.jsonl"
+    uniq: set[str] = set()
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    uniq.add(json.loads(line).get("text", ""))
+                except (json.JSONDecodeError, ValueError, TypeError):
+                    continue
+                if len(uniq) >= 100:  # 足够多 → 真实转录，提前返回
+                    return True
+    except OSError:
+        return False
+    return len(uniq) >= 100
+
+
 def has_local_data(name: str) -> bool:
-    """Return True if the dataset's local data file(s) exist.
+    """Return True if the dataset's local data file(s) exist and are usable.
 
     Used by ``pre_run_validation`` (audit P1-M2) to fail early when a real dataset's
-    files are missing instead of silently falling back to synthetic data.
+    files are missing instead of silently falling back to synthetic data. For
+    ``taf28k``, additionally verifies the JSONL holds real transcriptions rather than
+    the legacy instruction-template stub (audit P1-2).
     """
     name = str(name).strip().lower()
     root = _data_root()
@@ -446,7 +482,14 @@ def has_local_data(name: str) -> bool:
     paths = checks.get(name)
     if paths is None:
         return True  # unknown/other dataset: don't block on it
-    return any(p.exists() for p in paths)
+    if not any(p.exists() for p in paths):
+        return False
+    if name == "taf28k":
+        # npz 存在 → 真实转录链已完成（npz 由真实 jsonl 生成）
+        if (root / "TAF28k" / "taf28k.npz").exists():
+            return True
+        return _taf28k_jsonl_has_real_text(root)
+    return True
 
 
 def load_dataset(name: str = "balanced4k", max_samples: int | None = None, **kwargs) -> dict:

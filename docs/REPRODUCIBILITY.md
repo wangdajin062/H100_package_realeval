@@ -393,16 +393,18 @@ REALEVAL_TRAINING__EPOCHS=3 python -m experiments.runner --paper --exp 1
 |----------|--------|------|
 | `models.teacher` | `Qwen/Qwen2.5-0.5B-Instruct` | BF16 同构教师 |
 | `models.student` | `Qwen/Qwen2.5-0.5B-Instruct` | 量化学生（同架构） |
-| `data.dataset` | `chifraud` | 主训练语料库 |
+| `data.dataset` | `taf28k` | 主训练语料库（TAF-28k 二分类子集） |
 | `data.max_samples` | `16000` | 最大采样数 |
-| `training.batch_size` | `64` | 批次大小 |
-| `training.learning_rate` | `5e-5` | 学习率 |
+| `training.batch_size` | `8` | 批次大小 |
+| `training.learning_rate` | `1e-5` | 学习率 |
 | `training.epochs` | `5` | 训练轮数 |
-| `training.quantize` | `int4` | 量化方案 |
+| `training.quantize` | `nvfp4` | 量化方案（NBE QDQ 伪量化 QAT，论文 Eq.nbe） |
 | `training.apply_ov_rescaling` | `true` | 启用 OV-Freeze |
-| `distillation.temperature` | `2.0` | 蒸馏温度 |
+| `distillation.temperature` | `1.0` | 蒸馏温度 |
 | `distillation.total_steps` | `2000` | 概念步数（Fig4 对齐） |
-| `distillation.ovf_activation_ratio` | `0.7` | OV-Freeze 激活时机 |
+| `distillation.ovf_activation_ratio` | `0.8` | OV-Freeze 激活时机（最后 20%） |
+| `distillation.ovf_rho` | `0.95` | OV-Freeze EMA 系数（论文 Eq.6） |
+| `distillation.ovf_lambda` | `0.01` | OV-Freeze 损失权重（论文 Eq.5） |
 | `reproducibility.seed` | `42` | 全局随机种子 |
 | `speculative_decoding.gamma` | `5` | 草稿 token 数 γ |
 
