@@ -502,6 +502,7 @@ A：不会。每次运行前归档功能会清理旧文件，保留归档 Markdo
 - ✅ **ChiFraud 文本已补齐**：三个 CSV 已就位（train 192,267 / t2022 96,289 / t2023 115,553 逻辑行），`chifraud.jsonl` 生成 **404,109 条**（fraud 57,905 / normal 346,204，11 类齐全，二分类欺诈占比 14.3%）。
 - ⚠️ **sha 错位记录**：`dataset/metadata.json` 的三个 sha256 字段与实际文件名**循环错位**（实测 train=`fc7cacab…`、t2022=`25469871…`、t2023=`9775352b…`，metadata 却分别声称 `25469871…`/`9775352b…`/`fc7cacab…`）。官方 `train_eval.py` 按文件名使用（t2022=eval、t2023=test），文件名语义是权威的，故按文件名对齐、**未做 sha 重命名**；`download_chifraud.sh` 的校验和已改为实测值。官方 `datasets_metadata.json` 声称 411,434 条系 `wc -l` 把 text 字段内换行误算为样本所致，DictReader 逻辑样本为 404,109。
 - `spam11358`（11,358 条）、`AdvFraud3k`（2,119 条）、`balanced4k`（4,000 条）在本地快照中已齐全，可正常加载。
+- **`chifraud.npz` 源音频缺失（次要）**：`build_audio_npz.py` 依赖 `data/ChiFraud/audio/*.wav`（TTS 合成的电话音频）提取 MFCC 生成声学特征，但当前 `audio/` 为空。该 npz 是 `exp7`（speaker identification 隐私验证）的输入，**产物已存在**（61 样本 / 11 speakers，fraud 46 / normal 15），实验可跑；源 wav 仅存于早期快照（`realeval 10`，62/100 完整 + 38 空），属 TTS 再生产物、低风险缺失，不需纳入版本库。
 
 ### 14.1 修复链路
 
