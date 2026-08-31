@@ -104,3 +104,5 @@ data/**/*.npz
 data/**/*.jsonl
 data/**/*.csv
 data/**/*.json
+data/**/*.txt
+data/**/.gitkeep
