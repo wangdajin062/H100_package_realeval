@@ -74,7 +74,8 @@ reproducibility:
 # ── Privacy evaluation ──
 privacy:
   delta: 1.0e-5
-  sensitivity: 1.0
+  # sensitivity: 死配置已移除——gaussian_ldp 内部按 2*clip_bound（=6.0，data-independent）计算，
+  # exp5 走未裁剪 noise_sigma 路径（ε=1.5 为无认证 sensitivity 界的工程估计，见 v29.tex:891）。
   noise_multiplier: 1.0
   clip_bound: 3.0
   open_set_enroll_utt: 3

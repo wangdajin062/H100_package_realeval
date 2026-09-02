@@ -74,7 +74,6 @@ CONFIG_SCHEMA: dict[str, tuple[str, type | tuple[type, ...], Any, bool]] = {
 
     # 隐私评估
     "privacy.delta":                  ("差分隐私 δ", float, 1.0e-5, False),
-    "privacy.sensitivity":            ("敏感度", float, 1.0, False),
     "privacy.noise_multiplier":       ("高斯噪声倍率", float, 1.0, False),
     "privacy.clip_bound":             ("梯度裁剪界", float, 3.0, False),
     "privacy.open_set_enroll_utt":    ("开放集注册 utterance 数", int, 3, False),
