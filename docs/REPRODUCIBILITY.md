@@ -402,7 +402,7 @@ REALEVAL_TRAINING__EPOCHS=3 python -m experiments.runner --paper --exp 1
 | `training.apply_ov_rescaling` | `true` | 启用 OV-Freeze |
 | `distillation.temperature` | `1.0` | 蒸馏温度 |
 | `distillation.total_steps` | `2000` | 概念步数（Fig4 对齐） |
-| `distillation.ovf_activation_ratio` | `0.8` | OV-Freeze 激活时机（最后 20%） |
+| `distillation.ovf_activation_ratio` | `0.7` | OV-Freeze 激活时机（最后 30%，step 1400/2000） |
 | `distillation.ovf_rho` | `0.95` | OV-Freeze EMA 系数（论文 Eq.6） |
 | `distillation.ovf_lambda` | `0.01` | OV-Freeze 损失权重（论文 Eq.5） |
 | `reproducibility.seed` | `42` | 全局随机种子 |

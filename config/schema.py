@@ -50,7 +50,7 @@ CONFIG_SCHEMA: dict[str, tuple[str, type | tuple[type, ...], Any, bool]] = {
     "distillation.freeze_frac_default":  ("默认冻结比例", float, 1.0, False),
     "distillation.window_default":       ("默认窗口大小", float, 1.0, False),
     "distillation.total_steps":          ("概念步数空间（Fig4 对齐）", int, 2000, False),
-    "distillation.ovf_activation_ratio": ("OV-Freeze 激活时机", float, 0.8, False),
+    "distillation.ovf_activation_ratio": ("OV-Freeze 激活时机", float, 0.7, False),
     "distillation.ovf_rho":              ("OV-Freeze EMA 系数 ρ", float, 0.95, False),
     "distillation.ovf_lambda":           ("OV-Freeze 损失权重 λ", float, 0.01, False),
     "distillation.cot_max_new_tokens":   ("CoT 最大生成长度", int, 48, False),

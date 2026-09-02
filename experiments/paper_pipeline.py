@@ -126,7 +126,7 @@ def _device_benchmark(config: dict[str, Any], has_cuda: bool) -> dict[str, Any] 
     try:
         import torch
         from realeval import benchmark, models
-        model, tok = models.load_causal_lm(config["models"]["teacher"], quantize="int4", bf16=True)
+        model, tok = models.load_causal_lm(config["models"]["teacher"], quantize="nvfp4", bf16=True)
         sample_ids = tok("Detect fraud in this message.", return_tensors="pt").input_ids.squeeze(0)
         res = benchmark.benchmark(model, sample_ids, warmup=10, repeat=100,
                                   batch_sizes=(1, 8, 32))

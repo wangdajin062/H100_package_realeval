@@ -116,12 +116,12 @@ def run(config: dict) -> dict:
         )
 
         # Batch-level efficiency benchmark (for Table 7)
-        # Measures latency/throughput/memory at different batch sizes with int4 quant.
+        # Measures latency/throughput/memory at different batch sizes with NVFP4 quant.
         batch_benchmark = {}
         try:
             import torch
             model, tok = models.load_causal_lm(
-                config["models"]["teacher"], quantize="int4", bf16=True
+                config["models"]["teacher"], quantize="nvfp4", bf16=True
             )
             dev = next(model.parameters()).device
             model.eval()
