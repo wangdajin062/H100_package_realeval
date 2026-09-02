@@ -218,7 +218,7 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
     # Actual training produces N_real batches; we map each batch to a concept step
     # in [0, concept_total_steps] so the reported values always align with Fig4.
     concept_total_steps = int(config.get("distillation", {}).get("total_steps", 2000))
-    ovf_activation_ratio = float(config.get("distillation", {}).get("ovf_activation_ratio", 0.8))
+    ovf_activation_ratio = float(config.get("distillation", {}).get("ovf_activation_ratio", 0.7))
     ovf_activation_step = int(concept_total_steps * ovf_activation_ratio)
     actual_batches_per_epoch = max(1, (len(train_texts) + max_batch - 1) // max_batch)
     actual_total_batches = epochs * actual_batches_per_epoch
@@ -717,8 +717,11 @@ def real_llm_classify(config: dict, texts: list[str], labels: list[int], *, quan
 def real_fusion_classify(config, texts, labels, audio_emb, *, quantize="nvfp4",
                          fusion_strategy="sigmoid_linear", fit_data=None, text_scores=None):
     """Real multimodal *decision-level* fusion, aligned to the paper's fusion taxonomy
-    (Eq. fusion): per-modality risk scores are combined by a learned head. Three heads are
-    supported, matching the fusion-strategy ablation table:
+    (Eq. fusion): per-modality risk scores are combined by a learned head. The head is
+    two-modal (text + acoustic) here because TAF-28k provides only these two score
+    streams; the paper's four-modal w* carries url/meta as deployment parameters
+    (Eq. eq:w-deploy), not values measured on TAF-28k. Three heads are supported,
+    matching the fusion-strategy ablation table:
 
       * ``softmax_linear`` — a convex (softmax-normalised) weighting of the two modality
         scores, thresholded at 0.5.
@@ -806,11 +809,39 @@ def real_fusion_classify(config, texts, labels, audio_emb, *, quantize="nvfp4",
 
     try:
         if strat == "sigmoid_linear":
-            head = LogisticRegression(solver="lbfgs", max_iter=1000).fit(Xtr, ytr)
-            fused = head.predict(Xte)
-            n_params = int(head.coef_.size + head.intercept_.size)  # 3 scalars: w1, w2, b
-            head_meta = {"w": [round(float(v), 4) for v in head.coef_[0]],
-                         "b": round(float(head.intercept_[0]), 4)}
+            # L-BFGS logistic regression with user-stratified five-fold cross-validation
+            # (paper: fusion weights learned via L-BFGS + user-stratified 5-fold CV). The head
+            # stays two-modal (w_text, w_audio) because TAF-28k provides only text and acoustic
+            # scores; the paper's four-modal w* carries url/meta as deployment parameters
+            # (Eq. eq:w-deploy), not values measured on TAF-28k.
+            from sklearn.model_selection import StratifiedKFold
+            ytr_uniq = np.unique(ytr)
+            if len(ytr_uniq) < 2:
+                # degenerate single-class fit partition: plain fit, no CV possible
+                head = LogisticRegression(solver="lbfgs", max_iter=1000).fit(Xtr, ytr)
+                w_cv, b_cv = head.coef_[0], head.intercept_[0]
+                w_std, b_std = np.zeros_like(w_cv), 0.0
+                n_folds = 1
+            else:
+                n_folds = min(5, int(min(np.sum(ytr == c) for c in ytr_uniq)))
+                n_folds = max(2, n_folds)
+                skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=42)
+                ws, bs = [], []
+                for tr_idx, _va_idx in skf.split(Xtr, ytr):
+                    h = LogisticRegression(solver="lbfgs", max_iter=1000).fit(Xtr[tr_idx], ytr[tr_idx])
+                    ws.append(h.coef_[0])
+                    bs.append(h.intercept_[0])
+                w_cv = np.mean(ws, axis=0)
+                b_cv = np.mean(bs)
+                w_std = np.std(ws, axis=0)
+                b_std = np.std(bs)
+            fused = ((Xte @ w_cv + b_cv) >= 0.0).astype(int)
+            n_params = int(w_cv.size + 1)  # w1, w2 (+ b) = 3 scalars (two-modal fit)
+            head_meta = {"w": [round(float(v), 4) for v in w_cv],
+                         "b": round(float(b_cv), 4),
+                         "w_std": [round(float(v), 4) for v in w_std],
+                         "b_std": round(float(b_std), 4),
+                         "n_folds": n_folds}
         elif strat == "softmax_linear":
             # Convex weighting a*s_text + (1-a)*s_audio, a = softmax gate fit by 1-D search on train.
             grid = np.linspace(0.0, 1.0, 101)

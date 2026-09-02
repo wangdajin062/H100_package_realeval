@@ -21,5 +21,7 @@ __all__ = [
     "audit", "envreport", "io", "validation",
     # Specialized
     "privacy", "specdec",
+    # Acoustic embedding (real F_v constructor — R2 A-road)
+    "acoustic_embedding",
 ]
 

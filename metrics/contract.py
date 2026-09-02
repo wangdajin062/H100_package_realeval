@@ -166,6 +166,16 @@ EXPECTED_FIELDS: dict[str, list[tuple[str, ...]]] = {
         ("models", "q4km_0.5b_llama_cpp", "f1"),
         ("models", "q4km_0.5b_llama_cpp", "std"),
     ],
+    "exp15": [
+        ("text_only", "f1"),
+        ("text_only", "accuracy"),
+        ("audio_only", "f1"),
+        ("audio_only", "accuracy"),
+        ("fused", "f1"),
+        ("fused", "accuracy"),
+        ("marginal_contribution", "fused_minus_text_only"),
+        ("marginal_contribution", "fused_minus_audio_only"),
+    ],
 }
 
 # 来自论文自引用或外部文献的字段；不视为本实验的独立测量。

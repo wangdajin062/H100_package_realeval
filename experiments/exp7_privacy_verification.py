@@ -40,20 +40,37 @@ def run(config: dict) -> dict:
         from realeval import privacy, real_backend
         import numpy as np
         pii_report = privacy.scan_texts(texts)
-        # Resolve F_v embeddings: prefer TAF-28k NPZ, fall back to ChiFraud NPZ.
+        # Resolve F_v embeddings. R2 A-road: prefer the REAL F_v NPZ (built by
+        # data/scripts/build_chifraud_fv.py, provenance marker ``embedding_kind=="fv"``),
+        # then the TAF-28k real-F_v NPZ, then the legacy proxy chifraud.npz. Only the
+        # real-F_v source is eligible for the non-demo GLO reconstruction below.
         emb = ds.get("embeddings")
         spk_labels = ds.get("speaker_labels")
         embedding_source = "taf28k_fv"
+        fv_kind = None
+
+        def _load_npz_candidate(path):
+            from realeval.data import _data_root
+            import numpy as _np
+            z = _np.load(_data_root() / path)
+            kind = None
+            if "embedding_kind" in z:
+                kind = str(z["embedding_kind"][0])
+            return z["embeddings"], z["speaker_labels"].tolist(), kind
 
         if emb is None or spk_labels is None:
-            try:
-                from realeval.data import _data_root
-                cf = np.load(_data_root() / "ChiFraud" / "chifraud.npz")
-                emb, spk_labels = cf["embeddings"], cf["speaker_labels"].tolist()
-                embedding_source = "chifraud_npz_fallback"
-                logger.info("Falling back to ChiFraud NPZ (%d samples)", len(emb))
-            except (FileNotFoundError, KeyError) as e:
-                logger.warning("ChiFraud NPZ fallback also failed: %s", e)
+            for candidate, tag in (
+                ("ChiFraud/chifraud_fv.npz", "chifraud_fv"),
+                ("TAF28k/taf28k_fv.npz", "taf28k_fv"),
+                ("ChiFraud/chifraud.npz", "chifraud_proxy"),
+            ):
+                try:
+                    emb, spk_labels, fv_kind = _load_npz_candidate(candidate)
+                    embedding_source = tag
+                    logger.info("Loaded %s (%d samples, kind=%s)", candidate, len(emb), fv_kind)
+                    break
+                except (FileNotFoundError, KeyError, OSError) as e:
+                    logger.info("Candidate %s unavailable: %s", candidate, e)
 
         real_backend.require_assets(
             emb is not None and spk_labels is not None and len(spk_labels) == len(emb),
@@ -61,7 +78,20 @@ def run(config: dict) -> dict:
         emb = np.asarray(emb)
         asv = privacy.asv_eer_open_set(emb, spk_labels, n_enroll_utt=3, seed=42)
         sid = privacy.speaker_identification(emb, spk_labels, seed=42)
-        glo = privacy.glo_reconstruction_attack(emb, emb[:, :64] if emb.shape[1] >= 64 else emb, steps=50, seed=42)
+
+        # GLO reconstruction. R2 A-road: only the real F_v (embedding_kind=="fv") gets the
+        # honest proj_fn — the FBANK half (F_v[:, :64]) is stored in the clear (identity),
+        # the Whisper-proj half (F_v[:, 64:]) is a fixed per-sample constant, so the attack
+        # reconstructs the FBANK half exactly (corr -> ~1.0 by construction). The proxy NPZ
+        # keeps the random-orthogonal sandbox (demo) flag.
+        if emb.shape[1] >= 128 and fv_kind == "fv":
+            from realeval.acoustic_embedding import fbank_identity_proj_fn
+            glo = privacy.glo_reconstruction_attack(
+                emb, emb[:, :64], steps=50, seed=42,
+                proj_fn=fbank_identity_proj_fn(emb))
+        else:
+            glo = privacy.glo_reconstruction_attack(
+                emb, emb[:, :64] if emb.shape[1] >= 64 else emb, steps=50, seed=42)
         # Measurement-coverage ledger: marks which paper privacy claims are backed by real
         # measurements here vs. which require the audio-reconstruction scoring harness.
         # WER / PESQ / STOI / MOS are scored by realeval.privacy.reconstruction_quality_metrics
@@ -98,6 +128,7 @@ def run(config: dict) -> dict:
         if glo_is_demo:
             coverage["demo_only"] = {"glo_reconstruction_corr": glo.get("note")}
         result = {"computation": "h100_real_qwen", "embedding_source": embedding_source,
+                  "embedding_kind": fv_kind,
                   "pii_report": pii_report,
                   "asv_eer_pct": asv["asv_eer_pct"], "min_dcf": asv.get("min_dcf"),
                   "speaker_id_accuracy": sid["accuracy"],
