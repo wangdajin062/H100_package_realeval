@@ -1,6 +1,6 @@
 """runner/registry.py — 实验注册表。
 
-集中维护 14 个实验的模块名、短 ID 与描述，避免在 runner / paper_pipeline
+集中维护 15 个实验的模块名、短 ID 与描述，避免在 runner / paper_pipeline
 / CLI 中重复硬编码。
 """
 from __future__ import annotations
@@ -29,6 +29,7 @@ EXPERIMENTS: list[ExperimentEntry] = [
     ExperimentEntry("exp12_fraudfusion_baseline", "exp12", "FraudFusion Baseline (quantized competitor + storage decomposition)"),
     ExperimentEntry("exp13_fusion_strategy", "exp13", "Fusion Strategy (multimodal fusion ablation)"),
     ExperimentEntry("exp14_gguf_comparison", "exp14", "Multi-model same-data comparison (BF16 transformers vs Q4_K_M GGUF llama.cpp)"),
+    ExperimentEntry("exp15_modality_ablation", "exp15", "Modality Ablation (text-only / audio-only / fused F1)"),
 ]
 
 SHORT_TO_FULL: dict[str, str] = {e.short: e.module for e in EXPERIMENTS}

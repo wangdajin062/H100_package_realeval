@@ -89,7 +89,7 @@ def run_all(
     no_archive: bool = False,
     validate_alignment: bool = True,
 ) -> dict[str, Any]:
-    """运行全部 14 个实验。
+    """运行全部 15 个实验。
 
     Args:
         config: 实验配置。
