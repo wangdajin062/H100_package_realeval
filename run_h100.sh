@@ -44,10 +44,13 @@ export REALEVAL_ADAPTER_ROOT="${REALEVAL_ADAPTER_ROOT:-/workspace/outputs/lora_m
 export HF_HOME="${HF_HOME:-/workspace/hf_cache}"
 
 # 清理旧结果：默认不自动清空（避免单实验重跑误清全部结果）。
-# 需清空时用 --clean 参数或 CLEAN=1 环境变量，或先 scripts/archive_and_clear.py 归档。
+# 需清空时用 --clean 参数或 CLEAN=1 环境变量 —— 走 scripts/archive_and_clear.py
+# 先归档 Markdown 快照再清理（审计 P0-3：绝不裸删原始结果 JSON，须先留归档快照）。
+# 注意：paper_pipeline 自身默认也会 archive_if_needed() 并清空 results，故下方调用
+# 显式 --no-archive 关闭其内部归档，让「默认保留 / --clean 归档清空」语义真正成立。
 if [ "${CLEAN:-0}" = "1" ]; then
-  rm -rf outputs/results/* outputs/metrics/* outputs/predictions/* 2>/dev/null
-  echo "=== Cleaned previous outputs ==="
+  "$PY" scripts/archive_and_clear.py
+  echo "=== Archived + cleaned previous outputs ==="
 else
   echo "=== Skipping auto-clean（保留旧结果；用 --clean / CLEAN=1 / archive_and_clear.py 清理）==="
 fi
@@ -67,9 +70,9 @@ echo "=== H100 paper-validation pipeline ($MODE) — PY=$PY CONFIG=$CONFIG ==="
 if [ "$DISTRIBUTED" = "1" ]; then
   NGPU="$("$PY" -c 'import torch;print(torch.cuda.device_count())' 2>/dev/null || echo 1)"
   echo "=== torchrun --nproc_per_node=$NGPU (NCCL) ==="
-  "$PY" -m torch.distributed.run --nproc_per_node="$NGPU" -m experiments.paper_pipeline "$MODE" --config "$CONFIG"
+  "$PY" -m torch.distributed.run --nproc_per_node="$NGPU" -m experiments.paper_pipeline "$MODE" --no-archive --config "$CONFIG"
 else
-  "$PY" -m experiments.paper_pipeline "$MODE" --config "$CONFIG"
+  "$PY" -m experiments.paper_pipeline "$MODE" --no-archive --config "$CONFIG"
 fi
 echo "=== Deliverables in outputs/ ==="
 ls -1 outputs/ 2>/dev/null || true
