@@ -75,7 +75,8 @@ def run(config: dict) -> dict:
         except (gguf_backend.GGUFUnavailable, KeyError) as e:
             # KeyError = gguf_classify returned no "f1"; degrade the same way as an
             # unavailable backend instead of aborting the whole experiment.
-            models["q4km_0.5b_llama_cpp"] = {"f1": None, "runtime": "llama_cpp", "source": "ours",
+            models["q4km_0.5b_llama_cpp"] = {"f1": None, "std": None, "f1_std": None,
+                                             "runtime": "llama_cpp", "source": "ours",
                                              "note": f"QAD GGUF unavailable: {e}"}
         return {"computation": "h100_real_qwen", "models": models,
                 "model_source": "exp1_qad" if finetuned_path else "base_qwen",

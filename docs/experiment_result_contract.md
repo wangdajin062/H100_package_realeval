@@ -10,7 +10,7 @@
 | 图脚本变量 | paper_data 读取路径 | 实验产出字段 | 类型 | 备注 |
 |-----------|-------------------|------------|------|------|
 | PTQ_BASELINES | （论文常量，**不读实验**） | 外部 PTQ 基线常量表（RTN/AWQ/GPTQ/SpinQuant/QuaRot/BitDistill） | list | paper_data 硬编码，非本套件测量 |
-| QAT_QAD_OVF | exp11.schemes.int4.{f1,std} + exp1.{f1,std} + exp3.conditions.ov_freeze_full.{f1,std} + exp14.models.q4km_0.5b_llama_cpp.{f1,std} | 各实验对应字段 | 4 行 | QAT(int4)/QAD/QAD+OVF/Q4_K_M 四行，分别来自 exp11/exp1/exp3/exp14 |
+| QAT_QAD_OVF | exp2.variants.ce_only.{f1,std} + exp1.{f1,std} + exp3.conditions.ov_freeze_full.{f1,std} + exp14.models.q4km_0.5b_llama_cpp.{f1,std} | 各实验对应字段 | 4 行 | QAT(CE)/QAD/QAD+OVF/Q4_K_M 四行，分别来自 exp2/exp1/exp3/exp14 |
 | BF16_F1 | （论文自引用常量 0.931，**不读实验**） | — | float | BF16 ceiling，非实测 |
 
 ### ~~Figure 4 → Loss Convergence~~（已删除，v27 移除 Figure 4）

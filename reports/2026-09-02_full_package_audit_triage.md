@@ -117,7 +117,7 @@
 | P1-2 exp3 真实 LM 困惑度 | ✅ 完成 | real_backend 加 `compute_ppl` 真实因果 LM 困惑度，fig6 ylabel/ylim 同步 |
 | P1-6 exp10 fixed 臂 0.5B tokens | ✅ 完成 | real_backend 加 `max_train_tokens`，exp10 传 500M，paper_data 注释诚实更新 |
 | P1-7 exp7 ASV-EER 重建嵌入 | ✅ 完成 | `asv_eer_pct` 改为重建嵌入 ASV-EER（缺资产时诚实报 None），原始 F_v 降级为 `asv_eer_pct_original_fv` 诊断；GLO identity corr ~1.0 标记为构造性不列入 measured；PII docstring 如实化 |
-| P1-3 exp2 Logits MSE | ✅ 完成 | 实现早已是 logits MSE（`F.mse_loss(logits, t_logits_head)`，第 386-393 行）；仅 docstring 残留「hidden states」→ 改为「head logits (paper "Logits MSE")」 |
+| P1-3 exp2 Logits MSE | ✅ 完成 | 本次修订将 hidden-state MSE 改为 logits MSE（`F.mse_loss(logits, t_logits_head)`，第 386-393 行）；docstring 同步改为「head logits (paper "Logits MSE")」 |
 | P1-8 exp9 CoT 补全 | ✅ 完成 | TAF-28k 改 sigmoid-linear 决策级融合（文本 CoT 开关 + 128-d F_v 声学）；补 AdvFraud-3k 纯文本臂（`advfraud_f1`）；`model_source` 诚实标记；n_seeds=1 推理确定性标注；contract/consistency_check 同步 AdvFraud 字段 |
 | P1-10 exp11 INT4 QAD 训练臂 | ✅ 完成 | 同质 INT4 独立 QAD 训练（`real_qad_distill_train(quantize="int4")`），其余方案标 `trained_scheme="nvfp4_qad"` 推理侧诊断 |
 | P1-11 exp14 QAD GGUF | ✅ 完成 | `resolve_qad_gguf_path()` 指向 `exp1_qad_q4_k_m.gguf`；Q4_K_M 分支用导出 QAD GGUF，缺失诚实报「QAD GGUF unavailable」 |

@@ -33,15 +33,18 @@ def run(config: dict) -> dict:
     ds = data.load_taf28k(max_samples=max_samples, source="multimodal")
     texts, labels = ds["texts"], ds["labels"]
     audio_emb = ds.get("embeddings")
+    audio_source = "taf28k_legacy_384d"   # legacy NPZ 384-d Whisper（非论文 128-d F_v 口径）
     _fv = _try_load_taf28k_fv()
     if _fv is not None:
         audio_emb = _fv
+        audio_source = "taf28k_fv_128d"   # 论文 128-d F_v（64-d FBANK + 64-d Whisper-proj）
     is_synthetic = False
     if not texts or audio_emb is None:
         # Fall back to synthetic with both text and acoustic-style embeddings
         ds = data.load_synthetic(n=200)
         texts, labels = ds["texts"], ds["labels"]
         audio_emb = ds["embeddings"]
+        audio_source = "synthetic"
         is_synthetic = True
     n = min(len(texts), len(audio_emb))
     texts, labels, audio_emb = texts[:n], labels[:n], np.asarray(audio_emb[:n])
@@ -108,6 +111,8 @@ def run(config: dict) -> dict:
             }
         return {"computation": "h100_real_qwen", "strategies": strategies,
                 "headline_strategy": "sigmoid_linear",
+                "model_source": "exp1_qad" if finetuned_path else "base_qwen",
+                "audio_source": audio_source,
                 "is_synthetic": is_synthetic}
 
     return run_with_mode("exp13", config, run_paper)

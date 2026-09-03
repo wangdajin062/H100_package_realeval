@@ -39,14 +39,17 @@ def run(config: dict) -> dict:
     taf_ds = data.load_taf28k(max_samples=max_samples, source="multimodal")
     taf_texts, taf_labels = taf_ds["texts"], taf_ds["labels"]
     taf_audio = taf_ds.get("embeddings")
+    audio_source = "taf28k_legacy_384d"   # legacy NPZ 384-d Whisper（非论文 128-d F_v 口径）
     _fv = _try_load_taf28k_fv()
     if _fv is not None:
         taf_audio = _fv
+        audio_source = "taf28k_fv_128d"   # 论文 128-d F_v（64-d FBANK + 64-d Whisper-proj）
     taf_synthetic = False
     if not taf_texts or taf_audio is None:
         taf_ds = data.load_synthetic(n=200)
         taf_texts, taf_labels = taf_ds["texts"], taf_ds["labels"]
         taf_audio = taf_ds["embeddings"]
+        audio_source = "synthetic"
         taf_synthetic = True
     _n = min(len(taf_texts), len(taf_audio))
     taf_texts, taf_labels, taf_audio = taf_texts[:_n], taf_labels[:_n], np.asarray(taf_audio[:_n])
@@ -118,6 +121,7 @@ def run(config: dict) -> dict:
             }
         return {"computation": "h100_real_qwen", **arms,
                 "model_source": model_source,
+                "audio_source": audio_source,
                 "is_synthetic": taf_synthetic or adv_synthetic}
 
     return run_with_mode("exp9", config, run_paper)

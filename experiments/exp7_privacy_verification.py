@@ -117,7 +117,7 @@ def run(config: dict) -> dict:
         # reconstruction measurement (P1-M4). Report it honestly: keep the source note and a
         # demo flag, and don't list it among the real measurements when it is demo-only.
         glo_is_demo = str(glo.get("note", "")).startswith("Sandbox")
-        measured_fields = ["pii_scan", "asv_eer", "speaker_id_acc", "n_speakers"]
+        measured_fields = ["pii_scan", "asv_eer_original_fv", "speaker_id_acc", "n_speakers"]
         if not glo_is_demo and not glo_is_identity:
             measured_fields.append("glo_reconstruction_corr")
 
@@ -163,6 +163,15 @@ def run(config: dict) -> dict:
             except Exception as e:  # pragma: no cover - optional acoustic stack
                 logger.info("Reconstructed-embedding ASV-EER unavailable: %s", e)
                 recon_asv_eer = None
+        # headline asv_eer_pct（重建嵌入 ASV-EER，论文 Table 8）只有在重建资产就位时
+        # 才列为 measured；缺失时列入 not_measured（honest missing），不与原始 F_v
+        # 诊断（asv_eer_original_fv）混为一谈（audit：coverage ledger asv_eer 命名歧义）。
+        if recon_asv_eer is not None:
+            measured_fields.append("asv_eer_pct")
+        else:
+            recon_pending["asv_eer_pct"] = (
+                "requires speaker-aligned reconstruction assets (white/black-box); "
+                "original-F_v diagnostic reported separately as asv_eer_original_fv")
         coverage = {"measured": measured_fields, "not_measured": recon_pending}
         if glo_is_demo:
             coverage["demo_only"] = {"glo_reconstruction_corr": glo.get("note")}

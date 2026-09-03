@@ -45,10 +45,14 @@ def run(config: dict) -> dict:
         # 论文 Fig4a 的「Homogeneous INT4」是端到端用 quantize="int4"（bitsandbytes
         # PTQ + LoRA adapter）独立训练的 QAD 学生，而非用 NVFP4-QAD 产物在推理侧
         # 再量化为 int4（那会得到「异构」语义，也是旧 0.6172 陈旧值的来源）。
+        # apply_ov_rescaling=False 与 exp1 的 nvfp4 臂（无 OVF）对齐：CLAIM-02 比较
+        # 的是「异构 NVFP4 vs 同质 INT4」量化格式，OVF 是 exp3 的独立消融，两臂
+        # 都必须无 OVF，否则对照混入 OVF 主效应（audit P2：int4 臂 OVF 不对称）。
         try:
             int4_result = real_backend.real_qad_distill_train(
                 config, train_texts, train_labels, test_texts, test_labels,
                 quantize="int4", save_name="exp11_int4_qad",
+                apply_ov_rescaling=False,
             )
             schemes["int4"] = {
                 "f1": round(float(int4_result["f1"]), 4),

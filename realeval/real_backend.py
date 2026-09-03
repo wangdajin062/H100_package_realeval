@@ -110,6 +110,16 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
     from realeval.metrics import classification_metrics
     import torch
     import torch.nn.functional as F
+    import numpy as _np
+
+    # 训练侧消费 config["seed"]（claim_engine 每次 seed 注入 cfg["seed"]=1000*(s+1)，
+    # 普通运行回退 seed_base_from_config 的默认 1000）。必须在任何随机操作前 set_seed，
+    # 否则 CLAIM-02 的 5-seed 协议在训练侧空转（audit P2：训练侧不消费种子）。
+    # 三合一等价 experiments.common.set_seed（torch + cuda + numpy）。
+    _seed = int(config.get("seed", 1000))
+    torch.manual_seed(_seed)
+    torch.cuda.manual_seed_all(_seed)
+    _np.random.seed(_seed)
 
     _require(models.models_available(config), "Real Qwen weights unavailable")
 
