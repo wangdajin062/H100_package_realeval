@@ -407,7 +407,12 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
                 with torch.inference_mode():
                     t_logits_head = (teacher_head(t_last) if teacher_head is not None
                                      else head(t_last))
-                mse_loss = F.mse_loss(logits, t_logits_head)
+                # Manual MSE, NOT F.mse_loss: t_logits_head is computed under
+                # torch.inference_mode (inference tensor); F.mse_loss saves its target for
+                # backward and raises "Inference tensors cannot be saved for backward" once
+                # `logits` requires grad. sub/pow/mean never saves the teacher target —
+                # identical semantics to F.mse_loss (mean reduction).
+                mse_loss = ((logits - t_logits_head) ** 2).mean()
 
             # Quantization SNR: signal = teacher power, noise = (student - teacher)²
             # Compare on the aligned common dims (hetero teachers have different widths).
@@ -441,7 +446,12 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
             ovf_loss = torch.tensor(0.0, device=dev)
             if ovf_active:
                 # L_OVF only on the selected projection layers (paper Eq.5, P ⊆ {q,k,v,o}).
-                _ovf_terms = [F.mse_loss(s_var_ema[k], t_var_calib[k].to(s_var_ema[k].dtype))
+                # Manual MSE, NOT F.mse_loss: t_var_calib is captured under
+                # torch.inference_mode, so it is an inference tensor; F.mse_loss saves its
+                # target for backward and would raise "Inference tensors cannot be saved
+                # for backward" at the first OVF-active step. sub/pow/mean never saves the
+                # teacher target — identical semantics to F.mse_loss (mean reduction).
+                _ovf_terms = [((s_var_ema[k] - t_var_calib[k].to(s_var_ema[k].dtype)) ** 2).mean()
                               for k in s_var_ema if k[-1] in ovf_layers and k in t_var_calib]
                 if _ovf_terms:
                     ovf_loss = ovf_lambda * torch.stack(_ovf_terms).sum()

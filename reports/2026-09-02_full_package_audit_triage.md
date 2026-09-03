@@ -124,6 +124,8 @@
 | P1-12 exp13 QAD 文本 + 128-d F_v | ✅ 完成 | 文本分支用 `resolve_qad_path()` 的 QAD 产物；音频分支用 `taf28k_fv.npz` 128-d F_v；`latency_note` 说明端到端计时含 fusion-head fit |
 | P1-13 exp12 57× NVFP4 口径 | ✅ 完成 | `nvfp4_mb=248.0`（paper-claimed）；`total_x = bf16_7b/nvfp4_mb`（≈57×）；Q4_K_M 实测（≈28×）单独分列 `total_advantage_x_q4km_measured`；`nvfp4_footprint_source="paper_claimed_248MB"` |
 | P1-15 claim 框架 | ✅ 完成 | CLAIM-02 改异构-vs-同质（treatment=nvfp4 异构 vs baseline=int4 同质，`mean_diff<=0.01`）；CLAIM-03 seeds=5 + hypothesis/threshold_origin 明确「formula-derived token speedup（Leviathan Eq.1）非 wall-clock measured」 |
-| P1-4 PTQ 基线 | ⚠️ 部分 | paper_data 已标 `PTQ_BASELINES`「external — not produced by our experiments」；论文第 513 行 (iii) 已写「adapted reimplementations / cited reference points」。**需作者确认**：PTQ 是「重实现评测（A 路径补脚本，需 H100）」还是「纯文献引用（B 路径，Table 3 加脚注）」 |
-| P1-9 端侧延迟 | ⚠️ 部分 | paper_data `_FIG4_REF` 已标 268ms「Paper-claimed — NOT experiment-derived」；论文第 515 行 Reproducibility statement 已诚实声明仓库暂不能复现。**需作者确认**：第 513 行 (ii) 声称「on-device latencies measured on Snapdragon 8 Gen 3」是真实测（应补测量脚本/数据）还是组装估计（应改 (ii) 措辞） |
+| P1-4 PTQ 基线 | ✅ 已拍板 B 路径（2026-09-03） | 论文改标注：v29:513(iii) 改为「external reference results … not measured by our released evaluation suite」，Table 3 脚注将 PTQ 四行与 BERT-Fraud/SAFE-QAQ 并列为引用基线；paper_data `PTQ_BASELINES` 维持 external 标注 |
+| P1-9 端侧延迟 | ✅ 已拍板 A 路径（2026-09-03） | 作者确认存在仓外 Snapdragon 8 Gen 3 实测，v29:513(ii)「measured on Snapdragon 8 Gen 3」保留原文；paper_data `_FIG4_REF` 维持「NOT experiment-derived（本套件未测）」标注。建议仓外实测数据随 reproduction run 归档入仓备查 |
+| 复核新增：inference-tensor 崩溃隐患 | ✅ 完成 | `real_backend` 两处 `F.mse_loss` 改手写 `(a−b)².mean`：exp2 mse/kl_mse 臂（inference-mode 的 `t_logits_head` 被 saved-for-backward，step 0 即崩）与 L_OVF（`t_var_calib` 同理，OVF 激活首步崩） |
+| 复核新增：P0-5 证据图溯源强制 | ✅ 完成 | `add_predictions` 强制工件存在 + sha256 校验（不符即 raise）；`validate()` 拒绝无文件溯源的 PASS；`claim_runner` 落盘 `{claim_id}_predictions.json` 并设空预测→UNSUPPORTED 门禁；测试重定向 + 两个负向用例 |
 

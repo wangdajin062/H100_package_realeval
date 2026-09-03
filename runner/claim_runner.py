@@ -11,6 +11,7 @@ from pathlib import Path
 import yaml
 
 from audit.evidence_graph import EvidenceGraph, evaluate_claim, validate_claim_definition
+from realeval.io.paths import PREDICTIONS as PREDICTIONS_DIR
 
 ROOT = Path(__file__).resolve().parent.parent
 # Legacy-format claims (evaluated by this runner via audit.evidence_graph).
@@ -74,17 +75,29 @@ def run_claim(claim_path: Path, experiment_fn, config: dict | None = None) -> di
         logger.error("Claim %s experiment failed: %s", claim_id, e)
         return {"claim": claim, "error": str(e), "verdict": "UNSUPPORTED"}
 
-    # Record evidence chain
+    # Record evidence chain. Raw predictions are persisted first so the chain is
+    # file-backed (audit P0-5): add_predictions computes the artifact sha256, and
+    # EvidenceGraph.validate() refuses a PASS that lacks verified provenance.
     run_node = graph.add_run(result.provenance, parents=[claim_node])
+    PREDICTIONS_DIR.mkdir(parents=True, exist_ok=True)
+    preds_path = PREDICTIONS_DIR / f"{claim_id}_predictions.json"
+    preds_path.write_text(json.dumps(result.raw_predictions, ensure_ascii=False, default=str),
+                          encoding="utf-8")
     preds_node = graph.add_predictions({
+        "path": str(preds_path),
         "n_samples": len(result.raw_predictions),
         "sample_ids": [p.get("sample_id") for p in result.raw_predictions[:10]],
     }, parents=[run_node])
     metric_node = graph.add_metric(result.collected_metrics, parents=[preds_node])
     stats_node = graph.add_statistics(result.statistics, parents=[metric_node])
 
-    # Evaluate claim
-    eval_result = evaluate_claim(claim, result.collected_metrics)
+    # Evaluate claim. No raw predictions → metrics are caller-asserted only → UNSUPPORTED.
+    if not result.raw_predictions:
+        eval_result = {"verdict": "UNSUPPORTED",
+                       "details": "No raw predictions produced; metrics are not evidence-backed",
+                       "results": {}}
+    else:
+        eval_result = evaluate_claim(claim, result.collected_metrics)
     evidence_node = graph.add_evidence({
         "supports_claim": eval_result["verdict"] == "PASS",
         "strength": "strong" if eval_result["verdict"] == "PASS" else "weak",

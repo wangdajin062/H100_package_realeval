@@ -15,7 +15,10 @@ class TestEvidenceGraph:
         c = g.add_claim({"hypothesis": "Test claim", "acceptance": {"f1": ">0.9"}})
         e = g.add_experiment({"name": "test_exp"}, parents=[c])
         r = g.add_run({"model": "test_model", "seed": 42}, parents=[e])
-        p = g.add_predictions({"n_samples": 100}, parents=[r])
+        preds_file = tmp_path / "preds.json"
+        preds_file.write_text(json.dumps([{"sample_id": f"s{i}"} for i in range(100)]),
+                              encoding="utf-8")
+        p = g.add_predictions({"path": str(preds_file), "n_samples": 100}, parents=[r])
         m = g.add_metric({"f1": 0.95}, parents=[p])
         s = g.add_statistics({"ci_95": [0.93, 0.97]}, parents=[m])
         ev = g.add_evidence({"supports_claim": True}, parents=[s])
@@ -47,6 +50,32 @@ class TestEvidenceGraph:
         ok, errors = g.validate()
         assert not ok
         assert any("nonexistent_node" in e for e in errors)
+
+    def test_pass_requires_file_backed_predictions(self, tmp_path):
+        # audit P0-5: a PASS supported only by caller-asserted numbers must not validate.
+        from audit.evidence_graph import EvidenceGraph
+        g = EvidenceGraph("TEST-PROV")
+        c = g.add_claim({"hypothesis": "h", "acceptance": {"f1": ">0.9"}})
+        r = g.add_run({"model": "m"}, parents=[c])
+        p = g.add_predictions({"n_samples": 100}, parents=[r])  # no artifact on disk
+        m = g.add_metric({"f1": 0.95}, parents=[p])
+        ev = g.add_evidence({"supports_claim": True}, parents=[m])
+        g.add_conclusion({"verdict": "PASS"}, parents=[ev])
+        ok, errors = g.validate()
+        assert not ok
+        assert any("file-backed" in e for e in errors)
+
+    def test_predictions_hash_enforced(self, tmp_path):
+        from audit.evidence_graph import EvidenceGraph
+        g = EvidenceGraph("TEST-HASH")
+        f = tmp_path / "preds.json"
+        f.write_text("[]", encoding="utf-8")
+        nid = g.add_predictions({"path": str(f)})
+        assert g.nodes[nid].data["hash"]
+        with pytest.raises(ValueError):
+            g.add_predictions({"path": str(f), "hash": "deadbeef"})
+        with pytest.raises(FileNotFoundError):
+            g.add_predictions({"path": str(tmp_path / "missing.json")})
 
 
 class TestClaimEvaluation:
@@ -115,6 +144,8 @@ class TestClaimRunner:
             r.collected_metrics = {"f1": 0.95}
             r.statistics = {"f1": {"ci_95": [0.93, 0.97]}}
             r.provenance = {"git_commit": "abc123", "seed": 42}
+            # File-backed verdicts (audit P0-5) require non-empty raw predictions.
+            r.raw_predictions = [{"sample_id": "s1", "prediction": 1, "ground_truth": 1}]
             return r
 
         import yaml
@@ -135,6 +166,8 @@ class TestClaimRunner:
         # Redirect evidence output to tmp_path so tests never pollute outputs/evidence/.
         import audit.evidence_graph as _eg
         monkeypatch.setattr(_eg, "EVIDENCE_DIR", tmp_path)
+        # Redirect prediction artifacts too so outputs/predictions/ stays clean.
+        monkeypatch.setattr(cr, "PREDICTIONS_DIR", tmp_path)
         try:
             result = cr.run_claim(claim_path, fake_experiment)
             assert result["verdict"] == "PASS"

@@ -23,6 +23,11 @@ from typing import Any
 from realeval.io.paths import EVIDENCE as EVIDENCE_DIR
 
 
+def _sha256_file(path: Path) -> str:
+    """Content hash of an on-disk artifact (truncated sha256, same format as content_hash)."""
+    return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+
+
 class EvidenceNode:
     """A single node in the evidence graph. Treat attributes as read-only after creation."""
     def __init__(self, node_type: str, node_id: str, data: dict, parents: list[str] | None = None):
@@ -94,7 +99,21 @@ class EvidenceGraph:
         return self.add_node("run", data, parents)
 
     def add_predictions(self, data: dict, parents: list[str] | None = None) -> str:
-        """Add a RawPrediction node. data: {path, n_samples, format, hash}"""
+        """Add a RawPrediction node. data: {path, n_samples, format, hash}
+
+        When ``path`` is given the artifact must exist on disk; its sha256 is computed
+        here and any caller-supplied ``hash`` must match it (audit P0-5: evidence must
+        trace to a real artifact, not to caller-asserted values)."""
+        data = dict(data)
+        path = data.get("path")
+        if path is not None:
+            p = Path(path)
+            if not p.is_file():
+                raise FileNotFoundError(f"raw_prediction artifact missing: {p}")
+            digest = _sha256_file(p)
+            if data.get("hash") and data["hash"] != digest:
+                raise ValueError(f"raw_prediction hash mismatch for {p}")
+            data["hash"] = digest
         return self.add_node("raw_prediction", data, parents)
 
     def add_metric(self, data: dict, parents: list[str] | None = None) -> str:
@@ -142,7 +161,32 @@ class EvidenceGraph:
         conclusions = [n for n in self.nodes.values() if n.node_type == "conclusion"]
         if claims and not conclusions:
             errors.append("Claims exist but no conclusion reached")
+        # PASS conclusions must trace back to a file-backed raw_prediction whose stored
+        # hash still matches the artifact on disk (audit P0-5: caller-asserted numbers
+        # alone are not evidence; a PASS without verified provenance is invalid).
+        for node in conclusions:
+            if node.data.get("verdict") == "PASS" and not self._has_verified_prediction(node):
+                errors.append(
+                    f"Conclusion {node.node_id} verdict=PASS lacks file-backed "
+                    "raw_prediction provenance")
         return len(errors) == 0, errors
+
+    def _has_verified_prediction(self, node: EvidenceNode) -> bool:
+        """Walk ancestors for a raw_prediction node whose artifact exists and hashes true."""
+        seen, queue = set(), [node.node_id]
+        while queue:
+            nid = queue.pop(0)
+            if nid in seen or nid not in self.nodes:
+                continue
+            seen.add(nid)
+            n = self.nodes[nid]
+            if n.node_type == "raw_prediction":
+                path, digest = n.data.get("path"), n.data.get("hash")
+                if path and digest and Path(path).is_file() \
+                        and _sha256_file(Path(path)) == digest:
+                    return True
+            queue.extend(n.parents)
+        return False
 
     def trace(self, node_id: str) -> list[dict]:
         """Walk from a node back to its root Claim, returning the full provenance chain."""
