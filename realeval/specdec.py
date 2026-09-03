@@ -43,7 +43,11 @@ def diagnostic_B(config: dict, texts: list[str], *, gamma=5, n_samples=20) -> di
     from realeval.real_backend import require_assets, AssetsUnavailable
 
     require_assets(models.models_available(config), "Real Qwen weights unavailable")
-    target, tok = models.load_causal_lm(config["models"]["teacher"], bf16=True)
+    # Target is the deployed QUANTISED main model (paper: cloud-side NVFP4), NOT the
+    # BF16 teacher — acceptance is judged against the NVFP4 target's logits (audit P2).
+    # Caveat (same as exp8's nvfp4 arm): this loads base weights wrapped in NBE QDQ
+    # fake-quant (QAT forward), not the exp1 QAD checkpoint.
+    target, tok = models.load_causal_lm(config["models"]["teacher"], quantize="nvfp4", bf16=True)
     draft_path = config["models"].get("draft_model")
     draft, _ = models.load_causal_lm(draft_path, bf16=True, load_tokenizer=False)
     require_assets(target is not None and draft is not None, "draft/target loading failed")
@@ -51,7 +55,11 @@ def diagnostic_B(config: dict, texts: list[str], *, gamma=5, n_samples=20) -> di
 
     # Compute alpha from token counts (paper method)
     # Acceptance is a stochastic rule, so the draw needs a fixed source.
-    _rng = torch.Generator(device="cpu").manual_seed(int(config.get("reproducibility", {}).get("seed", 42)))
+    # Seed from claim_engine's injected cfg["seed"] (spaced 1000/repeat) so multi-seed
+    # repeats draw distinct draft/acceptance streams; falls back to reproducibility.seed
+    # for standalone runs (audit P1-15: CLAIM-03 must honour the 5-seed protocol).
+    _rng = torch.Generator(device="cpu").manual_seed(
+        int(config.get("seed", config.get("reproducibility", {}).get("seed", 42))))
     accepted, proposed = 0, 0
     for text in texts[:n_samples]:
         ids = tok(text, return_tensors="pt").input_ids.to(dev)
@@ -62,8 +70,13 @@ def diagnostic_B(config: dict, texts: list[str], *, gamma=5, n_samples=20) -> di
             with torch.no_grad(), hwenv.autocast_context():
                 for _g in range(gamma):
                     p = F.softmax(draft(cur).logits[0, -1], -1)
-                    tk = int(torch.argmax(p))
-                    dtoks.append(tk); dprobs.append(float(p[tk]))
+                    # Speculative decoding samples x ~ q from the draft's own
+                    # distribution; greedy argmax systematically inflates the
+                    # acceptance rate (audit P2). Sample on CPU with the fixed
+                    # generator so the draw is reproducible and device-agnostic.
+                    p_cpu = p.detach().float().cpu()
+                    tk = int(torch.multinomial(p_cpu, num_samples=1, generator=_rng).item())
+                    dtoks.append(tk); dprobs.append(float(p_cpu[tk]))
                     cur = torch.cat([cur, torch.tensor([[tk]], device=dev)], 1)
                 proposed += gamma
                 ext = torch.cat([seq, torch.tensor([dtoks], device=dev)], 1)

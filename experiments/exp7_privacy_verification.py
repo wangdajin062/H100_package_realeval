@@ -1,4 +1,4 @@
-"""exp7: Privacy Verification — Check for PII leakage in model outputs."""
+"""exp7: Privacy Verification — PII audit of the input corpus + reconstruction / speaker-ID / ASV attacks."""
 from __future__ import annotations
 import logging
 from experiments.framework import load_first_nonempty, run_with_mode
@@ -11,7 +11,9 @@ def _load_reconstruction_assets(log):
     present, so the WER/PESQ/STOI/MOS harness can backfill real values. Expected optional file:
     ``<data_root>/privacy/reconstruction.npz`` with arrays ``ref_wavs``, ``recon_wavs`` (object
     arrays of 1-D float waveforms) and ``ref_texts`` (str array), plus optional scalar
-    ``sample_rate``. Returns None when the assets are absent (the honest sandbox state)."""
+    ``sample_rate`` and an optional int array ``speaker_labels`` (speaker-aligned with the
+    reconstructed waveforms; enables the reconstructed-embedding ASV-EER of paper Table 8).
+    Returns None when the assets are absent (the honest sandbox state)."""
     try:
         import numpy as np
         from realeval.data import _data_root
@@ -21,7 +23,8 @@ def _load_reconstruction_assets(log):
         z = np.load(path, allow_pickle=True)
         return {"ref_wavs": list(z["ref_wavs"]), "recon_wavs": list(z["recon_wavs"]),
                 "ref_texts": [str(t) for t in z["ref_texts"]],
-                "sample_rate": int(z["sample_rate"]) if "sample_rate" in z else 16000}
+                "sample_rate": int(z["sample_rate"]) if "sample_rate" in z else 16000,
+                "speaker_labels": [int(s) for s in z["speaker_labels"]] if "speaker_labels" in z else None}
     except Exception as e:  # pragma: no cover - optional asset path
         log.info("No audio-reconstruction assets (%s); WER/PESQ/STOI/MOS remain pending.", e)
         return None
@@ -76,7 +79,11 @@ def run(config: dict) -> dict:
             emb is not None and spk_labels is not None and len(spk_labels) == len(emb),
             "Real F_v embeddings unavailable (need NPZ embeddings from real audio, not synthetic fallback)")
         emb = np.asarray(emb)
-        asv = privacy.asv_eer_open_set(emb, spk_labels, n_enroll_utt=3, seed=42)
+        # ASV-EER on the ORIGINAL transmitted F_v — a speaker-linkability diagnostic, NOT the
+        # paper's Table 8 metric. The paper's ASV-EER (46.8%/48.5%) is computed on embeddings
+        # re-extracted from RECONSTRUCTED waveforms (quantifying the failure of the
+        # reconstruction attack); that value is reported as `asv_eer_pct` below (audit P1-7).
+        asv_original = privacy.asv_eer_open_set(emb, spk_labels, n_enroll_utt=3, seed=42)
         sid = privacy.speaker_identification(emb, spk_labels, seed=42)
 
         # GLO reconstruction. R2 A-road: only the real F_v (embedding_kind=="fv") gets the
@@ -84,14 +91,21 @@ def run(config: dict) -> dict:
         # the Whisper-proj half (F_v[:, 64:]) is a fixed per-sample constant, so the attack
         # reconstructs the FBANK half exactly (corr -> ~1.0 by construction). The proxy NPZ
         # keeps the random-orthogonal sandbox (demo) flag.
+        glo_steps = int(config.get("privacy", {}).get("glo_attack_steps", 150))
+        glo_is_identity = False
         if emb.shape[1] >= 128 and fv_kind == "fv":
             from realeval.acoustic_embedding import fbank_identity_proj_fn
             glo = privacy.glo_reconstruction_attack(
-                emb, emb[:, :64], steps=50, seed=42,
+                emb, emb[:, :64], steps=glo_steps, seed=42,
                 proj_fn=fbank_identity_proj_fn(emb))
+            # FBANK half of the real F_v is stored in the clear (identity map) → GLO corr
+            # converges to ~1.0 BY CONSTRUCTION, not because the attack succeeds. This is a
+            # diagnostic, not a privacy metric (audit P1-7): privacy rests on time-averaging
+            # destroying temporal dynamics (WER/PESQ/STOI/MOS), not on FBANK non-invertibility.
+            glo_is_identity = True
         else:
             glo = privacy.glo_reconstruction_attack(
-                emb, emb[:, :64] if emb.shape[1] >= 64 else emb, steps=50, seed=42)
+                emb, emb[:, :64] if emb.shape[1] >= 64 else emb, steps=glo_steps, seed=42)
         # Measurement-coverage ledger: marks which paper privacy claims are backed by real
         # measurements here vs. which require the audio-reconstruction scoring harness.
         # WER / PESQ / STOI / MOS are scored by realeval.privacy.reconstruction_quality_metrics
@@ -104,7 +118,7 @@ def run(config: dict) -> dict:
         # demo flag, and don't list it among the real measurements when it is demo-only.
         glo_is_demo = str(glo.get("note", "")).startswith("Sandbox")
         measured_fields = ["pii_scan", "asv_eer", "speaker_id_acc", "n_speakers"]
-        if not glo_is_demo:
+        if not glo_is_demo and not glo_is_identity:
             measured_fields.append("glo_reconstruction_corr")
 
         # Audio-reconstruction scoring: run the real harness if aligned waveform assets exist.
@@ -124,17 +138,50 @@ def run(config: dict) -> dict:
                 "stoi_reconstruction": "requires reference+reconstructed waveform assets (harness ready)",
                 "mos_reconstruction": "requires reference+reconstructed waveform assets + SQUIM/NISQA (harness ready)",
             }
+
+        # ASV-EER on RECONSTRUCTED embeddings (paper Table 8 note): re-extract F_v from the
+        # reconstructed waveforms, then run the open-set ASV protocol on those. This is the
+        # paper's headline ASV-EER (46.8% white-box / 48.5% black-box), distinct from the
+        # original-F_v diagnostic above. Requires speaker-aligned reconstruction assets + the
+        # acoustic stack (librosa/whisper + w_proj); reports None (honest missing) otherwise.
+        # NOTE (audit P1-7 residual): the paper reports TWO numbers — white-box (attacker knows
+        # the projection → identity FBANK) and black-box (random-orthogonal guess). A single
+        # ``recon_wavs`` array can only reproduce one of them; separate white-box/black-box
+        # reconstruction asset sets are needed to fully recover both figures.
+        recon_asv_eer = None
+        if recon is not None and recon.get("speaker_labels") is not None:
+            try:
+                from realeval.acoustic_embedding import build_fv_from_wav, load_w_proj
+                _w_proj = load_w_proj()
+                recon_fvs = [build_fv_from_wav(
+                    wav, sr=recon.get("sample_rate", 16000), w_proj=_w_proj)
+                    for wav in recon["recon_wavs"]]
+                if all(fv is not None for fv in recon_fvs):
+                    _recon_asv = privacy.asv_eer_open_set(
+                        recon_fvs, recon["speaker_labels"], n_enroll_utt=3, seed=42)
+                    recon_asv_eer = _recon_asv["asv_eer_pct"]
+            except Exception as e:  # pragma: no cover - optional acoustic stack
+                logger.info("Reconstructed-embedding ASV-EER unavailable: %s", e)
+                recon_asv_eer = None
         coverage = {"measured": measured_fields, "not_measured": recon_pending}
         if glo_is_demo:
             coverage["demo_only"] = {"glo_reconstruction_corr": glo.get("note")}
+        elif glo_is_identity:
+            coverage["diagnostic_only"] = {"glo_reconstruction_corr":
+                "identity-map reconstruction (corr ~1.0 by construction, not a privacy metric)"}
         result = {"computation": "h100_real_qwen", "embedding_source": embedding_source,
                   "embedding_kind": fv_kind,
                   "pii_report": pii_report,
-                  "asv_eer_pct": asv["asv_eer_pct"], "min_dcf": asv.get("min_dcf"),
+                  # asv_eer_pct = the paper's Table 8 metric: ASV-EER on RECONSTRUCTED
+                  # embeddings (None until speaker-aligned reconstruction assets exist).
+                  "asv_eer_pct": recon_asv_eer,
+                  "asv_eer_pct_original_fv": asv_original["asv_eer_pct"],
+                  "min_dcf_original_fv": asv_original.get("min_dcf"),
                   "speaker_id_accuracy": sid["accuracy"],
                   "glo_reconstruction_corr": glo["mean_reconstruction_corr"],
                   "glo_reconstruction_note": glo.get("note"),
                   "glo_reconstruction_is_demo": glo_is_demo,
+                  "glo_reconstruction_is_identity": glo_is_identity,
                   "n_speakers": sid["n_speakers"],
                   "coverage": coverage}
         result.update(recon_measured)

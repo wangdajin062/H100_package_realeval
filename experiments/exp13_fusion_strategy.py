@@ -10,10 +10,32 @@ logger = logging.getLogger("exp13")
 def run(config: dict) -> dict:
     from realeval import data
     import numpy as np
-    # Load multimodal data: text (JSONL) + acoustic embeddings (NPZ) aligned by index
-    ds = data.load_taf28k(max_samples=config.get("data", {}).get("max_samples", 2000), source="multimodal")
+
+    max_samples = config.get("data", {}).get("max_samples", 2000)
+
+    def _try_load_taf28k_fv() -> np.ndarray | None:
+        """加载 128-d F_v NPZ（build_chifraud_fv.py 输出）；缺失则返回 None。"""
+        from realeval.data import _data_root
+        fv_path = _data_root() / "TAF28k" / "taf28k_fv.npz"
+        if not fv_path.exists():
+            return None
+        try:
+            z = np.load(fv_path, allow_pickle=True)
+            emb = np.asarray(z["embeddings"])
+            return emb[:max_samples] if max_samples else emb
+        except (KeyError, OSError) as e:
+            logger.info("TAF28k F_v NPZ unavailable: %s", e)
+            return None
+
+    # Load multimodal data: text (JSONL) + acoustic F_v embeddings (NPZ) aligned by index.
+    # 论文音频分支是 128-d F_v（64-d FBANK + 64-d Whisper-proj），而非 taf28k.npz 的
+    # 384-d Whisper（audit P1-12）。F_v NPZ 优先，退回 legacy NPZ，再退回 synthetic。
+    ds = data.load_taf28k(max_samples=max_samples, source="multimodal")
     texts, labels = ds["texts"], ds["labels"]
     audio_emb = ds.get("embeddings")
+    _fv = _try_load_taf28k_fv()
+    if _fv is not None:
+        audio_emb = _fv
     is_synthetic = False
     if not texts or audio_emb is None:
         # Fall back to synthetic with both text and acoustic-style embeddings
@@ -51,11 +73,17 @@ def run(config: dict) -> dict:
         strategies = {}
         # Hoist the expensive text-branch inference out of the per-strategy loop: the
         # same texts are scored once and shared by all three fusion heads (was 3x).
+        # 文本分支必须用 QAD 训练产物（audit P1-12）：原 zero-shot 基座无蒸馏，语义错位。
+        from experiments.common import resolve_qad_path
+        qad_path = resolve_qad_path()
+        finetuned_path = str(qad_path) if qad_path.exists() else None
         test_txt = real_backend.real_llm_classify(
             config, test_texts, test_labels, quantize="nvfp4",
+            finetuned_path=finetuned_path,
             return_preds=True, return_scores=True)
         train_txt = real_backend.real_llm_classify(
             config, train_texts, train_labels, quantize="nvfp4",
+            finetuned_path=finetuned_path,
             return_preds=True, return_scores=True)
         fit_data = {"texts": train_texts, "labels": train_labels, "audio": train_audio,
                     "text_scores": train_txt.get("scores") or train_txt["preds"]}
@@ -66,6 +94,9 @@ def run(config: dict) -> dict:
                 config, test_texts, test_labels, test_audio,
                 quantize="nvfp4", fusion_strategy=sname,
                 fit_data=fit_data, text_scores=eval_scores)
+            # 端到端计时（含 fusion head fit：L-BFGS + 5-fold CV / grid search /
+            # transformer head 在 train 上拟合），非纯推理——fusion head 拟合与推理在
+            # real_fusion_classify 内耦合，无法分离计时（audit P1-12 诚实标注）。
             lat_ms = (time.perf_counter() - t0) / max(1, len(test_texts)) * 1000
             strategies[sname] = {
                 "f1": result["f1"], "accuracy": result["accuracy"],
@@ -73,6 +104,7 @@ def run(config: dict) -> dict:
                 "head": result.get("fusion_head"),
                 "degraded": result.get("fusion_degraded", False),
                 "latency_ms": round(lat_ms, 4),
+                "latency_note": "end-to-end (includes fusion-head fit, not inference-only)",
             }
         return {"computation": "h100_real_qwen", "strategies": strategies,
                 "headline_strategy": "sigmoid_linear",

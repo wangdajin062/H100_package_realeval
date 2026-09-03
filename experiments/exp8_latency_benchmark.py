@@ -120,6 +120,12 @@ def run(config: dict) -> dict:
         batch_benchmark = {}
         try:
             import torch
+            # NVFP4 = NBE QDQ fake-quant（QAT 前向路径）。此处对 base 0.5B 权重做
+            # 伪量化 wrap，不挂 LoRA adapter —— NBE QAT 权重经 STE 直接训练、无 adapter，
+            # attach_adapter 对 QDQLinear 会显式 raise（student_loader.py:107），故这里
+            # 与 latency_detail（int4/int8 = PTQ + LoRA）的差异是语义正确的。
+            # 注意：这是裸 base 权重 + QDQ wrap，非 exp1 训练后的 QAD NVFP4 checkpoint；
+            # 是否应测训练后权重属协议决策（audit P1-9/P1-10），此处如实标注不冒充实测。
             model, tok = models.load_causal_lm(
                 config["models"]["teacher"], quantize="nvfp4", bf16=True
             )
@@ -150,7 +156,7 @@ def run(config: dict) -> dict:
                     elapsed_ms = (time.perf_counter() - t0) / repeat * 1000
                     mem_mb = torch.cuda.max_memory_allocated(dev) / 1e6 if torch.cuda.is_available() else 0
                     batch_benchmark[str(bs)] = {
-                        "latency_p50_ms": round(elapsed_ms, 2),
+                        "latency_p50_ms": round(quantile_ms(iter_times_ms, 50), 2),
                         # p90/p99 与 latency_detail 一致，用 quantile_ms 在逐次迭代耗时上计算
                         "latency_p90_ms": round(quantile_ms(iter_times_ms, 90), 2),
                         "latency_p99_ms": round(quantile_ms(iter_times_ms, 99), 2),

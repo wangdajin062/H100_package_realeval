@@ -511,6 +511,8 @@ def group_split(
 ) -> tuple[list[int], list[int]]:
     """Stratified (by label) train/test index split.
 
+    Groups indices by LABEL only — despite the name ``group_split``, no template-family
+    or text-identity grouping/dedup is performed (audit P2: 名不副实，仅标签分层，无模板去重).
     Preserves class distribution in both splits. Returns (train_idx, test_idx)
     as lists of integer indices.
 

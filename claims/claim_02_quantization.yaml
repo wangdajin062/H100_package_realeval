@@ -1,18 +1,19 @@
 id: CLAIM-02
-hypothesis: "INT4 quantisation preserves F1 within 1 point of the fp16 scheme."
+hypothesis: "The heterogeneous NVFP4 cloud format preserves F1 within 1 point of the homogeneous INT4-only scheme."
 experiment: exp11
 evidence_path: [schemes]
-independent_variable: quant_scheme
+independent_variable: deployment_scheme
 dependent_variable: f1
 control: [dataset, seed]
 compare:
-  treatment: int4
-  baseline: fp16
+  treatment: nvfp4   # heterogeneous cloud NVFP4 (QAT, no LoRA) — the cloud-format tier of Fig4a's heterogeneous arm (the FULL hetero NVFP4+Q4_K_M+OVF F1=0.923 lives in exp3.conditions.ov_freeze_full, outside this exp11-only evidence_path)
+  baseline: int4     # homogeneous INT4 (independent QAD training, PTQ + LoRA) — Fig4a homogeneous arm
 acceptance:
-  - "mean_diff <= 0.01"       # F1 drop under 1 point
+  - "mean_diff <= 0.01"   # heterogeneous NVFP4 not worse than homogeneous INT4 by more than 1 F1 point
 seeds: 5
 threshold_origin:
   mean_diff:
     value: 0.01
     source: "convention"  # industry-standard 1-percentage-point tolerance for quantization F1 preservation
-    note: "1-point F1 tolerance is a common convention in model compression literature. Not calibrated from this project's specific data distribution."
+    note: "1-point F1 tolerance for deployment-format parity (heterogeneous NVFP4 vs homogeneous INT4). Not calibrated from this project's specific data distribution."
+

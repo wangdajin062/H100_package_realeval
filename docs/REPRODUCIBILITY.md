@@ -399,7 +399,7 @@ REALEVAL_TRAINING__EPOCHS=3 python -m experiments.runner --paper --exp 1
 | `training.learning_rate` | `1e-5` | 学习率 |
 | `training.epochs` | `5` | 训练轮数 |
 | `training.quantize` | `nvfp4` | 量化方案（NBE QDQ 伪量化 QAT，论文 Eq.nbe） |
-| `training.apply_ov_rescaling` | `true` | 启用 OV-Freeze |
+| `training.apply_ov_rescaling` | `false` | 启用 OV-Freeze（QAD 主实验无 OVF；OVF 是 exp3 单独消融，硬编码 true） |
 | `distillation.temperature` | `1.0` | 蒸馏温度 |
 | `distillation.total_steps` | `2000` | 概念步数（Fig4 对齐） |
 | `distillation.ovf_activation_ratio` | `0.7` | OV-Freeze 激活时机（最后 30%，step 1400/2000） |

@@ -4,7 +4,6 @@ import logging
 
 from experiments.framework import run_with_mode
 from experiments.common import (
-    config_override,
     load_and_split_dataset,
     multi_seed_std,
     n_seeds_from_config,
@@ -22,7 +21,10 @@ def run(config: dict) -> dict:
         from realeval import real_backend
         import numpy as np
 
-        abl_config = config_override(config, training={"epochs": 3})
+        # Loss ablation keeps every training hyper-parameter identical to exp1
+        # (paper §Loss Function Ablation: "all other training hyper-parameters remain
+        # identical"), so epochs follows the config default (=5), matching exp1.
+        abl_config = config
         n_seeds = n_seeds_from_config(abl_config, "exp2")
 
         loss_specs = [

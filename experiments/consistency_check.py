@@ -33,10 +33,13 @@ PAPER_CLAIMS: dict[str, list[tuple]] = {
     "exp3":  [(("conditions", "ov_freeze_full", "f1"), 0.923, 0.03, "QAD+OVF F1")],
     "exp5":  [(("taf28k", "f1"), 0.923, 0.03, "TAF-28k IID F1"),
               (("chifraud", "f1"), 0.860, 0.03, "ChiFraud OOD F1")],
-    "exp9":  [(("with_cot", "f1"), 0.923, 0.03, "with-CoT F1 (claimed better)")],
+    "exp9":  [(("with_cot", "f1"), 0.923, 0.03, "with-CoT TAF-28k F1 (fusion)"),
+              (("with_cot", "advfraud_f1"), 0.875, 0.03, "with-CoT AdvFraud-3k F1"),
+              (("without_cot", "f1"), 0.905, 0.03, "without-CoT TAF-28k F1 (direct fusion)"),
+              (("without_cot", "advfraud_f1"), 0.852, 0.03, "without-CoT AdvFraud-3k F1")],
     "exp10": [(("scales", "teacher", "f1_fixed"), 0.916, 0.05, "0.5B teacher F1")],
     "exp11": [(("schemes", "int4", "f1"), 0.900, 0.05, "INT4 F1")],
-    "exp12": [(("storage_decomposition_point8", "total_advantage_x"), 28.0, 4.0, "storage advantage x")],
+    "exp12": [(("storage_decomposition_point8", "total_advantage_x"), 57.0, 6.0, "storage advantage x (7B BF16 / 0.5B NVFP4 248MB)")],
     "exp13": [(("strategies", "sigmoid_linear", "f1"), 0.923, 0.03, "fusion SYSTEM F1 (headline; sigmoid-linear/ours)")],
 }
 

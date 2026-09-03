@@ -29,7 +29,7 @@ CONFIG_SCHEMA: dict[str, tuple[str, type | tuple[type, ...], Any, bool]] = {
     "training.batch_size":             ("批次大小", int, 8, True),
     "training.learning_rate":          ("学习率", float, 1e-5, True),
     "training.epochs":                 ("训练轮数", int, 5, True),
-    "training.apply_ov_rescaling":     ("启用 OV-Freeze", bool, True, False),
+    "training.apply_ov_rescaling":     ("启用 OV-Freeze", bool, False, False),
     "training.quantize":               ("量化方案：nvfp4(NBE QDQ伪量化) / fp16 / int8 / int4 / nf4", str, "nvfp4", True),
     "training.balance_class_weight":   ("是否按类别频率加权 CE", bool, True, False),
     "training.val_frac":               ("校准集比例", float, 0.15, False),
@@ -42,13 +42,13 @@ CONFIG_SCHEMA: dict[str, tuple[str, type | tuple[type, ...], Any, bool]] = {
 
     # 蒸馏参数
     "distillation.temperature":          ("蒸馏温度", float, 1.0, True),
-    "distillation.alpha_ce":             ("CE loss 权重", float, 0.5, False),
     "distillation.alpha_kl":             ("KL loss 权重", float, 0.5, False),
     "distillation.task_weight":          ("分类头 loss 权重（head LR 系数）", float, 1e-3, False),
     "distillation.max_batch":            ("蒸馏最大批次", int, 8, False),
     "distillation.max_seq_length":       ("最大序列长度", int, 4096, False),
-    "distillation.freeze_frac_default":  ("默认冻结比例", float, 1.0, False),
-    "distillation.window_default":       ("默认窗口大小", float, 1.0, False),
+    # 旧 freeze_frac_default / window_default 已移除：OV-Freeze 的投影层子集与
+    # 前向 rescaling 强度改由 real_qad_distill_train 的函数参数 ovf_layers /
+    # rescale_strength 承担（exp3 以 kwargs 传入），不再作为 config 字段。
     "distillation.total_steps":          ("概念步数空间（Fig4 对齐）", int, 2000, False),
     "distillation.ovf_activation_ratio": ("OV-Freeze 激活时机", float, 0.7, False),
     "distillation.ovf_rho":              ("OV-Freeze EMA 系数 ρ", float, 0.95, False),

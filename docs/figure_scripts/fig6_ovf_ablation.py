@@ -6,10 +6,11 @@ OV-Freeze ablation.
       (red line, right axis) across attention-projection configurations.
       Full q,k,v,o-proj OV-Freeze gives the best F1 = 0.923 with drift cut
       from +18.2% (no OVF) to +1.3%.
-  (b) Activation step-ratio: F1 (left axis) and PPL (right axis) across OVF
-      activation windows. The final 30% window is Pareto-optimal.
+  (b) Rescale-strength sweep: F1 (left axis) and PPL (right axis) across the
+      forward rescaling intensity (paper Eq.8). The full rescaling (strength 1.0)
+      is used in production.
 
-All numbers from paper_data (EXP04 / EXP10).
+All numbers from paper_data (EXP3).
 
 Run:  python3 fig6_ovf_ablation.py
 Out:  fig6_ovf_ablation.png
@@ -61,35 +62,36 @@ axL.annotate("best $F_1$ +\nlowest drift", xy=(best_idx, f1[best_idx]),
              color=ps.PALETTE["highlight"],
              arrowprops=dict(arrowstyle="->", color=ps.PALETTE["highlight"], lw=0.9))
 
-# --- (b) activation step-ratio --------------------------------------------
-ratios = [d["ratio_pct"] for d in EXP3_OVF_STEP_RATIO]
+# --- (b) rescale-strength sweep -------------------------------------------
+strengths = [d["strength"] for d in EXP3_OVF_STEP_RATIO]
 f1b = [d["f1"] for d in EXP3_OVF_STEP_RATIO]
 ppl = [d["ppl"] for d in EXP3_OVF_STEP_RATIO]
-best_b = int(np.argmax(f1b))     # 30%
+best_b = int(np.argmax(f1b))     # full rescaling (strength = 1.0 in production)
 
-axR.plot(ratios, f1b, color=ps.PALETTE["primary"], lw=1.6, marker="o", ms=5,
+axR.plot(strengths, f1b, color=ps.PALETTE["primary"], lw=1.6, marker="o", ms=5,
          label="$F_1$")
-axR.scatter([ratios[best_b]], [f1b[best_b]], s=120, facecolor="none",
+axR.scatter([strengths[best_b]], [f1b[best_b]], s=120, facecolor="none",
             edgecolor=ps.PALETTE["highlight"], lw=1.8, zorder=5)
 axR.set_ylabel("$F_1$ score", color=ps.PALETTE["primary"])
-axR.set_xlabel("OV-Freeze activation step ratio (%)")
+axR.set_xlabel("Forward rescaling strength")
 axR.set_ylim(0.914, 0.9245)
-axR.set_title("(b) Step-ratio ablation", weight="bold", pad=10)
-axR.annotate("ours: 30%", xy=(ratios[best_b], f1b[best_b]),
-             xytext=(ratios[best_b] + 3, 0.924), fontsize=7.5,
+axR.set_title("(b) Rescale-strength ablation", weight="bold", pad=10)
+axR.annotate("ours: full\nrescale", xy=(strengths[best_b], f1b[best_b]),
+             xytext=(strengths[best_b] + 0.05, 0.924), fontsize=7.5,
              color=ps.PALETTE["highlight"])
-for r, v in zip(ratios, f1b):
+for r, v in zip(strengths, f1b):
     axR.text(r, v + 0.0004, f"{v:.3f}", ha="center", fontsize=6.4)
 
 axP = axR.twinx()
-axP.plot(ratios, ppl, color=ps.PALETTE["secondary"], lw=1.3, ls="--",
+axP.plot(strengths, ppl, color=ps.PALETTE["secondary"], lw=1.3, ls="--",
          marker="s", ms=4, label="PPL")
-axP.set_ylabel("KL-derived pseudo-PPL", color=ps.PALETTE["secondary"])
-axP.set_ylim(8.55, 8.80)
+axP.set_ylabel("Perplexity (PPL)", color=ps.PALETTE["secondary"])
+# Real LM perplexity (audit P1-2) — magnitude unknown until the H100 re-run, so no
+# fixed ylim; matplotlib auto-scales once real PPL values land. (The old 8.55–8.80
+# range was tuned to the KL-derived pseudo-PPL exp(min(KL,10)), now removed.)
 axP.tick_params(axis="y", colors=ps.PALETTE["secondary"])
 axP.grid(False)
 axP.spines["top"].set_visible(False)
-axP.axvspan(45, 55, color=ps.PALETTE["secondary"], alpha=0.06)
 
 out = os.path.join(os.path.dirname(__file__), "..", "figure")
 os.makedirs(out, exist_ok=True)

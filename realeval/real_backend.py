@@ -79,18 +79,23 @@ def _best_f1_threshold(probs, labels, grid=None):
 def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: list[int],
                             test_texts: list[str], test_labels: list[int], *,
                             quantize: str = "nvfp4", apply_ov_rescaling: bool = True,
-                            freeze_frac: float = 1.0, window: float = 1.0, rho: float = 1.0,
-                            loss_fn: str = "kl", teacher_model: str = None, save_name: str = None) -> dict:
+                            ovf_layers: tuple[str, ...] = ("q", "v", "k", "o"),
+                            rescale_strength: float = 1.0, ovf_loss_weight: float = 1.0,
+                            loss_fn: str = "kl", teacher_model: str = None, save_name: str = None,
+                            compute_ppl: bool = False, max_train_tokens: int | None = None) -> dict:
     """QAD (Quantization-Aware Distillation): teacher→student KL divergence training.
 
     Paper pipeline (exp1/exp2/exp3/exp10): freezes a BF16 teacher, quantises the student,
     and trains the student + classification head with a configurable loss function:
       - "pure_kl": pure KL divergence only (no task CE, T=1) — paper Eq.(2), the headline objective
       - "kl" (default): CE + KL divergence loss (temperature-scaled)
-      - "mse": CE + MSE loss on hidden states
+      - "mse": CE + MSE loss on head logits (paper "Logits MSE")
       - "kl_mse": CE + KL + MSE combined (3-term hybrid)
       - "ce": CE only (= QAT baseline, no distillation)
-    OV-Freeze regulariser (output-variance matching) is applied on top when enabled.
+    OV-Freeze regulariser ({q,k,v,o}_proj projection-layer output-variance matching with a
+    stop-gradient forward rescaling) is applied on top when enabled. The EMA variance and
+    the matching loss target the attention projection layers (paper Eq.5/6/8), not the
+    final hidden state.
 
     quantize selects the student quantisation: "nvfp4" (NBE QDQ fake-quant, QAT —
     the paper's headline scheme, Eq.(eq:nbe)) trains the quantised weights directly
@@ -243,7 +248,66 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
     trajectory = []
     snr_values = []
     global_step = 0
-    s_var_ema = None  # EMA variance estimate for OV-Freeze (paper Eq.6, ρ=0.95)
+    _tokens_seen = 0          # cumulative non-padding tokens (for fixed token budget)
+    _budget_reached = False
+    # ── OV-Freeze: projection-layer variance capture via forward hooks ──
+    # Paper §OV-Freeze aligns {q,k,v,o}_proj activation variance (not the final hidden
+    # state). Hooks capture each projection output every step; the student hook also
+    # applies a stop-gradient variance-aware rescaling when OV-Freeze is active. The
+    # teacher is frozen, so its batch variance is the online calibration target σ²_BF16,ℓ.
+    _PROJ_SUFFIXES = ("q_proj", "k_proj", "v_proj", "o_proj")
+
+    def _proj_key(name: str) -> str:
+        # Normalise "model.layers.3.self_attn.q_proj" → "L3.q" so teacher and student
+        # hooks align even when a PeftModel adds a "base_model.model.model." prefix.
+        parts = name.split(".")
+        layer = None
+        for i, p in enumerate(parts):
+            if p == "layers" and i + 1 < len(parts):
+                layer = parts[i + 1]
+                break
+        return f"L{layer}.{parts[-1][0]}" if layer is not None else name
+
+    s_var_ema: dict[str, torch.Tensor] = {}     # EMA student variance (paper Eq.6)
+    s_var_batch: dict[str, torch.Tensor] = {}   # current batch student variance
+    t_var_calib: dict[str, torch.Tensor] = {}   # online teacher calibration variance
+    _ovf_state = {"active": False}  # set before each student forward (per-step)
+
+    def _make_teacher_hook(key: str):
+        def _hook(module, args, output):
+            # population variance over (batch, seq) → per-output-dim vector
+            t_var_calib[key] = output.detach().float().var(dim=(0, 1))
+            return output
+        return _hook
+
+    def _make_student_hook(key: str, proj: str):
+        def _hook(module, args, output):
+            s_var_batch[key] = output.detach().float().var(dim=(0, 1))
+            if _ovf_state["active"] and proj in ovf_layers:
+                ema = s_var_ema.get(key)
+                calib = t_var_calib.get(key)
+                if ema is not None and calib is not None:
+                    # stop-gradient correction c_ℓ = sg[√(σ²_BF16 / Var_EMA)] (paper Eq.8);
+                    # rescale_strength interpolates toward full rescaling (Eq.8 at 1.0).
+                    c = (calib / (ema + 1e-9)).sqrt().detach()
+                    c = (1.0 + rescale_strength * (c - 1.0)).to(output.dtype)
+                    return output * c
+            return output
+        return _hook
+
+    _ovf_hooks = []
+    _n_t = _n_s = 0
+    for _name, _mod in teacher.named_modules():
+        if _name.split(".")[-1] in _PROJ_SUFFIXES:
+            _n_t += 1
+            _ovf_hooks.append(_mod.register_forward_hook(_make_teacher_hook(_proj_key(_name))))
+    for _name, _mod in student.named_modules():
+        if _name.split(".")[-1] in _PROJ_SUFFIXES:
+            _n_s += 1
+            _proj = _name.split(".")[-1][0]
+            _ovf_hooks.append(_mod.register_forward_hook(_make_student_hook(_proj_key(_name), _proj)))
+    logger.info("OV-Freeze: %d teacher + %d student projection hooks (layers=%s)",
+                _n_t, _n_s, ovf_layers)
     for epoch in range(epochs):
         for start in range(0, len(train_texts), max_batch):
             # Map actual batch index to concept step space [0, concept_total_steps)
@@ -252,6 +316,7 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
 
             # Activate OV-Freeze only after ovf_activation_step (in concept space)
             ovf_active = apply_ov_rescaling and concept_step >= ovf_activation_step
+            _ovf_state["active"] = ovf_active
 
             batch_texts = train_texts[start:start + max_batch]
             labels_t = torch.tensor(
@@ -319,7 +384,13 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
                 )
 
             if loss_fn in ("mse", "kl_mse"):
-                mse_loss = F.mse_loss(s_last, t_last)
+                # "Logits MSE" (paper Table 5): align head logits (batch, 2), NOT the
+                # last hidden state. Logits-level alignment is width-agnostic, so it stays
+                # well-defined for exp10's heterogeneous teachers (varying hidden width).
+                with torch.inference_mode():
+                    t_logits_head = (teacher_head(t_last) if teacher_head is not None
+                                     else head(t_last))
+                mse_loss = F.mse_loss(logits, t_logits_head)
 
             # Quantization SNR: signal = teacher power, noise = (student - teacher)²
             # Compare on the aligned common dims (hetero teachers have different widths).
@@ -329,36 +400,37 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
                 snr_db = float(10 * torch.log10(signal_power / (noise_power + 1e-12)))
             snr_values.append(snr_db)
 
-            # OV-Freeze: variance matching on output dimensions (staged activation)
-            # Window parameter controls the strength of variance rescaling (rho sweep).
-            # Align hidden dims for variance/OV-freeze when teacher ≠ student (exp10 hetero).
-            ovf_loss = torch.tensor(0.0, device=dev)
-            # unbiased=False (population variance) so a trailing batch of size 1 yields 0,
-            # not NaN. With the default unbiased=True, var over a singleton dim divides by
-            # (n-1)=0 → NaN, which then propagates through OVF backward into the student
-            # weights and silently corrupts the model.
-            t_var = t_last[..., :n_common].var(dim=0, unbiased=False)
-            s_var = s_last[..., :n_common].var(dim=0, unbiased=False)
-            # EMA variance estimate (paper Eq.6, ρ=0.95)
+            # ── OV-Freeze: projection-layer variance alignment (paper §OV-Freeze) ──
+            # Projection outputs are captured by the forward hooks registered above. The
+            # EMA tracks the student every step; the matching loss and forward rescaling
+            # activate only in the final 30% window — after the student has inherited the
+            # teacher's capability and its variance has stabilised (freeze occurs
+            # post-convergence, not during warmup).
             ovf_rho = float(config.get("distillation", {}).get("ovf_rho", 0.95))
-            if s_var_ema is None:
-                s_var_ema = s_var
-            else:
-                s_var_ema = ovf_rho * s_var_ema + (1 - ovf_rho) * s_var
-            drift_var = s_var_ema
-            if ovf_active and freeze_frac > 0:
-                k = max(1, min(int(t_var.numel() * freeze_frac), n_common))
-                # stop-gradient scale c_l = sg[√(σ²_BF16 / Var_EMA)] (paper Eq.8)
-                scale = (t_var[:k] / (s_var_ema[:k] + 1e-9)).sqrt().detach()
-                # L_OVF = λ Σ ‖Var_EMA − σ²_BF16‖² (paper Eq.5, λ=0.01)
-                ovf_lambda = float(config.get("distillation", {}).get("ovf_lambda", 0.01))
-                ovf_loss = ovf_lambda * F.mse_loss(s_var_ema[:k], t_var[:k])
-                # Measure drift AFTER OVF rescaling so the metric reflects variance matching:
-                drift_var = s_var_ema.clone()
-                drift_var[:k] = drift_var[:k] * (1 + window * (scale - 1)) ** 2
-            # Drift computed once after if/else on aligned dims (deduplicated)
-            drift_val = float(
-                (drift_var - t_var).abs().mean() / (t_var.abs().mean() + 1e-9) * 100)
+            ovf_lambda = float(config.get("distillation", {}).get("ovf_lambda", 0.01))
+            # EMA tracks every {q,k,v,o} projection layer, so drift stays measurable even
+            # when OV-Freeze is applied to only a subset (paper Fig6a: no-OVF baseline
+            # must still report a non-zero drift).
+            for k, sb in s_var_batch.items():
+                if k not in s_var_ema:
+                    s_var_ema[k] = sb
+                else:
+                    s_var_ema[k] = ovf_rho * s_var_ema[k] + (1 - ovf_rho) * sb
+
+            ovf_loss = torch.tensor(0.0, device=dev)
+            if ovf_active:
+                # L_OVF only on the selected projection layers (paper Eq.5, P ⊆ {q,k,v,o}).
+                _ovf_terms = [F.mse_loss(s_var_ema[k], t_var_calib[k].to(s_var_ema[k].dtype))
+                              for k in s_var_ema if k[-1] in ovf_layers and k in t_var_calib]
+                if _ovf_terms:
+                    ovf_loss = ovf_lambda * torch.stack(_ovf_terms).sum()
+
+            # Signed relative variance drift across ALL projection layers (paper:
+            # +18.2% → +1.3%); positive means the student variance exceeds the BF16 teacher.
+            _drift_terms = [((s_var_ema[k] - t_var_calib[k].to(s_var_ema[k].dtype))
+                             / (t_var_calib[k].abs() + 1e-9)).mean()
+                            for k in s_var_ema if k in t_var_calib]
+            drift_val = float(torch.stack(_drift_terms).mean() * 100) if _drift_terms else 0.0
 
             # Combined loss based on loss_fn mode
             if loss_fn == "ce":
@@ -372,7 +444,7 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
             else:  # "kl" (default)
                 loss = ce_loss + alpha_kl * kl_loss   # KL distillation
 
-            loss = loss + rho * ovf_loss
+            loss = loss + ovf_loss_weight * ovf_loss
 
             optimizer.zero_grad()
             loss.backward()
@@ -399,9 +471,27 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
             })
             global_step += 1
 
+            # Fixed token budget (paper Fig5b "Fixed 0.5B tokens", exp10): stop once the
+            # cumulative non-padding token count reaches max_train_tokens, overriding the
+            # epoch count. Actual tokens per batch = attention_mask sum (excludes padding).
+            _tokens_seen += int(enc.attention_mask.sum().item())
+            if max_train_tokens is not None and _tokens_seen >= max_train_tokens:
+                _budget_reached = True
+                break
+
         logger.info("QAD epoch %d/%d — batch %d/%d (OVF active: %s)",
                     epoch + 1, epochs, global_step, actual_total_batches,
                     concept_step >= ovf_activation_step)
+
+        if _budget_reached:
+            break
+
+    # Detach OV-Freeze hooks before evaluation so the calibrated/eval student runs clean
+    # (no variance capture, no forward rescaling) — evaluation must reflect the plain
+    # quantised student, not the OVF-rescaled forward used during the final 30% of training.
+    for _h in _ovf_hooks:
+        _h.remove()
+    _ovf_hooks.clear()
 
     # ── Evaluation ──
     student.eval()
@@ -442,6 +532,41 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
 
     m = classification_metrics([int(v) for v in test_labels], preds)
 
+    # ── True language-model perplexity (PPL) ──
+    # Paper Fig6b claims the EMA variance estimation restricts perplexity fluctuation to
+    # within +0.18. That PPL is a REAL causal-LM perplexity exp(−mean token NLL) over the
+    # test set, NOT the KL-derived pseudo-perplexity exp(min(KL,10)) previously reported —
+    # the pseudo-PPL is merely a monotone transform of the distillation KL and cannot
+    # support a language-modelling perplexity-fluctuation claim (audit P1-2). Computed on
+    # the plain quantised student (eval mode, OVF hooks already detached) over raw test
+    # texts (no classification-prompt template: PPL measures language-modelling quality).
+    # Optional (compute_ppl=True) — exp3's rescale-strength sweep (Fig6b) is the only
+    # consumer; other callers skip it to avoid a full test-set forward per training.
+    import math as _math
+    ppl = None
+    if compute_ppl:
+        _nll_sum = 0.0
+        _tok_count = 0
+        for start in range(0, len(test_texts), batch_size):
+            batch_texts = test_texts[start:start + batch_size]
+            _enc = tok(batch_texts, return_tensors="pt", padding=True,
+                       truncation=True, max_length=max_seq).to(dev)
+            with torch.inference_mode():
+                _out = student(**_enc)
+            _logits = _out.logits.float()
+            _shift_logits = _logits[:, :-1, :].contiguous()
+            _shift_labels = _enc.input_ids[:, 1:].contiguous()
+            _shift_mask = _enc.attention_mask[:, 1:].contiguous()
+            _nll = F.cross_entropy(
+                _shift_logits.view(-1, _shift_logits.size(-1)),
+                _shift_labels.view(-1),
+                reduction="none",
+            ).view(_shift_labels.shape)
+            _nll_sum += float((_nll * _shift_mask).sum().item())
+            _tok_count += int(_shift_mask.sum().item())
+        if _tok_count > 0:
+            ppl = round(_math.exp(_nll_sum / _tok_count), 3)
+
     kl_final = trajectory[-1]["kl"] if trajectory else 0.0
     drift_final = trajectory[-1]["drift_pct"] if trajectory else 0.0
 
@@ -478,15 +603,23 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
         "drift_pct_final": drift_final,
         "kl_plateau": kl_plateau,
         "kl_converged": kl_converged,
+        # total_steps / ovf_activation_step 是 concept 空间设计参数（Fig4 x 轴对齐，
+        # 取自 config total_steps / ovf_activation_ratio），非实际训练步数测量；
+        # 真实训练步数（epochs × batches_per_epoch）另以 actual_total_steps 报告
+        # （audit P2: config 回显非测量）。
         "total_steps": concept_total_steps,
         "ovf_activation_step": ovf_activation_step,
+        "actual_total_steps": actual_total_batches,
         "snr_min": snr_min,
         "snr_max": snr_max,
         "quantize": quantize,
         "loss_fn": loss_fn,
         "ov_rescaling": apply_ov_rescaling,
-        "freeze_frac": freeze_frac,
+        "ovf_layers": list(ovf_layers),
+        "rescale_strength": rescale_strength,
         "decision_threshold": decision_threshold,
+        "ppl": ppl,  # real LM perplexity over test set (None unless compute_ppl=True)
+        "train_tokens": _tokens_seen,  # actual non-padding tokens seen (fixed-budget audit)
     }
 
 

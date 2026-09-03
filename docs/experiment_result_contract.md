@@ -31,8 +31,8 @@
 ### Figure 7 → OV-Freeze Ablation
 | 图脚本变量 | paper_data 读取路径 | 实验产出字段 |
 |-----------|-------------------|------------|
-| EXP3_OVF_LAYER_ABLATION | exp3.layer_selection.{early,mid,late,all}.{f1,variance_drift_pct} | exp3 → layer_selection.{name}.{f1,variance_drift_pct} |
-| EXP3_OVF_STEP_RATIO | exp3.rho_sweep.rho_{0.0..0.5}.{f1,ppl} | exp3 → rho_sweep.{key}.{f1,ppl} |
+| EXP3_OVF_LAYER_ABLATION | exp3.layer_selection.{q,q_v,q_v_k}.{f1,variance_drift_pct} + conditions.{no_reg,ov_freeze_full}（端点） | exp3 → layer_selection.{q,q_v,q_v_k}.{f1,variance_drift_pct}；no_reg/full 读 conditions |
+| EXP3_OVF_STEP_RATIO | exp3.window_sweep.strength_{0.0,0.2,0.4,0.6,0.8,1.0}.{f1,ppl} | exp3 → window_sweep.{key}.{f1,ppl} |
 
 ### Figure 8 → Speculative Decoding
 | 图脚本变量 | paper_data 读取路径 | 实验产出字段 |
@@ -72,7 +72,7 @@
 1. **`paper_data.py` 加载逻辑**：先按时间戳加载 `exp*_*.json`，再补充 `all_experiments.json`，后加载者不覆盖前加载者。
 2. **阈值兼容**：`head.pt` 无 `threshold` 键时，`real_llm_classify` 回退到 `thr=0.5`（硬 argmax）。
 3. **`decision_threshold`**：exp1 QAD 蒸馏新增字段；旧版结果文件不包含此字段不影响图像脚本（仅 paper 级训后才会使用）。
-4. **`exp2.variants.kl_task` 兼容别名**：exp2 的 loss ablation 在科学上已将 `kl_task` 合并到 `kl_only`（OVF 在 exp3 中单独消融），但 `paper_data.py` 的 `EXP2_LOSS_ABLATION` 仍保留 `kl_task` 标签。实验脚本自动将 `kl_only` 复制为 `kl_task`，保证图像脚本无需修改即可读取。
+4. **`exp2.variants.kl_task` 独立变体**：`kl_task` 是 exp2 独立训练的 loss 变体（`loss_fn="kl"`，即 CE + KL，对应论文 "KL + task reg" 行），并非 `kl_only` 的复制别名（审计 P2：旧文档误述为"脚本将 `kl_only` 复制为 `kl_task`"）。
 5. **`std` 字段补齐**：exp3 的 `conditions.*` / `layer_selection.*` 以及 exp11 的 `schemes.*` 在单 seed 运行时 `std` 为 `None`（与多 seed 聚合结构一致）；`None` 表示单 seed 无测量标准差。
 
 ## 四、验证命令
@@ -145,12 +145,12 @@ cd docs/figure_scripts && python generate_all.py
 | `_get("exp3", "conditions", "no_reg", "f1")` | `result["conditions"]["no_reg"]["f1"]` |
 | `_get("exp3", "conditions", "no_reg", "variance_drift_pct")` | `result["conditions"]["no_reg"]["variance_drift_pct"]` |
 | 同上，key = `ov_freeze_full` / `ov_freeze_half` / `ov_freeze_quarter` | 同结构 |
-| `_get("exp3", "layer_selection", "early", "f1")` | `result["layer_selection"]["early"]["f1"]` |
-| `_get("exp3", "layer_selection", "early", "variance_drift_pct")` | `result["layer_selection"]["early"]["variance_drift_pct"]` |
-| 同上，key = `mid` / `late` / `all` | 同结构 |
-| `_get("exp3", "rho_sweep", "rho_0.0", "f1")` | `result["rho_sweep"]["rho_0.0"]["f1"]` |
-| `_get("exp3", "rho_sweep", "rho_0.0", "ppl")` | `result["rho_sweep"]["rho_0.0"]["ppl"]` |
-| 同上，key = `rho_0.1` ... `rho_0.5` | 同结构 |
+| `_get("exp3", "layer_selection", "q", "f1")` | `result["layer_selection"]["q"]["f1"]` |
+| `_get("exp3", "layer_selection", "q", "variance_drift_pct")` | `result["layer_selection"]["q"]["variance_drift_pct"]` |
+| 同上，key = `q_v` / `q_v_k` / `q_v_k_o` | 同结构 |
+| `_get("exp3", "window_sweep", "strength_0.0", "f1")` | `result["window_sweep"]["strength_0.0"]["f1"]` |
+| `_get("exp3", "window_sweep", "strength_0.0", "ppl")` | `result["window_sweep"]["strength_0.0"]["ppl"]` |
+| 同上，key = `strength_0.2` ... `strength_1.0` | 同结构 |
 
 ### exp5 → Fig 8(b)(c)（AdvFraud / LDP）
 
@@ -219,7 +219,7 @@ cd docs/figure_scripts && python generate_all.py
 
 | 契约字段 | 实验产出字段 | 备注 |
 |---------|-------------|------|
-| `competitor_comparison_real.QAD_MultiGuard_INT4.f1` | 同结构 | FraudFusion_pruned_INT4.f1 为 cited（None，无发布权重） |
+| `competitor_comparison_real.QAD_MultiGuard_NVFP4.f1` | 同结构 | FraudFusion_pruned_INT4.f1 为 cited（None，无发布权重） |
 | `storage_decomposition_point8.{footprints_mb,quantization_alone_x,param_scale_alone_x,total_advantage_x}` | 同结构 | footprints_mb 缺磁盘模型文件时各 advantage 为 None（键仍存在） |
 
 ### exp13 → 融合策略（不直接进图，contract 校验）
@@ -227,6 +227,22 @@ cd docs/figure_scripts && python generate_all.py
 | 契约字段 | 实验产出字段 | 备注 |
 |---------|-------------|------|
 | `strategies.{softmax_linear,sigmoid_linear,transformer}.{f1,accuracy,latency_ms}` | `result["strategies"][{name}][...]` | `fusion_degraded=True` 时为纯文本回退（见 P2-2） |
+
+### exp14 → 运行时对比（transformers BF16 vs llama.cpp Q4_K_M GGUF）
+
+| 契约字段 | 实验产出字段 | 备注 |
+|---------|-------------|------|
+| `models.q4km_0.5b_llama_cpp.{f1,std}` | `result["models"]["q4km_0.5b_llama_cpp"][...]` | 推理确定性 → 单次推理 `n_seeds=1`、`std=None`（论文 5-seed ±std 由 claim_engine 训练侧多 seed 实现，见审计 P2） |
+| `models.bf16_0.5b_transformers.{f1,std}` | `result["models"]["bf16_0.5b_transformers"][...]` | 同上，单次推理 |
+
+### exp15 → 模态消融（text-only / audio-only / fused）
+
+| 契约字段 | 实验产出字段 | 备注 |
+|---------|-------------|------|
+| `text_only.{f1,accuracy}` | `result["text_only"][...]` | Qwen zero-shot 软分阈 0.5（exp13 文本分支） |
+| `audio_only.{f1,accuracy}` | `result["audio_only"][...]` | 384-d Whisper-pooled 特征 + LogisticRegression（非 128-d F_v，见 P1-12） |
+| `fused.{f1,accuracy}` | `result["fused"][...]` | sigmoid_linear 决策级融合 |
+| `marginal_contribution.{fused_minus_text_only,fused_minus_audio_only}` | `result["marginal_contribution"][...]` | 融合相对单模态的增量 |
 
 ---
 

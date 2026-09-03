@@ -9,7 +9,7 @@ import pytest
 
 
 class TestEvidenceGraph:
-    def test_create_and_save_graph(self):
+    def test_create_and_save_graph(self, tmp_path):
         from audit.evidence_graph import EvidenceGraph
         g = EvidenceGraph("TEST-001")
         c = g.add_claim({"hypothesis": "Test claim", "acceptance": {"f1": ">0.9"}})
@@ -22,7 +22,7 @@ class TestEvidenceGraph:
         g.add_conclusion({"verdict": "PASS"}, parents=[ev])
         ok, errors = g.validate()
         assert ok, f"Validation errors: {errors}"
-        path = g.save()
+        path = g.save(tmp_path / "TEST-001.json")
         assert path.exists()
         # Round-trip
         g2 = EvidenceGraph.load(path)
@@ -105,7 +105,7 @@ class TestClaimRunner:
         finally:
             cr.CLAIMS_DIR = old_dir
 
-    def test_run_claim_end_to_end(self, tmp_path):
+    def test_run_claim_end_to_end(self, tmp_path, monkeypatch):
         from audit.evidence_graph import EvidenceGraph, evaluate_claim
 
         # Minimal end-to-end: claim → experiment → verdict
@@ -132,6 +132,9 @@ class TestClaimRunner:
         import runner.claim_runner as cr
         old_dir = cr.CLAIMS_DIR
         cr.CLAIMS_DIR = tmp_path
+        # Redirect evidence output to tmp_path so tests never pollute outputs/evidence/.
+        import audit.evidence_graph as _eg
+        monkeypatch.setattr(_eg, "EVIDENCE_DIR", tmp_path)
         try:
             result = cr.run_claim(claim_path, fake_experiment)
             assert result["verdict"] == "PASS"

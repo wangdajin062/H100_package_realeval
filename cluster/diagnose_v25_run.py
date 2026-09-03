@@ -229,7 +229,7 @@ def check_rf2_constant_f1(results_dir: Path):
         return
     d3 = json.loads(exp3[-1].read_text())
     f1s = []
-    for group in ("conditions", "layer_selection", "rho_sweep"):
+    for group in ("conditions", "layer_selection", "window_sweep"):
         for arm, vals in (d3.get(group) or {}).items():
             if isinstance(vals, dict) and vals.get("f1") is not None:
                 f1s.append((f"{group}/{arm}", vals["f1"]))

@@ -22,7 +22,11 @@ def run(config: dict) -> dict:
         import numpy as np
 
         quantize = config.get("training", {}).get("quantize", "nvfp4")
-        apply_ov = config.get("training", {}).get("apply_ov_rescaling", True)
+        # QAD 主实验（论文 Table 3 的 "NVFP4 QAD" = 0.916）是无 OV-Freeze 的纯 KL
+        # 蒸馏；OV-Freeze 是 exp3 的单独消融（0.916→0.923）。exp1 若默认含 OVF，其 f1
+        # 实为 "QAD+OVF" 却被 paper_data 映射为 "QAD（无 OVF）"，OVF 消融在数据源头
+        # 消失（audit P1-1）。故默认 False。
+        apply_ov = config.get("training", {}).get("apply_ov_rescaling", False)
         n_seeds = n_seeds_from_config(config, "exp1")
 
         f1s: list[float] = []

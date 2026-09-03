@@ -33,7 +33,12 @@ def run(config: dict) -> dict:
             ("teacher_7b",     models_cfg.get("teacher_7b")),
         ]
 
-        fixed_config = config_override(config, training={"epochs": 1})
+        # Fixed token budget (paper Fig5b "Fixed 0.5B tokens"): the fixed arm trains each
+        # teacher for a fixed 0.5B-token budget (audit P1-6 — was 1 epoch ≈ tens of M
+        # tokens, two orders of magnitude short). epochs is set high as a safety ceiling;
+        # the token budget (max_train_tokens below), not the epoch count, terminates
+        # training.
+        fixed_config = config_override(config, training={"epochs": 1000})
         conv_config = config_override(config, training={"epochs": 5})
 
         scales = {}
@@ -42,17 +47,20 @@ def run(config: dict) -> dict:
                 continue
             try:
                 fixed_f1s, conv_f1s, conv_accs = [], [], []
+                fixed_tokens = conv_tokens = None
                 for s in range(n_seeds):
                     set_seed(seed_base_from_config(config) + s)
-                    # Fixed token budget (1 epoch)
+                    # Fixed token budget (0.5B tokens, paper Fig5b)
                     fixed_result = real_backend.real_qad_distill_train(
                         fixed_config,
                         split.train_texts, split.train_labels,
                         split.test_texts, split.test_labels,
                         quantize="nvfp4",
                         teacher_model=model_id,
+                        max_train_tokens=500_000_000,
                     )
                     fixed_f1s.append(fixed_result["f1"])
+                    fixed_tokens = fixed_result.get("train_tokens")
                     # To convergence (5 epochs)
                     conv_result = real_backend.real_qad_distill_train(
                         conv_config,
@@ -63,6 +71,7 @@ def run(config: dict) -> dict:
                     )
                     conv_f1s.append(conv_result["f1"])
                     conv_accs.append(conv_result["accuracy"])
+                    conv_tokens = conv_result.get("train_tokens")
                 scales[key] = {
                     "f1_fixed": round(float(np.mean(fixed_f1s)), 4),
                     "f1_conv": round(float(np.mean(conv_f1s)), 4),
@@ -70,6 +79,8 @@ def run(config: dict) -> dict:
                     "std": multi_seed_std(conv_f1s),
                     "n_seeds": n_seeds,
                     "teacher_model": model_id,
+                    "train_tokens_fixed": fixed_tokens,
+                    "train_tokens_conv": conv_tokens,
                 }
             except Exception as e:
                 logger.warning("Teacher scale %s (%s) failed: %s", key, model_id, e)

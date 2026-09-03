@@ -25,7 +25,10 @@ def run(config: dict) -> dict:
 
     def run_paper(config: dict) -> dict:
         from realeval.specdec import diagnostic_B
-        result = diagnostic_B(config, texts, gamma=5, n_samples=20)
+        sd = config.get("speculative_decoding", {})
+        result = diagnostic_B(config, texts,
+                              gamma=int(sd.get("gamma", 5)),
+                              n_samples=int(sd.get("n_samples", 20)))
         # Do NOT backfill paper alpha_tuned into the measured bucket: that would
         # mislabel a self-cited number as an H100 measurement. Domain-tuned alpha
         # is NOT measured (verdict = "NOT MEASURED"); paper_reference is cited-only.

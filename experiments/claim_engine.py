@@ -86,7 +86,11 @@ def evaluate_claim(claim: dict, base_config: dict) -> dict:
         b_vals = _collect_samples(results, claim["evidence_path"], cmp["baseline"], dep)
         trace["evidence"] = {cmp["treatment"]: t_vals, cmp["baseline"]: b_vals}
         t_sum, b_sum = st.summarize(t_vals), st.summarize(b_vals)
-        comparison = st.compare(t_vals, b_vals, paired=(len(t_vals) == len(b_vals)))
+        # Paired by construction when "seed" is a controlled factor: each repeat runs
+        # both conditions under the same seed, so t_vals[s] pairs with b_vals[s]. The
+        # old length-equality heuristic treated equal-length but unpaired samples as
+        # paired (audit P2).
+        comparison = st.compare(t_vals, b_vals, paired=("seed" in claim.get("control", [])))
         trace["stats"] = {"treatment": t_sum, "baseline": b_sum, "comparison": comparison}
         # expose names for acceptance criteria
         ctx["treatment"] = type("N", (), t_sum)
@@ -100,11 +104,21 @@ def evaluate_claim(claim: dict, base_config: dict) -> dict:
         ctx["cohens_d"] = comparison.get("cohens_d")
         ctx["p_value"] = comparison.get("t_p")
     else:
-        # single-quantity claim (e.g. speedup from measured alpha)
-        node = _dig(results[0], claim["evidence_path"])
-        measured_alpha = node.get("generic") if isinstance(node, dict) else None
-        trace["evidence"] = {"node": node}
+        # single-quantity claim (e.g. speedup from measured alpha). Aggregate across
+        # seeds (mean ± std) so seeds>1 is meaningful rather than silently using only
+        # the first repeat (audit P1-15: CLAIM-03 must honour the 5-seed protocol).
+        vals = []
+        for r in results:
+            node = _dig(r, claim["evidence_path"])
+            v = node.get("generic") if isinstance(node, dict) else None
+            if v is not None:
+                vals.append(v)
+        trace["evidence"] = {"generic_per_seed": vals}
+        s = st.summarize(vals)
+        measured_alpha = s["mean"]
         ctx["measured_alpha"] = measured_alpha
+        if vals:
+            ctx["measured_alpha_std"] = s.get("std")
         gamma = base_config.get("speculative_decoding", {}).get("gamma", 5)
         # Closed-form speculative speedup with the degenerate cases handled explicitly
         # (Leviathan et al. 2023, Eq.1). `if measured_alpha` alone did not guard α=1.0,

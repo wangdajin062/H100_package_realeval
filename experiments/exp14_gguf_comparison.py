@@ -33,50 +33,52 @@ def run(config: dict) -> dict:
 
     def run_paper(config: dict) -> dict:
         from realeval import real_backend, gguf_backend
-        import numpy as np
-        from experiments.common import multi_seed_std, n_seeds_from_config, seed_base_from_config, set_seed, resolve_qad_path
+        from experiments.common import multi_seed_std, resolve_qad_path, resolve_qad_gguf_path
 
         models = {}
-        n_seeds = n_seeds_from_config(config, "exp14")
         qad_path = resolve_qad_path()
         finetuned_path = str(qad_path) if qad_path.exists() else None
 
-        # BF16 0.5B student via transformers (safetensors)
-        bf16_f1s = []
-        for s in range(n_seeds):
-            set_seed(seed_base_from_config(config) + s)
-            bf16 = real_backend.real_llm_classify(
-                config, test_texts, test_labels, quantize=None,
-                finetuned_path=finetuned_path, finetuned_dtype="bf16",
-            )
-            bf16_f1s.append(bf16["f1"])
+        # 推理确定性（eval + greedy/head.predict，temperature=0，无采样）：多 seed
+        # 推理是空转——set_seed 不改变确定性前向输出，std 恒为 0.0。论文的 5-seed
+        # ±std 属训练侧随机性（5 个不同 seed 训练出的模型各自评估），非推理侧多
+        # seed。故此处单次推理并如实标 n_seeds=1、std=None（audit P2: 多 seed 空转）。
+        # 单次推理也顺带消除了旧代码每次 seed 重复加载 GGUF 的问题。
+        bf16 = real_backend.real_llm_classify(
+            config, test_texts, test_labels, quantize=None,
+            finetuned_path=finetuned_path, finetuned_dtype="bf16",
+        )
         models["bf16_0.5b_transformers"] = {
-            "f1": round(float(np.mean(bf16_f1s)), 4),
-            "f1_std": multi_seed_std(bf16_f1s),
-            "std": multi_seed_std(bf16_f1s),
-            "runtime": "transformers", "source": "ours", "n_seeds": n_seeds,
+            "f1": round(float(bf16["f1"]), 4),
+            "f1_std": multi_seed_std([bf16["f1"]]),
+            "std": multi_seed_std([bf16["f1"]]),
+            "runtime": "transformers", "source": "ours", "n_seeds": 1,
         }
-        # Q4_K_M 0.5B GGUF edge student via llama.cpp (same test split)
+        # Q4_K_M 0.5B GGUF edge student via llama.cpp (same test split).
+        # 论文 "Q4_K_M QAD + OV-Freeze" 行是 QAD 训练产物导出为 Q4_K_M GGUF
+        # （scripts/export_to_gguf.py），而非 config.models.student_gguf 的 stock 官方
+        # GGUF（那是 zero-shot、无蒸馏，语义错位，audit P1-11）。用导出的 QAD GGUF
+        # 推理；导出产物缺失时诚实报缺（GGUFUnavailable），不静默退回 stock。
+        # 残留：导出链默认源为 exp1_qad（无 OVF 的 QAD）；若论文行需 OVF 产物，须
+        # 用 exp3 的 ov_freeze_full 产物另行导出（audit P1-15 统一）。
+        qad_gguf = resolve_qad_gguf_path()
         try:
-            gg_f1s = []
-            gg = None
-            for s in range(n_seeds):
-                set_seed(seed_base_from_config(config) + s)
-                gg = gguf_backend.gguf_classify(config["models"]["student_gguf"], test_texts, test_labels)
-                gg_f1s.append(gg["f1"])  # KeyError here degrades gracefully via the except below
+            gg = gguf_backend.gguf_classify(str(qad_gguf), test_texts, test_labels)
             models["q4km_0.5b_llama_cpp"] = {
-                "f1": round(float(np.mean(gg_f1s)), 4),
-                "f1_std": multi_seed_std(gg_f1s),
-                "std": multi_seed_std(gg_f1s),
+                "f1": round(float(gg["f1"]), 4),
+                "f1_std": multi_seed_std([gg["f1"]]),
+                "std": multi_seed_std([gg["f1"]]),
                 "latency_ms_p50": gg.get("latency_ms_p50"),
-                "runtime": "llama_cpp", "source": "ours", "n_seeds": n_seeds,
+                "runtime": "llama_cpp", "source": "ours", "n_seeds": 1,
+                "model_ref": qad_gguf.name,
             }
         except (gguf_backend.GGUFUnavailable, KeyError) as e:
             # KeyError = gguf_classify returned no "f1"; degrade the same way as an
             # unavailable backend instead of aborting the whole experiment.
             models["q4km_0.5b_llama_cpp"] = {"f1": None, "runtime": "llama_cpp", "source": "ours",
-                                             "note": f"GGUF unavailable: {e}"}
+                                             "note": f"QAD GGUF unavailable: {e}"}
         return {"computation": "h100_real_qwen", "models": models,
+                "model_source": "exp1_qad" if finetuned_path else "base_qwen",
                 "cite_only": {"SAFE_QAQ_7B": {"source": "cited", "note": "reported by source paper; not run here"}}}
 
 

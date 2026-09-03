@@ -54,14 +54,20 @@ def run(config: dict) -> dict:
             sz = _model_size_mb(key)
             if sz is not None:
                 fp[label] = sz
-        # Compute advantage factors from measured footprints (not hardcoded).
+        # 存储分解口径（audit P1-13）：论文 57× = 7B BF16 / 0.5B NVFP4（248MB 纯 4-bit
+        # NBE）。NVFP4 产物不在磁盘时，用论文声称的 248MB 计算（诚实标注 paper-claimed），
+        # 而非 Q4_K_M 实测（491.4MB 混合精度，得 ≈28×）——两者是不同量化产物，口径不可
+        # 混用。Q4_K_M 实测单独分列，不混入论文的 57× NVFP4 口径。
         bf16_7b = fp.get("7B_BF16_SAFE_QAQ")
         bf16_05 = fp.get("0.5B_BF16")
         q4_05 = fp.get("0.5B_Q4_K_M")
-        quant_x = round(bf16_05 / q4_05, 1) if (bf16_05 and q4_05) else None
-        param_x = round(bf16_7b / bf16_05, 1) if (bf16_7b and bf16_05) else None
-        total_x = round(quant_x * param_x, 1) if (quant_x and param_x) else None
+        nvfp4_mb = 248.0  # paper-claimed NVFP4 0.5B footprint（待 NVFP4 产物实测回填）
+        quant_x = round(bf16_05 / nvfp4_mb, 1) if bf16_05 else None       # 0.5B BF16 / NVFP4 ≈ 4×
+        param_x = round(bf16_7b / bf16_05, 1) if (bf16_7b and bf16_05) else None  # 7B / 0.5B = 14×
+        total_x = round(bf16_7b / nvfp4_mb, 1) if bf16_7b else None       # 7B BF16 / NVFP4 ≈ 57×
+        total_x_q4km = round(bf16_7b / q4_05, 1) if (bf16_7b and q4_05) else None  # 边缘实测 ≈ 28×
         return {"computation": "h100_real_qwen",
+                "model_source": "exp1_qad" if finetuned_path else "base_qwen",
                 "competitor_comparison_real": {
                     "QAD_MultiGuard_NVFP4": {"f1": qad["f1"], "source": "ours"},
                     # FraudFusion has no released weights; marked as cite-only (no F1 compared).
@@ -72,6 +78,8 @@ def run(config: dict) -> dict:
                     "quantization_alone_x": quant_x,
                     "param_scale_alone_x": param_x,
                     "total_advantage_x": total_x,
+                    "total_advantage_x_q4km_measured": total_x_q4km,
+                    "nvfp4_footprint_source": "paper_claimed_248MB",
                 }}
 
 

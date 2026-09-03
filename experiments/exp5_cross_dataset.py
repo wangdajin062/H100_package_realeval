@@ -13,9 +13,11 @@ def run(config: dict) -> dict:
     max_samples = config.get("data", {}).get("max_samples", 2000)
     taf_ds = data.load_taf28k(max_samples=max_samples)
     chi_ds = data.load_chifraud(max_samples=max_samples)
+    chifraud_proxied = False
     if not chi_ds["texts"]:
         logger.warning("ChiFraud text JSONL missing; using balanced4k as Chinese-fraud proxy for exp5")
         chi_ds = data.load_chifraud_balanced(max_samples=max_samples)
+        chifraud_proxied = True
     datasets = {
         "taf28k": taf_ds,
         "chifraud": chi_ds,
@@ -66,8 +68,10 @@ def run(config: dict) -> dict:
                         finetuned_path=finetuned_path,
                     )
                     results[dname] = {"f1": result["f1"], "accuracy": result["accuracy"],
-                                      "n_samples": n_adv,
-                                      "note": f"本地 AdvFraud 总样本 {n_adv} 条（非论文声称 3,000）"}
+                                      "n_samples": len(mixed_texts),
+                                      "note": f"本地 AdvFraud 总样本 {n_adv} 条（非论文声称 3,000）；"
+                                              f"full_pool 实为 shared_test_split 的 10% 测试切片 "
+                                              f"（{len(adv_test_texts)} 条 fraud + TAF 测试 normal {len(normal_texts)} 条），非全池。"}
 
                     # 注意（audit P1-1）：本地 AdvFraud 数据为 2,119 条（119 S1–S8 对抗改写 +
                     # 2,000 novel_template），非论文声称的 3,000 条；且 review_status 全为
@@ -103,6 +107,10 @@ def run(config: dict) -> dict:
 
         out = {"computation": "h100_real_qwen",
                "model_source": "exp1_qad" if finetuned_path else "base_qwen"}
+        if chifraud_proxied:
+            # ChiFraud 文本 JSONL 缺失时以 balanced4k 顶替，非真实 ChiFraud OOD 语料
+            # （audit P2: ChiFraud 缺失静默顶替 balanced4k）—— 显式盖章，勿冒充实测 ChiFraud。
+            out["chifraud_proxy"] = "balanced4k"
         if "taf28k" in results:
             out["taf28k"] = results["taf28k"]
         if "chifraud" in results:

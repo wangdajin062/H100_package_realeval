@@ -79,11 +79,12 @@ def load_and_split_dataset(
 
 
 # ── Shared leakage-safe split manifest (P1-M1) ──────────────────────────────────
-# exp1/2/3/4/9/10/11/12 already split via stratified group_split. exp5/13/14 used a
-# positional tail slice, which (a) is not stratified, (b) skips template-group dedup,
-# and (c) does not match exp1's random split — so ~80% of the "test" tail actually sat
-# in exp1's training set. These helpers give every experiment ONE consistent, leakage-
-# safe test partition: prefer exp1's persisted manifest; else a deterministic group_split.
+# exp1/2/3/4/9/10/11/12 already split via stratified group_split (stratified by label
+# ONLY — group_split does NOT dedup template families, see audit P2). exp5/13/14 used a
+# positional tail slice, which (a) is not stratified and (b) does not match exp1's random
+# split — so ~80% of the "test" tail actually sat in exp1's training set. These helpers
+# give every experiment ONE consistent, leakage-safe test partition: prefer exp1's
+# persisted manifest; else a deterministic group_split.
 
 def _split_text_hash(text: str) -> str:
     return hashlib.sha1(str(text).encode("utf-8")).hexdigest()[:16]
@@ -115,7 +116,12 @@ def load_split_manifest(dataset_key: str) -> set[str] | None:
 def leakage_safe_indices(
     texts: list[str], labels: list[Any], *, test_ratio: float = 0.1, seed: int = 42
 ) -> tuple[list[int], list[int]]:
-    """Stratified, template-group-safe (train_idx, test_idx) — the same split exp1 uses."""
+    """Stratified-by-label (train_idx, test_idx) — the same split exp1 uses.
+
+    NOTE: stratified by label ONLY; no template-group dedup is performed (audit P2:
+    the name "group_split" implies template-family grouping, but the implementation
+    groups by label). Near-duplicate template families may straddle the split.
+    """
     from realeval.data import group_split
     return group_split(texts, labels, test_ratio=test_ratio, seed=seed)
 
@@ -187,6 +193,17 @@ def config_override(config: dict[str, Any], **overrides: Any) -> dict[str, Any]:
 def resolve_qad_path() -> Path:
     """解析 exp1 产出的 QAD 模型路径。"""
     return MODELS / "exp1_qad"
+
+
+def resolve_qad_gguf_path() -> Path:
+    """解析 exp1 QAD 产物经 scripts/export_to_gguf.py 导出的 Q4_K_M GGUF 路径。
+
+    export_to_gguf.py 默认输出 ``<source_dir>_<quant_type>.gguf``，即
+    ``outputs/models/exp1_qad_q4_k_m.gguf``（quant_type 默认 q4_k_m）。exp14 的 Q4_K_M
+    边缘学生必须用这个 QAD 导出产物推理，而非 config.models.student_gguf 的 stock
+    官方 GGUF（那会退化为 zero-shot，语义错位，audit P1-11）。
+    """
+    return MODELS / "exp1_qad_q4_k_m.gguf"
 
 
 def build_variant_result(

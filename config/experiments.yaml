@@ -27,7 +27,7 @@ training:
   batch_size: 8
   learning_rate: 1e-5
   epochs: 5
-  apply_ov_rescaling: true
+  apply_ov_rescaling: false  # QAD 主实验无 OVF（audit P1-1：原 true 使 exp1 实为 QAD+OVF 却映射为无 OVF）；OVF 是 exp3 单独消融（硬编码 true）
   quantize: "nvfp4"  # nvfp4 (NBE QDQ fake-quant, QAT — paper Eq.(eq:nbe)), fp16, int8, int4, nf4 (PTQ)
   balance_class_weight: true  # weight the classification-head CE by inverse class frequency (fraud is the minority class)
   val_frac: 0.15               # fraction of training data held out for threshold calibration
@@ -40,13 +40,13 @@ training:
 
 distillation:
   temperature: 1.0
-  alpha_ce: 0.5
   alpha_kl: 0.5
   task_weight: 1e-3             # classification-head loss weight (head LR coefficient)
   max_batch: 8
   max_seq_length: 4096
-  freeze_frac_default: 1.0
-  window_default: 1.0
+  # 旧 freeze_frac_default / window_default 已移除：OV-Freeze 的投影层子集与
+  # 前向 rescaling 强度改由 real_qad_distill_train 函数参数 ovf_layers /
+  # rescale_strength 承担（exp3 以 kwargs 传入），不再作为 config 字段。
   total_steps: 2000              # concept-step space for Fig4 alignment (OVF schedule + SNR range)
   ovf_activation_ratio: 0.7      # activate OV-Freeze at 70% of total training steps (final 30%, step 1400/2000)
   ovf_rho: 0.95                  # OV-Freeze EMA coefficient (paper Eq.6, ρ=0.95)

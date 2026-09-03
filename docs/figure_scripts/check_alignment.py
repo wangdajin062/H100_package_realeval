@@ -62,7 +62,7 @@ def load_results() -> dict:
 
 
 def _get(results: dict, exp_name: str, keys: tuple):
-    """按整段 key 遍历（不做点分割——key 可含 '.'，如 teacher_1.5b / rho_0.0）。
+    """按整段 key 遍历（不做点分割——key 可含 '.'，如 teacher_1.5b / strength_0.0）。
 
     返回 (value, ok)。ok=False 表示：
       · key 不存在；或

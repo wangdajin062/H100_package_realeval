@@ -38,7 +38,10 @@ def _load_results() -> dict[str, dict]:
     for f in sorted(_RESULTS_DIR.glob("exp*_*.json")):
         try:
             r = json.loads(f.read_text(encoding="utf-8"))
-            if str(r.get("computation", "")).startswith("smoke"):
+            comp = str(r.get("computation", ""))
+            # smoke 合成验证结果 与 failed 失败结果都不是有效测量产出，绝不能进入图表。
+            # 过滤 failed 使更早的一次成功结果不被最新时间戳的失败结果遮蔽（audit P2）。
+            if comp.startswith("smoke") or comp == "failed":
                 continue
             name = r.get("experiment", f.stem.split("_")[0])
             by_exp[name] = r
@@ -49,7 +52,8 @@ def _load_results() -> dict[str, dict]:
     if all_file.exists():
         try:
             for k, v in json.loads(all_file.read_text(encoding="utf-8")).items():
-                if k in by_exp or str(v.get("computation", "")).startswith("smoke"):
+                comp = str(v.get("computation", ""))
+                if k in by_exp or comp.startswith("smoke") or comp == "failed":
                     continue
                 by_exp[k] = v
         except Exception:
@@ -117,6 +121,21 @@ def _from_result(exp_name: str, *keys: str, placeholder: str, fallback=_SENTINEL
         return fallback
     if fallback is not _SENTINEL:
         _MISSING_PLACEHOLDERS.append((placeholder, exp_name, keys, fallback))
+        # 静默回退 → 显式警告：非 cited 的 fallback 意味着实验结果缺失。fallback=None
+        # 是显式报缺（诚实状态，待 H100 重跑回填实测）；fallback=非 None 是用历史/遗留
+        # 常量兜底出图，图与论文表格可能不一致（audit P1-14）。
+        if fallback is None:
+            warnings.warn(
+                f"{placeholder}: 实验结果 {exp_name} 缺少字段 {'→'.join(keys)}，"
+                f"显式报缺为 None（待 H100 重跑回填实测值）",
+                stacklevel=2,
+            )
+        else:
+            warnings.warn(
+                f"{placeholder}: 实验结果 {exp_name} 缺少字段 {'→'.join(keys)}，"
+                f"回退到 fallback={fallback!r}（非 cited，图/表可能不一致）",
+                stacklevel=2,
+            )
         return fallback
     raise MissingExperimentData(
         f"{placeholder}: 实验结果 {exp_name} 缺少字段 {'→'.join(keys)}"
@@ -153,16 +172,16 @@ PTQ_BASELINES = [
 ]
 
 # QAT / QAD / OV-Freeze placeholders (resolved from experiment outputs)
-PH_EXP1_F1 = _from_result("exp1", "f1", placeholder="PH_EXP1_F1", fallback=0.7974)
-# 注：调优后（results_20260803）exp1 F1=0.7974（旧 0.5121），
-# acc=0.9456，std=0.0133。
+PH_EXP1_F1 = _from_result("exp1", "f1", placeholder="PH_EXP1_F1", fallback=None)
+# 注：审计 P1-14 —— fallback 原为 0.7974（2026-08-03 失败运行的实测遗留值），与论文
+# Table 3 的 0.916 矛盾导致图/表不一致。改为 None 显式报缺，待 H100 重跑回填实测值。
 PH_EXP3_OVF_FULL_F1 = _from_result(
     "exp3", "conditions", "ov_freeze_full", "f1",
-    placeholder="PH_EXP3_OVF_FULL_F1", fallback=0.8047
+    placeholder="PH_EXP3_OVF_FULL_F1", fallback=None  # audit P1-14: was 0.8047 (stale 8-03 run) vs paper 0.923
 )
 PH_EXP11_INT4_F1 = _from_result(
     "exp11", "schemes", "int4", "f1",
-    placeholder="PH_EXP11_INT4_F1", fallback=0.6172
+    placeholder="PH_EXP11_INT4_F1", fallback=None  # audit P1-14: was 0.6172 (stale) vs paper 0.915
 )
 # 注：exp11 int4=0.6172 为调优前 exp1_qad 的下游陈旧值（待重跑，预期 ~0.8，见 results_20260803）。
 # QAT (CE-loss) 源：exp2 的 ce_only 变体（loss_fn="ce"）才是论文 Table 3 的 "NVFP4 QAT"
@@ -170,11 +189,11 @@ PH_EXP11_INT4_F1 = _from_result(
 # 语义不同）。fallback 用实测值 0.7667（论文声称 0.844，实测/声称 gap 待 H100 重跑回填）。
 PH_EXP2_CE_ONLY_QAT_F1 = _from_result(
     "exp2", "variants", "ce_only", "f1",
-    placeholder="PH_EXP2_CE_ONLY_QAT_F1", fallback=0.7667
+    placeholder="PH_EXP2_CE_ONLY_QAT_F1", fallback=None  # audit P1-14: was 0.7667 (stale) vs paper 0.844
 )
 PH_EXP14_Q4KM_F1 = _from_result(
     "exp14", "models", "q4km_0.5b_llama_cpp", "f1",
-    placeholder="PH_EXP14_Q4KM_F1", fallback=0.7025
+    placeholder="PH_EXP14_Q4KM_F1", fallback=None  # audit P1-14: was 0.7025 (stale) vs paper 0.917
 )
 # 注：调优后 exp14 异常回退（q4km 0.0014 / bf16 0.16，重跑验证中）。0.7025 仅作
 # 「结果文件完全缺失」时的兜底；GGUF 不可用导致实测 f1=None 时显式报缺为 None，
@@ -186,17 +205,18 @@ _ovf_f1   = _OVF_FULL_F1   # alias for Fig3 QAT_QAD_OVF compatibility
 _qat_f1 = PH_EXP2_CE_ONLY_QAT_F1
 
 # Error bars for the QAT/QAD rows: resolved from experiment outputs when a
-# multi-seed run provides a measured std. exp1 已产出真实 std=0.0133（5 seed）；
-# exp3/11/14 尚未重跑出真实 std，保留论文估算误差棒（标注：非实测，待重跑回填）。
-PH_EXP1_ERR          = _from_result("exp1", "std", placeholder="PH_EXP1_ERR", fallback=0.0133)
+# multi-seed run provides a measured std. Audit P1-14: the stale 8-03 std values
+# (0.0133/0.006/0.014/0.007) contradicted the paper's ±0.005–0.014 bars; they are
+# None (explicit missing) until the H100 re-run produces a real multi-seed std.
+PH_EXP1_ERR          = _from_result("exp1", "std", placeholder="PH_EXP1_ERR", fallback=None)
 PH_EXP3_OVF_FULL_ERR = _from_result("exp3", "conditions", "ov_freeze_full", "std",
-                                    placeholder="PH_EXP3_OVF_FULL_ERR", fallback=0.006)
+                                    placeholder="PH_EXP3_OVF_FULL_ERR", fallback=None)
 PH_EXP11_INT4_ERR    = _from_result("exp11", "schemes", "int4", "std",
-                                    placeholder="PH_EXP11_INT4_ERR", fallback=0.014)
+                                    placeholder="PH_EXP11_INT4_ERR", fallback=None)
 PH_EXP2_CE_ONLY_QAT_ERR = _from_result("exp2", "variants", "ce_only", "std",
-                                       placeholder="PH_EXP2_CE_ONLY_QAT_ERR", fallback=0.014)
+                                       placeholder="PH_EXP2_CE_ONLY_QAT_ERR", fallback=None)
 PH_EXP14_Q4KM_ERR    = _from_result("exp14", "models", "q4km_0.5b_llama_cpp", "std",
-                                    placeholder="PH_EXP14_Q4KM_ERR", fallback=0.007)
+                                    placeholder="PH_EXP14_Q4KM_ERR", fallback=None)
 
 def _recovery(f1):
     """由 F1 计算恢复率；F1 缺失（None，显式报缺）时恢复率同样报缺为 None。"""
@@ -270,20 +290,20 @@ def _loss_entry(vk, label, fallback_f1, fallback_kl):
 
 EXP2_LOSS_ABLATION = [
     _loss_entry("kl_only",          "Pure KL\n(ours)",
-                _from_result("exp2", "variants", "kl_only", "f1", placeholder="PH_EXP2_KL_ONLY_F1", fallback=0.5577),
-                _from_result("exp2", "variants", "kl_only", "kl_final", placeholder="PH_EXP2_KL_ONLY_KL", fallback=0.34629)),
+                _from_result("exp2", "variants", "kl_only", "f1", placeholder="PH_EXP2_KL_ONLY_F1", fallback=None),
+                _from_result("exp2", "variants", "kl_only", "kl_final", placeholder="PH_EXP2_KL_ONLY_KL", fallback=None)),
     _loss_entry("mse_only",         "MSE",
-                _from_result("exp2", "variants", "mse_only", "f1", placeholder="PH_EXP2_MSE_ONLY_F1", fallback=0.7667),
-                _from_result("exp2", "variants", "mse_only", "kl_final", placeholder="PH_EXP2_MSE_ONLY_KL", fallback=3.34172)),
+                _from_result("exp2", "variants", "mse_only", "f1", placeholder="PH_EXP2_MSE_ONLY_F1", fallback=None),
+                _from_result("exp2", "variants", "mse_only", "kl_final", placeholder="PH_EXP2_MSE_ONLY_KL", fallback=None)),
     _loss_entry("ce_only",          "CE\n(= QAT)",
-                _from_result("exp2", "variants", "ce_only", "f1", placeholder="PH_EXP2_CE_ONLY_F1", fallback=0.7667),
-                _from_result("exp2", "variants", "ce_only", "kl_final", placeholder="PH_EXP2_CE_ONLY_KL", fallback=3.34172)),
+                _from_result("exp2", "variants", "ce_only", "f1", placeholder="PH_EXP2_CE_ONLY_F1", fallback=None),
+                _from_result("exp2", "variants", "ce_only", "kl_final", placeholder="PH_EXP2_CE_ONLY_KL", fallback=None)),
     _loss_entry("kl_mse_combined",  "3-term\nhybrid",
-                _from_result("exp2", "variants", "kl_mse_combined", "f1", placeholder="PH_EXP2_KL_MSE_F1", fallback=0.5577),
-                _from_result("exp2", "variants", "kl_mse_combined", "kl_final", placeholder="PH_EXP2_KL_MSE_KL", fallback=0.34629)),
+                _from_result("exp2", "variants", "kl_mse_combined", "f1", placeholder="PH_EXP2_KL_MSE_F1", fallback=None),
+                _from_result("exp2", "variants", "kl_mse_combined", "kl_final", placeholder="PH_EXP2_KL_MSE_KL", fallback=None)),
     _loss_entry("kl_task",          "KL +\ntask",
-                _from_result("exp2", "variants", "kl_task", "f1", placeholder="PH_EXP2_KL_TASK_F1", fallback=0.5577),
-                _from_result("exp2", "variants", "kl_task", "kl_final", placeholder="PH_EXP2_KL_TASK_KL", fallback=0.34629)),
+                _from_result("exp2", "variants", "kl_task", "f1", placeholder="PH_EXP2_KL_TASK_F1", fallback=None),
+                _from_result("exp2", "variants", "kl_task", "kl_final", placeholder="PH_EXP2_KL_TASK_KL", fallback=None)),
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -299,10 +319,12 @@ def _teacher_entry(tk, label, tokens, fallback_f1, fallback_conv):
     return {"teacher": label, "f1_fixed": f1_fixed, "f1_conv": f1_conv,
             "tokens_B": tokens}
 
-# exp10 现产出 f1_fixed/f1_conv 双维（experiments/exp10_teacher_scale.py:66-68：固定 token
-# 预算 1 epoch vs 收敛 5 epoch），fig5b 脚本读取的正是这两维。旧的调优前重跑仅记录单维
-# F1，故此处 fallback 统一为 None 显式报缺（不再用论文声称值 0.896/0.877/… 冒充实测），
-# exp10 真实产出存在时正常读取双维（见 reports/CONSISTENCY_AUDIT.md §2.5/§6.4）。
+# exp10 现产出 f1_fixed/f1_conv 双维：f1_fixed 为固定 0.5B-token 预算（audit P1-6——原 1 epoch
+# 差两个数量级，已改 max_train_tokens=500M），f1_conv 为收敛训练（5 epochs）。fig5b 脚本读取的
+# 正是这两维。fallback 统一为 None 显式报缺（不再用论文声称值 0.896/0.877/… 冒充实测），exp10
+# 真实产出存在时正常读取双维。tokens_B 注解为论文 Fig5b 的「到收敛 token 预算」声明值
+# （0.5/0.7/1.0/2.0B，随 teacher 尺度增大）；conv 臂当前以 5 epochs 近似收敛，尚未按该预算
+# 逐 teacher 训练——此为 P1-6 的残留（待 H100 重跑时按预算训练或改图注）。
 EXP10_TEACHER = [
     _teacher_entry("teacher",        "0.5B\n(same)", 0.5,
                    _from_result("exp10", "scales", "teacher", "f1_fixed", placeholder="PH_EXP10_T_05B_FIXED", fallback=None),
@@ -325,71 +347,72 @@ EXP10_TEACHER = [
 _cond   = _get("exp3", "conditions") or {}
 _layers = _get("exp3", "layer_selection") or {}
 
-# Individual F1 values from each condition/layer (not all from ov_freeze_full)
-# exp3 outputs layer_selection keys: early(0.25), mid(0.5), late(0.75), all(1.0).
-# Map them to the figure labels used by fig6_ovf_ablation.py.
-_f1_no_ovf = _r(_from_result("exp3", "conditions", "no_reg", "f1", placeholder="PH_EXP3_NO_OVF_F1", fallback=0.8047))
-_f1_ovf    = _OVF_FULL_F1   # reuse consolidated constant
-_f1_half   = _r(_from_result("exp3", "conditions", "ov_freeze_half", "f1", placeholder="PH_EXP3_OVF_HALF_F1", fallback=0.8047))
-_f1_qrt    = _r(_from_result("exp3", "conditions", "ov_freeze_quarter", "f1", placeholder="PH_EXP3_OVF_QUARTER_F1", fallback=0.8047))
-_f1_early  = _r(_from_result("exp3", "layer_selection", "early", "f1", placeholder="PH_EXP3_LAYER_EARLY_F1", fallback=None))
-_f1_mid    = _r(_from_result("exp3", "layer_selection", "mid", "f1", placeholder="PH_EXP3_LAYER_MID_F1", fallback=None))
-_f1_late   = _r(_from_result("exp3", "layer_selection", "late", "f1", placeholder="PH_EXP3_LAYER_LATE_F1", fallback=None))
+# Individual F1 values. exp3 layer_selection keys are projection-layer subsets
+# (paper Fig6a q→v→k→o cumulative order): q / q_v / q_v_k / q_v_k_o. The "ours" bar
+# reuses the full-set condition (conditions.ov_freeze_full = ("q","v","k","o"), the
+# same subset as q_v_k_o), which is also the PH_EXP3_OVF_FULL_F1 source for Fig3/Fig4.
+# The FFN / +FFN bars of an earlier draft are removed: OV-Freeze on FFN layers was
+# never implemented in real_backend (they were aliased to early/full), and keeping
+# them would fabricate a measurement. FFN-extension remains future work.
+_f1_no_ovf = _r(_from_result("exp3", "conditions", "no_reg", "f1", placeholder="PH_EXP3_NO_OVF_F1", fallback=None))
+_f1_ovf    = _OVF_FULL_F1   # reuse consolidated constant (= conditions.ov_freeze_full.f1)
+_f1_q      = _r(_from_result("exp3", "layer_selection", "q", "f1", placeholder="PH_EXP3_LAYER_Q_F1", fallback=None))
+_f1_qv     = _r(_from_result("exp3", "layer_selection", "q_v", "f1", placeholder="PH_EXP3_LAYER_QV_F1", fallback=None))
+_f1_qvk    = _r(_from_result("exp3", "layer_selection", "q_v_k", "f1", placeholder="PH_EXP3_LAYER_QVK_F1", fallback=None))
 
-# drift fallback：no_reg/full 更新为调优后 OVF 修复验证值（2026-08-03 重跑验证）：
-#   no_reg 52.45 → full 0.0。quarter/half 调优后完整 exp3 待跑，沿用调优前递减序列
-#   （48.186/35.561）。layer_selection 三点（early/mid/late）一直未单独记录，暂保留 61.479。
-_drift_no   = _r(_from_result("exp3", "conditions", "no_reg", "variance_drift_pct", placeholder="PH_EXP3_NO_OVF_DRIFT", fallback=52.45), 1)
-_drift_full = _r(_from_result("exp3", "conditions", "ov_freeze_full", "variance_drift_pct", placeholder="PH_EXP3_OVF_FULL_DRIFT", fallback=0.0), 1)
-_drift_half = _r(_from_result("exp3", "conditions", "ov_freeze_half", "variance_drift_pct", placeholder="PH_EXP3_OVF_HALF_DRIFT", fallback=35.561), 1)
-_drift_qrt  = _r(_from_result("exp3", "conditions", "ov_freeze_quarter", "variance_drift_pct", placeholder="PH_EXP3_OVF_QUARTER_DRIFT", fallback=48.186), 1)
-_drift_early = _r(_from_result("exp3", "layer_selection", "early", "variance_drift_pct", placeholder="PH_EXP3_LAYER_EARLY_DRIFT", fallback=None), 1)
-_drift_mid   = _r(_from_result("exp3", "layer_selection", "mid", "variance_drift_pct", placeholder="PH_EXP3_LAYER_MID_DRIFT", fallback=None), 1)
-_drift_late  = _r(_from_result("exp3", "layer_selection", "late", "variance_drift_pct", placeholder="PH_EXP3_LAYER_LATE_DRIFT", fallback=None), 1)
+# drift fallback：audit P1-14 —— no_reg/full 原 fallback 52.45/0.0（8-03 遗留值）与论文
+#   +18.2%→+1.3% 矛盾，改为 None 显式报缺待 H100 重跑回填。
+_drift_no   = _r(_from_result("exp3", "conditions", "no_reg", "variance_drift_pct", placeholder="PH_EXP3_NO_OVF_DRIFT", fallback=None), 1)
+_drift_full = _r(_from_result("exp3", "conditions", "ov_freeze_full", "variance_drift_pct", placeholder="PH_EXP3_OVF_FULL_DRIFT", fallback=None), 1)
+_drift_q    = _r(_from_result("exp3", "layer_selection", "q", "variance_drift_pct", placeholder="PH_EXP3_LAYER_Q_DRIFT", fallback=None), 1)
+_drift_qv   = _r(_from_result("exp3", "layer_selection", "q_v", "variance_drift_pct", placeholder="PH_EXP3_LAYER_QV_DRIFT", fallback=None), 1)
+_drift_qvk  = _r(_from_result("exp3", "layer_selection", "q_v_k", "variance_drift_pct", placeholder="PH_EXP3_LAYER_QVK_DRIFT", fallback=None), 1)
 
 EXP3_OVF_LAYER_ABLATION = [
     {"config": "no OVF",        "f1": _f1_no_ovf, "drift_pct": _drift_no},
-    {"config": "FFN",           "f1": _f1_early,  "drift_pct": _drift_early},
-    {"config": "q",             "f1": _f1_mid,    "drift_pct": _drift_mid},
-    {"config": "q,v",           "f1": _f1_half,   "drift_pct": _drift_half},
-    {"config": "q,k,v",         "f1": _f1_late,   "drift_pct": _drift_late},
+    {"config": "q",             "f1": _f1_q,      "drift_pct": _drift_q},
+    {"config": "q,v",           "f1": _f1_qv,     "drift_pct": _drift_qv},
+    {"config": "q,k,v",         "f1": _f1_qvk,    "drift_pct": _drift_qvk},
     {"config": "q,k,v,o\n(ours)", "f1": _f1_ovf,  "drift_pct": _drift_full},
-    {"config": "q,k,v,o\n+FFN", "f1": _f1_ovf,    "drift_pct": _drift_full},
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Figure 6(b) / exp3 rho sweep : OV-Freeze activation step-ratio
+# Figure 6(b) / exp3 window_sweep : forward rescaling strength
 # ═══════════════════════════════════════════════════════════════════════════════
 
-_rho = _get("exp3", "rho_sweep") or {}
-def _rho_entry(pct, rk, fallback_f1, fallback_ppl):
-    v = _rho.get(rk, {})
+_sweep = _get("exp3", "window_sweep") or {}
+def _sweep_entry(strength, rk, fallback_f1, fallback_ppl):
+    v = _sweep.get(rk, {})
     return {
-        "ratio_pct": pct,
+        "strength": strength,
         "f1":  _r(v.get("f1",  fallback_f1)) if v else fallback_f1,
         "ppl": _r(v.get("ppl", fallback_ppl)) if v else fallback_ppl,
     }
 
-# rho_sweep（OVF 激活步比）调优后未重跑，原 fallback 为论文声称值。改为 None 显式报缺。
+# window_sweep sweeps `rescale_strength` (the forward rescaling intensity of paper
+# Eq.8), NOT the EMA coefficient ρ (Eq.6). NOTE: an earlier draft labelled this x-axis
+# "activation step ratio"; the sweep actually varies rescale_strength. The activation-
+# window sweep (ovf_activation_ratio) is a separate, still-unimplemented ablation.
+# Values fall back to None (explicit missing) until the H100 re-run.
 EXP3_OVF_STEP_RATIO = [
-    _rho_entry( 0, "rho_0.0",
-               _from_result("exp3", "rho_sweep", "rho_0.0", "f1", placeholder="PH_EXP3_RHO_00_F1", fallback=None),
-               _from_result("exp3", "rho_sweep", "rho_0.0", "ppl", placeholder="PH_EXP3_RHO_00_PPL", fallback=None)),
-    _rho_entry(10, "rho_0.1",
-               _from_result("exp3", "rho_sweep", "rho_0.1", "f1", placeholder="PH_EXP3_RHO_01_F1", fallback=None),
-               _from_result("exp3", "rho_sweep", "rho_0.1", "ppl", placeholder="PH_EXP3_RHO_01_PPL", fallback=None)),
-    _rho_entry(20, "rho_0.2",
-               _from_result("exp3", "rho_sweep", "rho_0.2", "f1", placeholder="PH_EXP3_RHO_02_F1", fallback=None),
-               _from_result("exp3", "rho_sweep", "rho_0.2", "ppl", placeholder="PH_EXP3_RHO_02_PPL", fallback=None)),
-    _rho_entry(30, "rho_0.3",
-               _from_result("exp3", "rho_sweep", "rho_0.3", "f1", placeholder="PH_EXP3_RHO_03_F1", fallback=None),
-               _from_result("exp3", "rho_sweep", "rho_0.3", "ppl", placeholder="PH_EXP3_RHO_03_PPL", fallback=None)),
-    _rho_entry(40, "rho_0.4",
-               _from_result("exp3", "rho_sweep", "rho_0.4", "f1", placeholder="PH_EXP3_RHO_04_F1", fallback=None),
-               _from_result("exp3", "rho_sweep", "rho_0.4", "ppl", placeholder="PH_EXP3_RHO_04_PPL", fallback=None)),
-    _rho_entry(50, "rho_0.5",
-               _from_result("exp3", "rho_sweep", "rho_0.5", "f1", placeholder="PH_EXP3_RHO_05_F1", fallback=None),
-               _from_result("exp3", "rho_sweep", "rho_0.5", "ppl", placeholder="PH_EXP3_RHO_05_PPL", fallback=None)),
+    _sweep_entry(0.0, "strength_0.0",
+               _from_result("exp3", "window_sweep", "strength_0.0", "f1", placeholder="PH_EXP3_STR_00_F1", fallback=None),
+               _from_result("exp3", "window_sweep", "strength_0.0", "ppl", placeholder="PH_EXP3_STR_00_PPL", fallback=None)),
+    _sweep_entry(0.2, "strength_0.2",
+               _from_result("exp3", "window_sweep", "strength_0.2", "f1", placeholder="PH_EXP3_STR_02_F1", fallback=None),
+               _from_result("exp3", "window_sweep", "strength_0.2", "ppl", placeholder="PH_EXP3_STR_02_PPL", fallback=None)),
+    _sweep_entry(0.4, "strength_0.4",
+               _from_result("exp3", "window_sweep", "strength_0.4", "f1", placeholder="PH_EXP3_STR_04_F1", fallback=None),
+               _from_result("exp3", "window_sweep", "strength_0.4", "ppl", placeholder="PH_EXP3_STR_04_PPL", fallback=None)),
+    _sweep_entry(0.6, "strength_0.6",
+               _from_result("exp3", "window_sweep", "strength_0.6", "f1", placeholder="PH_EXP3_STR_06_F1", fallback=None),
+               _from_result("exp3", "window_sweep", "strength_0.6", "ppl", placeholder="PH_EXP3_STR_06_PPL", fallback=None)),
+    _sweep_entry(0.8, "strength_0.8",
+               _from_result("exp3", "window_sweep", "strength_0.8", "f1", placeholder="PH_EXP3_STR_08_F1", fallback=None),
+               _from_result("exp3", "window_sweep", "strength_0.8", "ppl", placeholder="PH_EXP3_STR_08_PPL", fallback=None)),
+    _sweep_entry(1.0, "strength_1.0",
+               _from_result("exp3", "window_sweep", "strength_1.0", "f1", placeholder="PH_EXP3_STR_10_F1", fallback=None),
+               _from_result("exp3", "window_sweep", "strength_1.0", "ppl", placeholder="PH_EXP3_STR_10_PPL", fallback=None)),
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -461,7 +484,7 @@ _FIG4_REF = {
 # 同质 INT4 读取 exp11 的 int4 方案（uniform INT4），与 PH_EXP11_INT4_F1 同源；
 # 此前误读 exp1.f1（QAD 字段），与 PH_EXP1_F1 的 fallback 相冲突（见 reports/CONSISTENCY_AUDIT.md）。
 _f1_homo = _from_result("exp11", "schemes", "int4", "f1",
-                        placeholder="PH_EXP11_HOMO_F1", fallback=0.6172)  # homogeneous INT4 (exp11 int4)
+                        placeholder="PH_EXP11_HOMO_F1", fallback=None)  # homogeneous INT4 (exp11 int4); audit P1-14: was 0.6172 vs paper 0.915
 _f1_hetero = _OVF_FULL_F1  # QAD+OVF (heterogeneous)
 
 
@@ -483,7 +506,7 @@ FIG4_QUANT = {
 FIG4_ADVFRAUD = {
     "labels": ["Full pool\n(3,000)", "Curated subset\n(517)"],
     "f1": [
-        _from_result("exp5", "advfraud", "full_pool", "f1", placeholder="PH_EXP5_ADVFRAUD_FULL_POOL_F1", fallback=0.1238),
+        _from_result("exp5", "advfraud", "full_pool", "f1", placeholder="PH_EXP5_ADVFRAUD_FULL_POOL_F1", fallback=None),
         _from_result("exp5", "advfraud", "curated", "f1", placeholder="PH_EXP5_ADVFRAUD_CURATED_F1", fallback=None),
     ],
     "bf16_matched": _from_result(
@@ -520,6 +543,10 @@ if __name__ == "__main__":
         if abs(expected - m["recovery"]) >= 0.06:
             errors.append(f"{m['key']}: recovery {m['recovery']} != {expected}")
     for m in QAT_QAD_OVF:
+        # f1/recovery 显式报缺为 None（audit P1-14）时跳过一致性校验——无实测值
+        # 就没有 recovery 可核对，不应 TypeError。
+        if m["f1"] is None or m["recovery"] is None:
+            continue
         expected = round(m["f1"] / BF16_F1 * 100, 1)
         if abs(expected - m["recovery"]) >= 0.06:
             errors.append(f"{m['name']}: recovery {m['recovery']} != {expected}")
