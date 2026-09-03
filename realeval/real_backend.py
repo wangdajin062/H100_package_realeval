@@ -292,14 +292,21 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
 
     def _make_student_hook(key: str, proj: str):
         def _hook(module, args, output):
-            s_var_batch[key] = output.detach().float().var(dim=(0, 1))
+            # Keep gradient on the variance ONLY for the OVF-active projection layers in
+            # the terminal window: L_OVF (Eq.5) must back-propagate through Var_batch^(t)
+            # to steer parameters (audit: L_OVF was inert when detached). All other captures
+            # (inactive window / non-OVF layers) stay detached running statistics — no
+            # gradient, no retained graph, no cross-step autograd leakage.
+            _need_grad = _ovf_state["active"] and proj in ovf_layers
+            s_var_batch[key] = (output.float() if _need_grad else output.detach().float()).var(dim=(0, 1))
             if _ovf_state["active"] and proj in ovf_layers:
                 ema = s_var_ema.get(key)
                 calib = t_var_calib.get(key)
                 if ema is not None and calib is not None:
                     # stop-gradient correction c_ℓ = sg[√(σ²_BF16 / Var_EMA)] (paper Eq.8);
                     # rescale_strength interpolates toward full rescaling (Eq.8 at 1.0).
-                    c = (calib / (ema + 1e-9)).sqrt().detach()
+                    # ema.detach(): rescale always reads the detached running statistic.
+                    c = (calib / (ema.detach() + 1e-9)).sqrt().detach()
                     c = (1.0 + rescale_strength * (c - 1.0)).to(output.dtype)
                     return output * c
             return output
@@ -425,7 +432,11 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
                 if k not in s_var_ema:
                     s_var_ema[k] = sb
                 else:
-                    s_var_ema[k] = ovf_rho * s_var_ema[k] + (1 - ovf_rho) * sb
+                    # Detach the previous EMA term: only the CURRENT batch variance feeds
+                    # gradient into L_OVF (Eq.5 back-props through Var_batch^(t)); the
+                    # ρ·Var_EMA^(t-1) history is a detached running statistic, so the graph
+                    # is never retained across steps.
+                    s_var_ema[k] = ovf_rho * s_var_ema[k].detach() + (1 - ovf_rho) * sb
 
             ovf_loss = torch.tensor(0.0, device=dev)
             if ovf_active:
@@ -437,7 +448,7 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
 
             # Signed relative variance drift across ALL projection layers (paper:
             # +18.2% → +1.3%); positive means the student variance exceeds the BF16 teacher.
-            _drift_terms = [((s_var_ema[k] - t_var_calib[k].to(s_var_ema[k].dtype))
+            _drift_terms = [((s_var_ema[k].detach() - t_var_calib[k].to(s_var_ema[k].dtype))
                              / (t_var_calib[k].abs() + 1e-9)).mean()
                             for k in s_var_ema if k in t_var_calib]
             drift_val = float(torch.stack(_drift_terms).mean() * 100) if _drift_terms else 0.0
