@@ -383,22 +383,25 @@ def real_qad_distill_train(config: dict, train_texts: list[str], train_labels: l
                 with torch.inference_mode():
                     t_logits_head = (teacher_head(t_last) if teacher_head is not None
                                      else head(t_last))
-                kl_loss = F.kl_div(
-                    F.log_softmax(logits / T, dim=-1),
-                    F.softmax(t_logits_head / T, dim=-1),
-                    reduction="batchmean",
-                ) * (T ** 2)
+                # Manual KL, NOT F.kl_div: t_logits_head is an inference tensor (computed
+                # under torch.inference_mode); F.kl_div saves its target for backward and
+                # raises "Inference tensors cannot be saved for backward" once logits
+                # requires grad. target*(log(target)−input) summed over classes, mean over
+                # batch — identical to F.kl_div(reduction="batchmean"); the teacher target
+                # only ever appears as a detached multiplicative coefficient (never saved).
+                _log_probs = F.log_softmax(logits / T, dim=-1)
+                _target_probs = F.softmax(t_logits_head / T, dim=-1)
+                kl_loss = (_target_probs * (_target_probs.log() - _log_probs)).sum(-1).mean() * (T ** 2)
             elif loss_fn == "pure_kl":
                 # Pure KL with T=1 (paper Eq.(2)): no task CE term. This is the headline
                 # distillation objective of the paper (Table 7, F1=0.916, KL=0.005).
                 with torch.inference_mode():
                     t_logits_head = (teacher_head(t_last) if teacher_head is not None
                                      else head(t_last))
-                kl_loss = F.kl_div(
-                    F.log_softmax(logits, dim=-1),
-                    F.softmax(t_logits_head, dim=-1),
-                    reduction="batchmean",
-                )
+                # Manual KL (same inference-tensor rationale as the kl branch above).
+                _log_probs = F.log_softmax(logits, dim=-1)
+                _target_probs = F.softmax(t_logits_head, dim=-1)
+                kl_loss = (_target_probs * (_target_probs.log() - _log_probs)).sum(-1).mean()
 
             if loss_fn in ("mse", "kl_mse"):
                 # "Logits MSE" (paper Table 5): align head logits (batch, 2), NOT the
