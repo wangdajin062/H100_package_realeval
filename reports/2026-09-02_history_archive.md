@@ -1,7 +1,7 @@
 # 历史报告归档（截至 2026-09-02）
 
-> 本文件由 2026-09-02 整理生成，将 reports/ 下 25 份历史修订文档归档为一份。
-> 保留的活跃文档：`2026-09-02_a_road_execution.md`、`2026-09-02_script_design_consistency_audit.md`。
+> 本文件由 2026-09-02 整理生成，将 reports/ 下 25 份历史修订文档归档为一份；2026-09-04 二次归档，并入 4 份审计/设计/执行文档（`full_package_audit` / `distillation_design` / `a_road_execution` / `script_design_consistency_audit`）。
+> 保留的活跃文档：`2026-09-02_full_package_audit_triage.md`（执行路线图）。
 
 ## 目录
 
@@ -5968,3 +5968,616 @@ python fig8_revision_ablations.py
   - 未动项（报告中注明需联动或零影响）：exp12 结果键 QAD_MultiGuard_INT4 命名（需 contract/figure 联动）、models.py 非法 quantize 静默全精度（沿用旧模式）、privacy.py n==0 分支 n_pairs 键（无消费方）。
   - GPU 训练全链路（修后 QAT 5 epoch 收敛 + save_pretrained 实机）仍需 H100 验证。
 
+
+---
+
+# 归档：2026-09-02_full_package_audit.md
+
+# 全量包审计报告：验证脚本逻辑与产出 vs 论文实验设计
+
+> 审计日期：2026-09-02。审计对象：整个 `H100_package_realeval` 包（experiments/exp1–exp15、runner/、metrics/、audit/、claims/、outputs/、docs/figure_scripts 桥接层），对照论文 `docs/v29.tex`（§Experiments 479–990 行）与契约 `docs/experiment_result_contract.md`。
+> 方法：5 路并行静态审计 + 关键发现人工抽查复核（exp1 OVF 配置、exp3 ppl、exp12 键名、exp1 failed 结果、alpha_ce/alpha_kl 均已亲验）。
+
+---
+
+## 一、总体判定
+
+**脚本逻辑侧**：未发现硬编码结果冒充实测的主路径。15 个实验的核心路径均为真实计算（真实模型权重 + GPU 训练/推理 + sklearn 指标）；诚实性机制（`pre_run_validation` fail-fast、`is_synthetic` 盖章、`computation="failed"` 落盘、cited/demo 显式标注）经过多轮审计迭代基本到位。claim 验证管道（claim_engine / contract / consistency_check）当前**全部 FAIL/UNSUPPORTED，没有掩盖问题**。
+
+**但存在两个层面的根本问题**：
+
+1. **协议错位**：十余处实验"测的不是论文声称的那个量"——字段满足契约、数值是实测，但协议与论文表格/图的设计定义不同（详见 §三严重级清单）。这些产出若进图，会以实测之名支撑一个它并未执行的实验。
+2. **产出真空**：当前包内**没有任何一次成功的正式实验结果**。exp2–exp15 零结果文件；exp1 最新结果为 `computation="failed"`（GPU 显存 11.8GB < 35GB），更早一份是 `smoke_sklearn` 合成占位；三条 CLAIM 全部 UNSUPPORTED；唯一一次真实 H100 运行（2026-08-03）的原始 JSON 已被归档流程删除，仅存 md 摘要，且摘要自报多项结果与论文叙事**反转**。论文 v29 §5.2–5.9 的核心定量声明，**在包内几乎无一能追溯到实测文件**；图像层靠 `paper_data.py` 的静默常量回退维持"永远能出图"，且回退值（0.7974 等）与论文表格（0.916 等）互相矛盾。
+
+结论：**当前状态下，脚本逻辑大体诚实但多处偏离论文设计；产出结果不能支撑 v29.tex 的任何核心定量声明。** 论文 v29:515 自己亦声明"公开仓库输出尚不能复现所报告表格"。
+
+---
+
+## 二、论文实验设计规格（审计基准）
+
+- **数据集**：TAF-28k（28,511 对，8:1:1，主结果）；AdvFraud-3k（3,000 池 / 517 人工过滤子集；公开仓库仅 2,119 条本地变体，论文已披露 pending）；ChiFraud（OOD 专用）。
+- **协议**：5 seeds mean±std；纯 KL 蒸馏 T=1，同构 0.5B 自蒸馏；OV-Freeze 仅最后 30% 步激活（λ=0.01, EMA ρ=0.95）；NVFP4 = H100 QDQ-NBE 仿真；阈值在 val 上校准；FPR=FP/(FP+TN)；Recovery=F1_quant/F1_BF16。
+- **headline 数值**：BF16 0.931；旗舰 NVFP4 QAD+OVF+CoT 0.923（Recovery 99.1%）；QAD+CoT 0.916；QAT 0.844；PTQ 0.838–0.858；异构 0.923 vs 同质 INT4 0.915；OVF drift +18.2%→+1.3%；推测解码 α 0.78→0.86、H100 3.49×；端侧 P50 268ms；隐私 WER≥0.95、ASV-EER 46.8%、speaker-ID 8.3%。
+- **三条 claim**：CLAIM-01（exp3，OVF 使 drift 降 ≥30%，5 seeds）；CLAIM-02（exp11，int4 vs fp16 F1 差 ≤0.01，5 seeds）；CLAIM-03（exp6，实测 α 推 speedup>2，seeds=1）。
+
+---
+
+## 三、问题清单
+
+### 阻断级（P0）
+
+| # | 问题 | 证据 |
+|---|------|------|
+| P0-1 | **产出真空**：exp2–exp15 零结果文件；exp1 最新 failed、次新 smoke 合成占位；`--validate-contract` 全 FAIL（退出码 2）。论文全部 headline 数字无实测证据 | `outputs/results/` 盘点；`outputs/logs/experiments.log` |
+| P0-2 | **三条 CLAIM 全 UNSUPPORTED**（显存不足），claim 级验证从未通过 | `outputs/claims/CLAIM-01/02/03.json` |
+| P0-3 | **唯一真实 H100 运行（2026-08-03）原始 JSON 已被归档机制删除**，仅存 `outputs/results_20260803.md` 摘要；摘要自报与论文**反转**：exp2 KL 反转（kl_only 0.5577 < mse 0.7667）、exp3 F1 不随 OVF 变化、exp9 CoT 有害（with_cot 0.3131）、exp14 异常 0.0014、exp1 实测 0.7974 vs 论文 0.916 | `outputs/results_20260803.md`；`outputs/archive/` 不存在 |
+| P0-4 | **exp12 键名与契约不符，契约校验恒失败**：产出 `QAD_MultiGuard_NVFP4` vs 契约期望 `QAD_MultiGuard_INT4`（已亲验） | `experiments/exp12_fraudfusion_baseline.py:66` vs `metrics/contract.py:149`、`contract.md:222` |
+| P0-5 | **证据图允许假数据出 PASS**：`outputs/evidence/CLAIM-E2E.json`、`TEST-001.json` 用手工假数据（f1=0.95、commit=abc123、n_samples=0）产出 verdict=PASS；evidence_graph 只按调用方填入值判标准，不校验数值来源 | `audit/evidence_graph.py:204-239`；两个 evidence 文件 |
+
+### 严重级（P1，协议错位：实测存在但测的不是论文声称的量）
+
+| # | 问题 | 证据 |
+|---|------|------|
+| P1-1 | **exp1 默认含 OVF，却被契约映射为 Fig3 "QAD（无 OVF）"行**：`apply_ov_rescaling: true` 为默认（已亲验），论文 0.916 vs 0.923 的 OVF 消融在数据源头消失 | `config/experiments.yaml:30`、`experiments/exp1_qad_production.py:24-25`、`realeval/real_backend.py:315`、`contract.md:13` |
+| P1-2 | **exp3 `ppl` 是 exp(min(KL,10)) 伪困惑度**（已亲验，有注释坦承），论文 Fig6b 的 PPL 波动 ≤+0.18 无法由此支撑 | `experiments/exp3_ov_freeze_control.py:36-41` vs `v29.tex:801` |
+| P1-3 | **exp2 "Logits MSE" 实为 hidden-state MSE + CE**（`mse = ce_loss + mse_loss(s_last, t_last)`），与论文 Table 5 的 logits MSE 语义不符 | `realeval/real_backend.py:383-384,431-432` vs `v29.tex:782` |
+| P1-4 | **论文 PTQ/BitDistiller 基线无任何实验脚本测量**，Fig3/Table 3 全部由 paper_data 硬编码常量填充；exp4 的 LogReg/XGB/MLP 在论文中不存在（且 xgb 实为 GradientBoosting） | `contract.md:12`、`experiments/exp4_baseline_comparison.py:26-39` |
+| P1-5 | **exp5 "curated 517" 是取前 517 行的位置占位**（本地数据无人工过滤标注），却作 MEASURED 字段进图；**exp1 权重缺失时静默降级 base zero-shot** 仍以原字段落盘 | `experiments/exp5_cross_dataset.py:77-88,35-36,104-105`、`contract.py:92` |
+| P1-6 | **exp10 fixed 臂是 1 epoch，≠ 论文 Fig5b 标注的 "Fixed 0.5B tokens"**（差约两个数量级）；tokens_B 注解为硬编码 | `experiments/exp10_teacher_scale.py:36`、`docs/figure_scripts/fig5_loss_teacher_ablation.py:77`、`paper_data.py:307-318` |
+| P1-7 | **exp7 ASV-EER 在原始 F_v 上计算，论文协议是在重建嵌入上计算**（论文 46.8%/48.5% 无法复现）；真实 F_v 就位时 GLO corr 由构造恒 ~1.0 且会列入 measured；PII 扫描扫的是输入语料而非 docstring 所称"模型输出" | `experiments/exp7_privacy_verification.py:79,87-91,107-108`、`realeval/acoustic_embedding.py:160-190` vs `v29.tex:851,881` |
+| P1-8 | **exp9 仅纯文本、单数据集、单 seed**；论文 CoT 表含 AdvFraud 臂、多模态融合流水线与多种子 ± 区间；QAD 产物缺失时静默退回 base 且无标记 | `experiments/exp9_cot_ablation.py:22-45` vs `v29.tex:698-726` |
+| P1-9 | **论文端侧延迟（SD8G3/Q4_K_M，268ms P50 等）全仓库无任何测量来源**，fig1 用硬编码常量；exp8 测的是 H100 教师模型且其产出无任何图/表消费，契约所称 "Table 7" 在 v29 不存在 | `docs/figure_scripts/fig1_architecture.py:127`、`paper_data.py:224-238` vs `v29.tex:843` |
+| P1-10 | **exp11 的 int4/int8/nf4 行 = NVFP4-QAD checkpoint + PTQ 再量化推理**，非论文设计的"同质 INT4 独立训练基线（0.915）"；套件中不存在 int4 QAD 训练路径 | `experiments/exp11_quantization_scheme.py:42-59`、`realeval/real_backend.py:608-617` vs `v29.tex:694` |
+| P1-11 | **exp14 q4km 行测的是 stock 官方 GGUF zero-shot**（无分类头无 OVF），非论文行 "Q4_K_M QAD+OVF 0.917"；导出链 `export_to_gguf.py` 未被消费；解析失败默认判 normal 引入多数类偏置 | `config/experiments.yaml:19`、`experiments/exp14_gguf_comparison.py:65`、`realeval/gguf_backend.py:84` |
+| P1-12 | **exp13 未按论文设计测融合**：文本分支为基座 zero-shot 而非 QAD+OVF 学生；声学为 384-d Whisper 池化而非 128-d F_v；latency_ms 混入融合头/校准器训练耗时；transformer 头是 217 参数冻结随机特征（论文 1.84M）；params 字段与论文 "5 scalars" 不符 | `experiments/exp13_fusion_strategy.py:54-69`、`realeval/real_backend.py:703,867,910-983` vs `v29.tex:458,470-472` |
+| P1-13 | **exp12 存储口径 ≈28×，与论文 57×（248MB NVFP4）不符**；248MB 产物套件中不存在；FraudFusion 已从 v29 消失，cited 条目成孤儿 | `experiments/exp12_fraudfusion_baseline.py:50-63`、`consistency_check.py:39` vs `v29.tex:671,690` |
+| P1-14 | **paper_data.py 静默常量回退**：拿不到实测就用常量出图，fig 脚本无警告；当前 66 个 placeholder 走 fallback；fallback 实测遗留值（0.7974/0.8047/0.6172/0.7025）与论文表格矛盾——图与表必然不一致；PTQ/spec/延迟类硬编码常量则永远"符合论文" | `docs/figure_scripts/paper_data.py:101-123,132,146-199,415-428` |
+| P1-15 | **claim 框架与论文表述错位**：CLAIM-02 是 int4-vs-fp16，论文 fig4a 是异构-vs-同质；CLAIM-03 seeds=1 与论文 5-seed 协议不一致，且其 speedup 为公式推算非实测 | `claims/claim_02_quantization.yaml`、`claims/claim_03_specdec.yaml` vs `v29.tex:694,498` |
+
+### 次要级（P2）
+
+- exp2 epochs=3 vs exp1 的 5，与论文"其余超参相同"声明不符（`exp2:25`）。
+- exp1 `total_steps`/`ovf_activation_step` 为 config 回显而非测量（`real_backend.py:551-552`）；trajectory 仅保留最后一个 seed（`exp1:52-53`）。
+- exp5 "full_pool" 实为 10% 切片且 n_samples 报池大小（`exp5:60,68-69`）；ChiFraud 缺失时 balanced4k 静默顶替（`exp5:16-18`）。
+- exp6 draft 用 argmax 贪心而非从 q 采样，α 系统性偏高；实测 target 为 BF16 教师而非 NVFP4；gamma/n_samples 硬编码无视 config（`specdec.py:65`、`exp6:28`）。
+- exp7 GLO steps=50 硬编码无视 config 的 150（`exp7:89-94`）。
+- exp8 batch_benchmark 的 p50 实为均值、nvfp4 路径未挂 adapter（`exp8:120-159`）。
+- exp11/exp14 多 seed 确定性空转（std=0.0）；exp14 每次循环重复加载 GGUF；exp11 不走共享 manifest（`exp11:19`）。
+- exp12/exp14 在 QAD 产物缺失时静默退化 zero-shot 且无 `model_source` 标记（exp11 有，二者没有）。
+- exp15 已注册实现但 v29.tex:908 仍写 "future work"，文本滞后；contract.md 缺 exp14/exp15 章节、Fig3 表 QAT 行来源描述与实现不符（实现读 exp2.ce_only）。
+- config `alpha_ce: 0.5` 为死配置（代码只读 `alpha_kl`，已亲验 `real_backend.py:200`）；`group_split` 名不副实（仅标签分层，无模板去重）。
+- failed 结果以最新时间戳遮蔽旧成功结果，使图回退常量（`experiment_runner.py:61-68` + `paper_data.py:38-44`）。
+- `benchmark.csv` 是 toy nn.Linear 产物落在正式 metrics 目录；`outputs/tables/Table2.tex` 空表、`summary.csv` 空。
+- 契约文档 §三.4 对 kl_task 机制描述过时（脚本实为独立训练）。
+- claim_engine 统计细节：paired 仅按样本数相等判断、seeds=5 功效低（`claim_engine.py:89`）。
+
+---
+
+## 四、产出盘点与论文数值可追溯性
+
+| 实验 | 结果文件 | 性质 | 论文对应数值可追溯？ |
+|------|---------|------|---------------------|
+| exp1 | 1 failed + 1 smoke 占位 | 无正式结果 | ✗（0.916 无支撑；fallback 0.7974 与论文矛盾） |
+| exp2–exp15 | 零文件 | 不存在 | ✗ 全部 |
+| 其他 | integration_test/test_exp 为测试夹具 | f1=0.95 硬编码 | — |
+| CLAIM-01/02/03 | 3 个 JSON | 全 UNSUPPORTED（诚实记录） | ✗ |
+| evidence | CLAIM-E2E/TEST-001 | **假数据 PASS** | — |
+| metrics | benchmark.csv（toy 基准）/summary.csv（空） | 与论文无关 | — |
+| tables | Table2.tex 空表、tables.md 仅标题 | 空壳 | — |
+| figures | 空目录 | 从未生成 | — |
+| 2026-08-03 md | 唯一真实运行摘要 | 多项与论文反转 | 部分（但反向） |
+
+**论文 §5.2–5.9 数值可追溯性**：Table 3 主表、Table 4 跨数据集、Table 5 loss 消融、Fig6 OVF、推测解码表、延迟分解、隐私表——**无一有实测文件支撑**；能"追到"的都是 paper_data.py 的自引用/硬编码常量（含循环引用：exp5 `bf16_matched_advfraud=0.882`、exp6 `paper_reference.*` 以 cited 身份进图）。
+
+## 五、修复优先级建议
+
+1. **先打通真实运行**（P0-1/2/3）：H100 环境重跑 exp1→exp15 全链，保留原始 JSON（修复归档流程会删原始结果的问题）；CLAIM 重验。
+2. **修 P0-4 键名**（exp12 `NVFP4`→`INT4` 或改契约），让 validate-contract 可用。
+3. **封堵假 PASS 通道**（P0-5）：evidence 节点强制 content_hash 链到真实 predictions/metrics 文件；测试夹具移出 outputs/evidence。
+4. **消除静默回退**（P1-14/6）：paper_data 在 placeholder 非空时让 generate_all 失败或在图上显式水印；回退常量与论文值二选一，消除图表矛盾。
+5. **逐项对齐协议**（P1-1/2/3/5/10/11/12/13）：exp1 拆出无 OVF 臂；exp3 用真 PPL 或改图注；exp2 改 logits MSE 或改论文表述；exp14 接入导出的 QAD GGUF；exp13 换 QAD 学生+128-d F_v+纯推理计时；exp11 增加 INT4 QAD 训练臂或改论文行标注；exp12 统一 57× 口径。
+6. **诚实化标注**（P1-5/8/9）：exp5/exp9/exp12/exp14 的降级路径一律打 `model_source` 标记；端侧延迟在论文中注明"无实测、组装估计"（已部分做到）或补测量。
+7. **claim 与论文对齐**（P1-15）：CLAIM-02 改为异构-vs-同质框架；CLAIM-03 升 5 seeds、speedup 改实测。
+
+## 六、未能验证项声明
+
+本审计以静态代码分析 + 产出文件盘点为主（本机无 GPU、无 H100 权重与数据）；"真实计算路径"结论基于代码走读，数值量级能否复现论文（0.92 档）未实测确认。exp11/exp14 "std=0.0 空转"为代码路径推断（无采样、eval 模式），未实测验证。
+
+---
+
+# 归档：2026-09-02_distillation_design.md
+
+# QAD-MultiGuard 蒸馏逻辑与教师-学生模型设计
+
+> 日期：2026-09-02
+> 范围：论文 [v29.tex](docs/v29.tex) §QAD（`Pure KL` / `Homologous self-distillation` / `Edge–Cloud Co-Quantisation` / `OV-Freeze`）
+> + 实现 [real_backend.py](realeval/real_backend.py) `real_qad_distill_train` + 消融 [exp1](experiments/exp1_qad_production.py) / [exp2](experiments/exp2_qad_loss_ablation.py) / [exp3](experiments/exp3_ov_freeze_control.py)
+> 目的：把教师-学生蒸馏设计（论文视角）与实现（代码视角）对齐，逐式逐行核对，诚实标注差异。
+
+---
+
+## 0. 一句话定位
+
+QAD（Quantisation-Aware Distillation）是一种**同源自蒸馏**：用 **BF16 全精度教师** 监督**同架构的量化学生**，目标是纠正低比特量化引入的**输出分布偏移**，而非从异构教师迁移任务知识。Headline 目标是**纯 KL 散度**（T=1，无 CE 项），辅以 **OV-Freeze** 正则对齐教师-学生的激活方差。双轨部署（云端 `NVFP4` / 边缘 `Q4_K_M`）共享同一 BF16 教师分布作为统一优化靶。
+
+---
+
+## 1. 架构总览
+
+```
+                 ┌─────────────────────────────────────────────┐
+                 │  BF16 Homologous Teacher                     │
+                 │  Qwen2.5-0.5B-Instruct (frozen, no grad)    │
+                 └───────────────┬─────────────────────────────┘
+                                 │ p_teacher(y|x)   (token-level logits)
+                                 ▼
+                 ┌─────────────────────────────────────────────┐
+                 │  Quantised Student (same architecture)      │
+                 │  NVFP4 (cloud, QDQ fake-quant QAT/NBE)      │
+                 │  Q4_K_M (edge, GGUF block quant, PTQ+LoRA)  │
+                 │  + 2-layer classification head (128→2)      │
+                 └───────────────┬─────────────────────────────┘
+                                 │ p_student(y|x)
+                                 ▼
+                 L_QAD = KL(p_teacher ‖ p_student)   (Eq. kl-loss)
+                 L_OVF = λ Σ ‖Var_EMA(y) − σ²_BF16‖² (Eq. ovf-loss)
+                 L_joint = L_QAD + L_OVF              (Eq. joint)
+```
+
+---
+
+## 2. 教师-学生架构设计
+
+### 2.1 同源自蒸馏（homologous self-distillation）
+
+- **教师** = **学生骨干** = `Qwen2.5-0.5B-Instruct`（[experiments.yaml:8-9](config/experiments.yaml#L8-L9)）。教师以 BF16 冻结，学生以低比特量化后训练。
+- 设计动机（[v29.tex:288](docs/v29.tex#L288)）：QAD 纠正的是**量化造成的分布偏移**，不是异构教师的知识迁移，因此同源教师保证 KL 目标在架构上天然对齐，无需显式特征空间正则。
+- 代码里教师与学生的 hidden size 相同时复用同一个 `head`（[real_backend.py:168-171](realeval/real_backend.py#L168-L171)），KL 直接在 2 类 logits 上计算。
+
+### 2.2 加载与分类头
+
+| 组件 | 实现 | 位置 |
+|---|---|---|
+| 教师加载（冻结） | `load_causal_lm(teacher, bf16=True)`，前向走 `torch.inference_mode()`（无 grad） | [real_backend.py:266-269](realeval/real_backend.py#L266-L269) |
+| 学生加载（量化） | `load_causal_lm(student, quantize=quantize, bf16=True)` | [real_backend.py:121](realeval/real_backend.py#L121) |
+| 分类头 | 两层 `Linear(hidden→128)→ReLU→Linear(128→2)`，Kaiming init + 末层 Xavier | [real_backend.py:145-166](realeval/real_backend.py#L145-L166) |
+| NBE 路径不挂 LoRA | `quantize=="nvfp4"` 时 adapter 强制 `"base"`（QAT 直接训量化权重，无 adapter） | [real_backend.py:125-130](realeval/real_backend.py#L125-L130) |
+
+### 2.3 异构教师（exp10 teacher-scale 消融）
+
+当教师 hidden size ≠ 学生（1.5B/3B/7B 教师）时，构建**独立的可训练教师投影头** `teacher_head`（同结构，hidden→128→2），使 KL 可在 2 类 logits 上计算（[real_backend.py:168-186](realeval/real_backend.py#L168-L186)）。这仅服务于 exp10 消融；主结果走同源路径。
+
+---
+
+## 3. 蒸馏目标：纯 KL 与五个 loss 变体
+
+### 3.1 纯 KL（headline）
+
+论文 Eq. `kl-loss`（[v29.tex:276-280](docs/v29.tex#L276-L280)）：
+
+$$L_{\mathrm{QAD}} = D_{\mathrm{KL}}\!\bigl( p_{\text{teacher}}(y|x)\,\|\,p_{\text{student}}(y|x) \bigr), \quad T = 1$$
+
+代码对应 `loss_fn="pure_kl"` 分支（[real_backend.py:309-319](realeval/real_backend.py#L309-L319)）：
+
+```python
+kl_loss = F.kl_div(F.log_softmax(logits, dim=-1),      # student, T=1
+                   F.softmax(t_logits_head, dim=-1),    # teacher, T=1
+                   reduction="batchmean")
+```
+
+关键点：
+- **T=1 固定**，训练与推理分布一致（[v29.tex:282](docs/v29.tex#L282)）。
+- **无 CE 项**，区别于 hybrid QAT（CE+KL）。论文声称 pure-KL 达到 $D_{KL}=0.005$ vs QAT $0.311$（[v29.tex:284](docs/v29.tex#L284)）。
+- exp1 生产训练固定 `loss_fn="pure_kl"`（[exp1_qad_production.py:43](experiments/exp1_qad_production.py#L43)），exp3 各 OV-Freeze 条件也固定 `pure_kl`（[exp3_ov_freeze_control.py:33](experiments/exp3_ov_freeze_control.py#L33)）。
+
+### 3.2 loss_fn 五分支（exp2 消融矩阵）
+
+代码里五种模式（[real_backend.py:363-373](realeval/real_backend.py#L363-L373)），与论文 loss-ablation 表逐项对应：
+
+| `loss_fn` | 联合 loss 构成 | 论文对应项 | 代码注释 |
+|---|---|---|---|
+| `pure_kl` | `kl_loss`（T=1） | **Pure KL (ours)** | headline，Table 7 |
+| `kl` | `ce + alpha_kl·kl`（温度缩放） | KL + task reg | hybrid |
+| `mse` | `ce + mse` | Logits MSE | 特征对齐 |
+| `ce` | `ce` | Cross-entropy (QAT) | QAT baseline |
+| `kl_mse` | `ce + alpha_kl·kl + mse` | Three-term mixture | 3 项混合 |
+
+exp2 精确编码这五变体（[exp2_qad_loss_ablation.py:28-34](experiments/exp2_qad_loss_ablation.py#L28-L34)），并**统一关闭 OVF**（`use_ovf=False`），避免与 exp3 混淆。
+
+### 3.3 KL 计算的温度细节
+
+- `pure_kl`：`log_softmax(logits)` 不除 T（T=1）。
+- `kl`/`kl_mse`：`log_softmax(logits/T)` 与 `softmax(t_logits/T)`，乘回 `T²`（[real_backend.py:299-308](realeval/real_backend.py#L299-L308)）——标准 Hinton 温度缩放形式。
+- 诊断 KL 与训练 KL 复用教师头 logits（[real_backend.py:382-391](realeval/real_backend.py#L382-L391)）。
+
+---
+
+## 4. OV-Freeze 正则（Output-Variance Freeze）
+
+### 4.1 设计动机
+
+量化（尤其 `Q4_K_M`）会放大投影层激活的方差漂移。论文声称 OV-Freeze 使层间方差偏差从 **+18.2% 降到 +1.3%**（[v29.tex:394](docs/v29.tex#L394)），从而在蒸馏→部署迁移阶段防止表征塌缩。
+
+### 4.2 三个公式的代码实现（2026-09-02 重构为 forward-hook 实现）
+
+| 论文公式 | 代码 | 一致性 |
+|---|---|---|
+| Eq. `ovf-loss`：$L_{OVF}=\lambda\sum_{\ell\in\mathcal P}\|\mathrm{Var}_{EMA}(y_\ell)-\sigma^2_{BF16,\ell}\|_2^2$ | `ovf_loss = ovf_lambda * Σ_{ℓ∈ovf_layers} F.mse_loss(s_var_ema[ℓ], t_var_calib[ℓ])` | ✅（投影层子集，见 §8-1） |
+| Eq. `ema`：$\mathrm{Var}^{(t)}=\rho\cdot\mathrm{Var}^{(t-1)}+(1-\rho)\cdot\mathrm{Var}_{batch}$，$\rho=0.95$ | `s_var_ema[ℓ] = ovf_rho*s_var_ema[ℓ] + (1-ovf_rho)*s_var_batch[ℓ]` | ✅ |
+| Eq. `ovf-rescale`：$c_\ell=\mathrm{sg}[\sqrt{\sigma^2_{BF16,\ell}/(\mathrm{Var}_{EMA}+\epsilon)}]$ | `c = (t_var_calib[ℓ]/(s_var_ema[ℓ]+1e-9)).sqrt().detach()`；forward 返回 `output * (1 + rescale_strength*(c-1))` | ✅（前向 stop-gradient rescaling，见 §8-2） |
+
+关键实现细节：
+- **forward-hook 捕获**：`register_forward_hook` 挂在 `self_attn.{q,k,v,o}_proj` 各投影层——teacher hook 算 `t_var_calib`（在线 batch 方差），student hook 算 `s_var_batch` 并在 `ovf_active` 且层 ∈ `ovf_layers` 时施加前向 rescaling。
+- **方差估计用总体方差** `var(dim=(0,1))`（per-dim 向量，q/o 896 维、k/v 128 维各自独立），避免 batch=1 时 `(n-1)=0` 导致 NaN 反向污染学生权重。
+- **投影层子集** `ovf_layers: tuple[str,...]`（默认 `("q","v","k","o")`）控制 L_OVF 与 rescaling 施加到哪些层；EMA 对所有投影层持续跟踪（使 no-OVF 基线仍可测非零 drift）。
+- **drift 指标**（`drift_pct_final`）为 **signed** 相对偏差：`mean((s_var_ema − t_var_calib)/t_var_calib)·100`（+ 表示 student 高于 BF16 teacher，对齐论文 +18.2%→+1.3%）。
+
+### 4.3 激活调度（staged activation）
+
+- 论文：OV-Freeze **只在最后 30% 训练激活**（[v29.tex:394](docs/v29.tex#L394)）。
+- 代码：concept-step 空间 `concept_total_steps=2000`，`ovf_activation_ratio=0.7` → `ovf_activation_step=1400`；`ovf_active = apply_ov_rescaling and concept_step >= 1400`（[real_backend.py:216-224](realeval/real_backend.py#L216-L224)、[real_backend.py:254](realeval/real_backend.py#L254)）。
+- **concept-step 映射**：真实 batch 数被线性映射到 `[0, 2000)` 空间，保证 Fig4 的 OVF 调度 + SNR 范围对齐（[real_backend.py:249-251](realeval/real_backend.py#L249-L251)）。
+
+---
+
+## 5. 联合目标与训练流程
+
+### 5.1 联合 loss
+
+论文 Eq. `joint`（[v29.tex:371-375](docs/v29.tex#L371-L375)）：$L_{joint}=L_{QAD}+L_{OVF}$。
+
+代码（[real_backend.py:375](realeval/real_backend.py#L375)）：
+
+```python
+loss = base_loss + rho * ovf_loss   # base 由 loss_fn 分支决定；rho 默认 1.0
+```
+
+### 5.2 优化器与 LR 调度
+
+- **AdamW**，weight_decay=0.05；两组参数分层 LR：学生骨干 `backbone_lr=1e-5`、分类头 `head_lr=task_weight=1e-3`（[real_backend.py:198-204](realeval/real_backend.py#L198-L204)）。
+- **warmup + cosine**：`LinearLR(0.01→1.0, 100 steps)` → `CosineAnnealingLR`，`SequentialLR` 串接（[real_backend.py:226-240](realeval/real_backend.py#L226-L240)）。
+
+### 5.3 类别加权 + 标签平滑 + focal
+
+- 按逆类频加权 CE（fraud 是少数类）：`cw = counts.sum()/(2*counts)`（[real_backend.py:206-214](realeval/real_backend.py#L206-L214)）。
+- 标签平滑 0.1；focal loss 默认关闭（`focal_gamma=0`），配置项 `focal_gamma`（[real_backend.py:281-293](realeval/real_backend.py#L281-L293)）。
+
+### 5.4 阈值校准（F1 的关键杠杆）
+
+- 从 **train 集**切出 `val_frac=0.15` 作为校准 slice（永不碰 test）（[real_backend.py:134-143](realeval/real_backend.py#L134-L143)）。
+- 在 val 上 `_best_f1_threshold`（默认 19 格 = 0.05 bins）搜索决策阈值，替代 argmax@0.5（[real_backend.py:411-428](realeval/real_backend.py#L411-L428)）——类别不平衡下 accuracy≫F1 时这是 F1 的最大杠杆。
+
+### 5.5 量化 SNR 轨迹
+
+每个 step 测 SNR = 教师功率 /（学生−教师）² 功率（对齐维度），记录 min/max 供 Fig4（[real_backend.py:324-330](realeval/real_backend.py#L324-L330)）。SNR 无值时返回 `None`（显式缺失），**不伪造**论文的 18.4/18.9（[real_backend.py:454-458](realeval/real_backend.py#L454-L458)）。
+
+---
+
+## 6. 双轨量化（Edge–Cloud Co-Quantisation）
+
+论文 [v29.tex:290-322](docs/v29.tex#L290-L322) 与 Tab2：
+
+| 维度 | 云端 `NVFP4` | 边缘 `Q4_K_M` |
+|---|---|---|
+| 骨干 | Qwen2.5-0.5B-Instruct | 同 |
+| 参数量 | 494M | 494M |
+| 量化 | QDQ 伪量化（block=16, FP8 E4M3 缩放），QAT via STE | GGUF 块量化，PTQ + LoRA |
+| footprint | 248 MB | 240 MB |
+| 目标平台 | Blackwell（NBE 在 H100 仿真） | ARM/Snapdragon |
+| 精度恢复 | 99.1% | 98.5% |
+
+代码侧：`quantize="nvfp4"` 走 NBE QDQ 伪量化 QAT（STE 直接训量化权重，无 LoRA）；边缘 `Q4_K_M` 是独立 PTQ 路径（`student_gguf` + `student_variant`），两条轨**共享同一 BF16 教师分布**作为统一优化靶。NBE 协议（Eq. `nbe`）在 [v29.tex:341-348](docs/v29.tex#L341-L348)。
+
+---
+
+## 7. 消融设计
+
+### 7.1 exp2 — loss 消融（5 变体）
+
+见 §3.2 表。统一 `apply_ov_rescaling=False`、`quantize="nvfp4"`、`epochs=3`，扫 5 个 `loss_fn`，多 seed 报 `f1 / f1_list / kl_final / std`。
+
+### 7.2 exp3 — OV-Freeze 控制（投影层子集 + rescale 强度 sweep）
+
+> ✅ 已按 2026-09-02 重构重写（原 freeze_frac/window/rho 三维 → ovf_layers/rescale_strength）。
+
+| 子消融 | 变量 | 实现 |
+|---|---|---|
+| `conditions`（4 条件） | 投影层子集 `ovf_layers ∈ {(), (q), (q,v), (q,v,k,o)}` | no_reg / quarter / half / full |
+| `layer_selection` | 投影层累加 `{q / q,v / q,k,v / q,k,v,o}` | q / q_v / q_v_k / q_v_k_o（对齐 Fig6a q→v→k→o 顺序） |
+| `window_sweep` | `rescale_strength ∈ {0.0, 0.2, 0.4, 0.6, 0.8, 1.0}` | 前向 rescaling 强度（Eq.8），1.0 = 完整 $c_\ell$ |
+
+三层语义明确分离：`ovf_rho`（EMA 系数 ρ，Eq.6）保留为 config 字段；`ovf_loss_weight`（$L_{joint}$ 中 OVF 项系数）与 `rescale_strength`（前向缩放强度）为函数参数。
+
+---
+
+## 8. 代码↔论文一致性标注（已修复于 2026-09-02）
+
+以下 6 项是设计文档初版标注的代码↔论文差异，均已按重构修复（除 8-6 为待办）。保留原始发现供追溯。
+
+### 8-1 ✅ 已修复 — OV-Freeze 作用层：投影层激活方差（原为 last hidden state）
+
+- **修复**：real_backend 现用 `register_forward_hook` 捕获 `self_attn.{q,k,v,o}_proj` 各投影层输出，对齐其激活方差（per-dim `var(dim=(0,1))`），与论文 Eq. `ovf-loss` 的 $\mathcal P=\{q,k,v,o\}_{proj}$ 一致。
+- **原始差异**：旧实现对齐 last hidden state 方差（`hidden_states[-1]`），与论文声称的投影层统计不符。
+
+### 8-2 ✅ 已修复 — 前向 stop-gradient rescaling
+
+- **修复**：student hook 在 `ovf_active` 且层 ∈ `ovf_layers` 时施加 `output * (1 + rescale_strength*(c-1))`，其中 `c = sg[√(σ²_BF16/(Var_EMA+ε))]`（`.detach()`），实现论文 Eq.8 前向 rescaling + Eq.9 反向流（梯度乘有界 `c`）。
+- **原始差异**：旧实现 `scale` 仅用于事后 drift 指标，未施加到 student 前向。
+
+### 8-3 ✅ 已修复 — ρ / rho / window 命名混淆
+
+| 新名 | 语义 | 旧名 |
+|---|---|---|
+| `ovf_rho`（config） | Eq.6 EMA 系数 = 0.95 | 不变 |
+| `ovf_loss_weight`（函数参数） | $L_{joint}$ 中 OVF 项系数 | `rho` |
+| `rescale_strength`（函数参数） | 前向 rescaling 强度（Eq.8） | `window` |
+| `window_sweep`（exp3） | 扫 `rescale_strength` | `rho_sweep` |
+
+### 8-4 ✅ 已修复 — 投影层子集语义
+
+- **修复**：`ovf_layers: tuple[str,...]` 取代 `freeze_frac`（维度比例）；exp3 `layer_selection` 键 `early/mid/late/all` → `q/q_v/q_v_k/q_v_k_o`（投影层累加，对齐 Fig6a q→v→k→o 顺序）。
+
+### 8-5 ✅ 已修复 — drift 符号（signed）
+
+- **修复**：drift 改为 signed 相对偏差 `mean((s_var_ema − t_var_calib)/t_var_calib)·100`（+ 表示 student 高于 BF16 teacher），对齐论文 "+18.2% → +1.3%"。
+
+### 8-6 ⚠️ 待办 — fallback 默认值陈旧
+
+`temperature` fallback 仍为 2.0（config 权威值 1.0，论文 T=1）。生产路径显式传 config 无运行时 bug，但建议将 fallback 对齐（`temperature`→1.0）。本次重构未触及（超出 OV-Freeze 范围）。
+
+### 8-7 ⚠️ 已知 gap — Fig6 的 FFN / activation-window 维度
+
+- **FFN 扩展**：论文原 Fig6(a) 的 FFN / +FFN 两条 bar 从未在 real_backend 实现（旧代码用 early→FFN 牵强映射）。重构已删除这两条 bar 及论文第 799 行的 FFN 结论，FFN OV-Freeze 标注为待实现。
+- **activation window**：论文原 Fig6(b) 的 x 轴标为 "activation step ratio"，但 exp3 实际扫的是 `rescale_strength`（前向缩放强度）。重构已把 Fig6(b) 改为 rescale-strength sweep，`ovf_activation_ratio`（激活时机，最后 30%）的独立 ablation 标注为待实现。
+
+---
+
+## 9. 数字：暂用论文现有 headline 值（待 H100 重跑更新）
+
+按用户决策（2026-09-02）：**数字暂用论文现有 headline 值，待 H100 重跑后如实更新**，本次重构不动任何数字。
+
+| 数字 | 来源实验 | 状态 |
+|---|---|---|
+| QAD F1=0.916 / KL=0.005（pure-KL） | exp1 | 暂用历史值 |
+| 云端 NVFP4 F1=0.923 / 边缘 Q4_K_M F1=0.917 | exp11 / exp14 | 暂用历史值 |
+| OV-Freeze drift +18.2%→+1.3% | exp3 | 暂用历史值（重跑后 drift 因 signed 指标变化可能更新） |
+| 量化 SNR 18.4 / 18.9（Fig4 panel b） | exp1 trajectory | 暂用历史值（SNR 无值时返回 None，不伪造） |
+| loss 消融（Table 5） | exp2 | 暂用历史值 |
+
+运行命令见 [2026-09-02_a_road_execution.md](2026-09-02_a_road_execution.md) §三。
+
+---
+
+## 附：公式↔代码速查
+
+| 论文 Eq. | label | 代码位置 |
+|---|---|---|
+| $L_{QAD}=KL(p_T\|p_S)$ | `eq:kl-loss` | [real_backend.py:309-319](realeval/real_backend.py#L309-L319) |
+| $\widehat{W}=clamp(round(W/s),q_{min},q_{max})\cdot s$ | `eq:nbe` | NBE QDQ 伪量化（student loader） |
+| $L_{OVF}=\lambda\sum\|Var_{EMA}-\sigma^2_{BF16}\|^2$ | `eq:ovf-loss` | [real_backend.py:353-355](realeval/real_backend.py#L353-L355) |
+| $Var_{EMA}=\rho Var_{EMA}+(1-\rho)Var_{batch}$ | `eq:ema` | [real_backend.py:342-347](realeval/real_backend.py#L342-L347) |
+| $L_{joint}=L_{QAD}+L_{OVF}$ | `eq:joint` | [real_backend.py:375](realeval/real_backend.py#L375) |
+| $c_\ell=sg[\sqrt{\sigma^2/(Var_{EMA}+\epsilon)}]$ | `eq:ovf-rescale` | [real_backend.py:350-352](realeval/real_backend.py#L350-L352) |
+
+---
+
+# 归档：2026-09-02_a_road_execution.md
+
+# A 路执行报告（R1–R6 must_fix 补证据，不降级）
+
+> 日期：2026-09-02
+> 范围：执行 [revision_checklist_v29_round2.md](2026-09-02_history_archive.md)（已归档）六条 must_fix 的 **A 路**选项
+> 原则：**补端到端证据，不把 headline 数字降级为「不可复现/代理」**。
+
+---
+
+## 一、论文文本改动（已完成，[v29.tex](docs/v29.tex)）
+
+### R5 — 删合规宣称（A 路）
+6 处措辞替换，收敛为「privacy-oriented / motivated by / data-minimisation practices」，与正文已有的
+「technical assessment, not legal compliance」保持一致，不再出现 `compliant / complying / mandated by / aligning with` 残留。
+
+| 位置 | 改动 |
+|---|---|
+| 摘要 | `privacy-compliant` → `privacy-oriented` |
+| 引言 | `while complying with` → `under constraints informed by` |
+| 引言 | `privacy compliance` → `privacy preservation` |
+| C1 | `mandates that acoustic processing occur on-device` → `motivates on-device acoustic processing` |
+| C1 | `device boundary mandated by PIPL` → `device boundary motivated by PIPL's data-minimisation principle` |
+| §sysarch | `aligning with PIPL data-minimisation requirements` → `aligning with data-minimisation practices` |
+
+### R4 — 四模态→双模态诚实化（A 路）
+2 处限定：Tier-3 融合段明确「仅 text/acoustic 权重在 TAF-28k 上经 L-BFGS 学习，URL/metadata 权重为 carry-forward
+deployment parameters (Eq. w-deploy)」；§4.5「fusion weights」→「text and acoustic fusion weights」。
+
+### R2 — 维度矛盾 + ASV-EER 改标（A 路文本部分）
+- §6.2 speaker-ID 段：`128-dimensional MFCC-based` → `128-dimensional acoustic embeddings
+  (the concatenation of the 64-dimensional temporally-averaged FBANK and 64-dimensional Whisper-projection
+  components, Eq. f-v)`；`temporal MFCC averaging` → `temporal FBANK averaging`（与 Eq.(5) 64 维一致）。
+- 表 4 加注：`ASV-EER 测于 reconstructed embeddings，量化的是重建攻击的失败程度而非 F_v 本身的说话人泄漏`。
+
+> **2026-09-02 审计修正**：上述 R2 文本编辑把 §6.2 写成了「MLP 训练在真实拼接 F_v 上」，与 §sec:acoustic 第 410 行的诚实口径（experiments 用 proxy embeddings、拼接 F_v 端到端评估留待 reproduction）**矛盾**，且与落盘代理 `chifraud.npz`（20 维 MFCC tile-128）不符。已回退：§6.2 改回「proxy acoustic embeddings (temporally averaged 20-dim MFCC tiled to 128) + 端到端留待 reproduction」，`FBANK averaging` → `MFCC averaging`。真实 F_v 的 speaker-ID/ASV-EER 数字待 H100 产出 `chifraud_fv.npz` 后写回。详见 [2026-09-02_script_design_consistency_audit.md](2026-09-02_script_design_consistency_audit.md)。
+
+### R6 — 陈述部署模型（A 路）
+- §sysarch 新增 `\paragraph{Deployment model.}`：明确 on-device 隐私性质以「检测软件运行于数据主体终端」为前提。
+- Discussion 新增 `Deployment-model limitation` 段：不分析运营商侧部署、data-controller 认定、PIPL 合法依据，
+  留给「与运营商/监管方协作的部署导向工作」。
+
+---
+
+## 二、代码改动（已完成，全部通过 `py_compile`）
+
+### R2 — 真实 F_v 构造 + GLO 端到端接线
+新增/修改：
+- **[realeval/acoustic_embedding.py](realeval/acoustic_embedding.py)**（新）— 真实 F_v 构造函数：
+  - `time_averaged_fbank` / `whisper_pooled_hidden` / `build_fv_from_wav`（64-FBANK ⊕ ψ(W_proj·h̄_w)）
+  - `fbank_identity_proj_fn` — GLO 的诚实 `proj_fn`：FBANK 半段以明文存储（恒等映射，攻击者可精确恢复，corr→~1.0），
+    Whisper-proj 半段为逐样本常量、非 FBANK 的函数。
+  - `griffin_lim_fbank` — 从时均 FBANK 反演波形（供 WER/PESQ/STOI/MOS 端到端评分）。
+  - 所有可选依赖（librosa/whisper/W_proj）缺失时返回显式 `unavailable`，**绝不伪造**。
+- **[data/scripts/build_chifraud_fv.py](data/scripts/build_chifraud_fv.py)**（新）— 产出真实 F_v 的
+  `chifraud_fv.npz`（含 `embedding_kind=["fv"]` 溯源标记 + W_proj 来源）；speaker bucketing 与旧
+  `build_audio_npz.py` 完全一致（唯一变量 = 代理嵌入 → 真实 F_v）。
+- **[experiments/exp7_privacy_verification.py](experiments/exp7_privacy_verification.py)**（改）— 嵌入加载链改为
+  `chifraud_fv.npz → taf28k_fv.npz → chifraud.npz(proxy)`；仅当 `embedding_kind=="fv"` 时给 GLO 传真实
+  `proj_fn`，`glo_is_demo` 自动翻为 False（GLO 纳入真实测量），proxy 路径保留诚实 demo 标志。
+
+### R3 — 单模态消融
+- **[experiments/exp15_modality_ablation.py](experiments/exp15_modality_ablation.py)**（新）— 同一泄漏安全
+  TAF-28k test 集上报告 text-only / audio-only / fused F1 + 边际贡献 delta。
+- **[metrics/contract.py](metrics/contract.py)**（改）— exp15 字段纳入 MEASURED 合约（消融数字必须真实产出）。
+
+### R1 — 可复现 QAD 训练 + sha256
+- **[cluster/reproduce_qad.py](cluster/reproduce_qad.py)**（新）— 走 exp1 同一代码路径
+  （`real_qad_distill_train`, nvfp4 QAT/NBE, pure-KL, OV-Freeze），固定 seed，产出 checkpoint 后计算 sha256 +
+  超参快照 + git commit pointer，写入 `repro_manifest.json`。
+
+---
+
+## 三、H100 执行命令清单（需在 GPU 上运行，产出新数字）
+
+> 前置：数据就位（`data/TAF28k/taf28k.jsonl + taf28k.npz`）、ChiFraud 音频（`data/ChiFraud/audio/`）、
+> Qwen 权重、Whisper-tiny、librosa、`pesq`/`pystoi`/`jiwer`。
+
+### R2 — 真实 F_v 端到端
+```bash
+# 1) 构建真实 F_v（W_proj 可先无训练：固定 seed 随机正交；若要训练 W_proj 见 §四）
+PYTHONPATH=/workspace /workspace/venv/bin/python \
+  data/scripts/build_chifraud_fv.py --w-proj /workspace/data/acoustic/w_proj.npy
+
+# 2) 重跑 exp7：GLO 用真实 proj_fn（glo_is_demo=False）+ speaker-ID/ASV-EER 落在真实 F_v 上
+PYTHONPATH=/workspace /workspace/venv/bin/python -m experiments.runner --exp 7 --paper --config config/experiments.yaml
+
+# 3) 波形反演 + WER/PESQ/STOI/MOS（把重建波形写回 reconstruction.npz 供 harness 评分）
+#    —— 见 acoustic_embedding.griffin_lim_fbank + exp7 的 _load_reconstruction_assets 路径
+```
+
+### R3 — 单模态消融
+```bash
+PYTHONPATH=/workspace /workspace/venv/bin/python -m experiments.runner --exp 15 --paper --config config/experiments.yaml
+```
+验收：`marginal_contribution.fused_minus_text_only / fused_minus_audio_only` 与融合权重
+`w_audio=0.30 < w_text=0.40` 对齐（声学为次要贡献者时 audio-only F1 应低于 text-only，fused 略高于二者）。
+
+### R1 — 可复现 QAD + sha256
+```bash
+PYTHONPATH=/workspace /workspace/venv/bin/python cluster/reproduce_qad.py
+```
+验收：`outputs/models/exp1_qad/repro_manifest.json` 有 sha256 + commit + F1≈0.923（容差内）。
+（PTQ 侧 LoRA adapter 由既有 `cluster/train_lora_manual.py` 复现，见 §四。）
+
+---
+
+## 四、遗留项（非本轮 six must_fix，建议跟进）
+
+1. **line 265「empirically achieves WER ≥ 0.95」**：A 路补端到端后，若真实 F_v 的 WER 数字 ≠ 0.95，
+   需更新该威胁模型句（目前暂留原样，等 §三 R2 产出的 WER 数字对齐）。威胁模型的诚实结论是：
+   **隐私来自时均（FBANK 半段）摧毁时间动态，而非投影不可逆** —— GLO 对 FBANK 半段的恢复 corr 收敛到 ~1.0。
+2. **W_proj 训练**：`w_proj.npy` 目前无训练来源（fig2 用的是随机示意）。若论文坚持「trained acoustic head」，
+   需补一个训练 W_proj 的脚本（Whisper-tiny 冻结 + 64×384 投影头）。否则应把 W_proj 描述为「frozen/seeded
+   projection」，与 `build_chifraud_fv.py` 记录的 provenance 一致。
+3. **LDP 灵敏度 config/代码不一致**（审计附注，非 must_fix）：[privacy.py:291](realeval/privacy.py#L291)
+   `gaussian_ldp` 内部 `sensitivity = 2.0 * clip_bound`（=6.0，数据无关裁剪是正确做法），但
+   [experiments.yaml](config/experiments.yaml) `privacy.sensitivity: 1.0` 是死配置。修 S12（ε=1.5 措辞）时
+   一并处理：删掉死字段，或让字段真正生效并据此重算 ε。
+
+---
+
+## 五、验收判据对照
+
+| must_fix | A 路产出 | 状态 |
+|---|---|---|
+| R1 可复现 | `reproduce_qad.py` + sha256 manifest（待 H100 跑出） | 代码✅ / 数字⏳ |
+| R2 F_v 端到端 | `acoustic_embedding.py` + `build_chifraud_fv.py` + exp7 接线（待 H100 跑出 WER/speaker-ID/ASV-EER） | 代码✅ / 数字⏳ |
+| R3 单模态消融 | `exp15` + 合约字段（待 H100 跑出） | 代码✅ / 数字⏳ |
+| R4 双模态诚实化 | v29.tex 2 处 | ✅ |
+| R5 删合规宣称 | v29.tex 6 处 | ✅ |
+| R6 部署模型陈述 | v29.tex 2 段 | ✅ |
+
+---
+
+# 归档：2026-09-02_script_design_consistency_audit.md
+
+# 实验脚本 ↔ 论文实验设计 一致性审计（A 路修订落地后）
+
+> **日期**：2026-09-02
+> **范围**：A 路 six must_fix（R1–R6）修订全部落地后，核对三线一致性 —— (1) 实验脚本、(2) 论文实验设计（`docs/v29.tex`）、(3) 结果文件（`outputs/results/`）。
+> **方法**：静态核对（脚本源码 + 结果文件落盘状态 + v29.tex 全文），不运行 GPU/H100 实验（本机无数据/权重/GPU）。
+> **口径**：诚实优先 —— 论文不得宣称尚未产出的测量；「补端到端证据」≠ 把「代码已就绪但未跑」的数字当作「已测得」写入正文。
+
+---
+
+## 一、核心发现（MAJOR，已修复）：proxy vs 真实 $\bm{F}_v$ 自我矛盾
+
+A 路 R2 的**文本**修订此前把 §6.2 speaker-ID 段写成「MLP 直接训练在拼接后的真实 $\bm{F}_v$（64-FBANK ⊕ 64-Whisper-投影）上」，与 §sec:acoustic 第 410 行既有诚实口径**直接矛盾**：
+
+| 落点 | 措辞 | 语义 |
+|---|---|---|
+| v29:410（2026-09-01 诚实降级，未动） | 「the released experiments evaluate its two components through their respective **proxy embeddings** … rather than through the **jointly trained concatenated** $\bm{F}_v$, whose end-to-end construction … remain part of the ongoing reproduction effort」 | 实验用**代理嵌入**，真实拼接 $\bm{F}_v$ 尚未端到端评估 |
+| v29:855（A 路 R2 编辑，现已回退） | 「was trained directly on the **$128$-dim acoustic embeddings (the concatenation of the 64-dim FBANK and 64-dim Whisper-projection, Eq. f-v)**」 | MLP **训练在真实拼接 $\bm{F}_v$** 上 |
+
+**矛盾性质**：前者说「从未用拼接 $\bm{F}_v$ 评估」，后者说「就是用拼接 $\bm{F}_v$ 训练」—— 二者互斥。且后者与事实不符：落盘的 `data/ChiFraud/chifraud.npz` 是 `build_audio_npz.py` 产出的 **20 维 DCT-MFCC 时序平均后 tile 到 128** 的代理嵌入（无 FBANK、无 Whisper、无投影），并非 $\bm{F}_v$。
+
+**已修复（v29.tex）**：
+- 第 855 行回退为：`was trained on the 128-dimensional proxy acoustic embeddings (temporally averaged 20-dimensional MFCC features tiled to 128 dimensions) … the end-to-end speaker-identification evaluation of the jointly trained concatenated F_v (Eq. f-v) remains part of the ongoing reproduction effort (Section sec:acoustic)`。
+- 第 857 行回退：`temporal FBANK averaging` → `temporal MFCC averaging`（代理是 MFCC，非 FBANK）。
+
+修复后第 855/857 行与第 410/420 行（MFCC temporal averaging / proxy）口径统一。注意：**这一回退不是「降级」，而是纠正过度声明** —— 真实 $\bm{F}_v$ 的 speaker-ID/ASV-EER 数字要等 H100 产出 `chifraud_fv.npz` 并重跑 exp7 后才能写回正文（见 §三）。
+
+---
+
+## 二、six must_fix 逐条一致性状态
+
+| 项 | 代码 | 文本（v29.tex） | 数字 | 一致性结论 |
+|---|---|---|---|---|
+| **R1** 可复现 QAD + sha256 | ✅ `cluster/reproduce_qad.py`（同 exp1 代码路径 + 固定 seed + `_sha256_dir`） | ✅ 无新宣称（R1 是流程项） | ⏳ `repro_manifest.json` 未产出 | 代码与设计一致；数字待 H100 |
+| **R2** 真实 $\bm{F}_v$ 端到端 | ✅ `acoustic_embedding.py` + `build_chifraud_fv.py` + exp7 接线（`chifraud_fv.npz → taf28k_fv.npz → chifraud.npz(proxy)`） | ✅ 第 855/857 已回退为诚实代理口径（本次修复）；表 4 ASV-EER 注保留 | ⏳ `chifraud_fv.npz` 未产出 → exp7 当前仍回退到 proxy；表 4 数字仍是 proxy 值 | 代码与设计一致；数字待 H100，正文**不得**先宣称真实 $\bm{F}_v$ 已测得 |
+| **R3** 单模态消融 | ✅ `exp15_modality_ablation.py` + 合约字段（`text_only`/`audio_only`/`fused`/`marginal_contribution`） | ⚠️ Discussion 第 908 行仍写「single-modality baselines are not reported … left to future work」—— 与「已补 exp15」形成文本滞后 | ⏳ 无 exp15 结果文件 | 代码就绪；数字 + 文本需在 H100 跑出后同步更新 |
+| **R4** 四模态→双模态诚实化 | —（纯文本） | ✅ 2 处（Tier-3 融合段 + §4.5 fusion weights） | — | 已对齐 |
+| **R5** 删合规宣称 | —（纯文本） | ✅ 6 处（privacy-oriented / motivated by / data-minimisation practices） | — | 已对齐 |
+| **R6** 陈述部署模型 | —（纯文本） | ✅ 2 段（§sysarch Deployment model + Discussion Deployment-model limitation） | — | 已对齐 |
+
+---
+
+## 三、结果文件 vs 实验设计（数字 ⏳ 清单）
+
+当前 `outputs/results/` 仅含 2026-08-13 的陈旧文件：
+
+```
+outputs/results/all_experiments.json          # 仅 exp1
+outputs/results/exp1_20260813_105315.json
+outputs/results/exp1_20260813_110527.json     # error 文件
+outputs/results/integration_test_20260813_105308.json
+outputs/results/test_exp_20260813_105312.json
+```
+
+**缺失的全部 A 路产物**（需在 GPU 上运行 `reports/2026-09-02_a_road_execution.md` §三 命令清单）：
+
+| 产物 | 产出命令 | 论文对应落点 |
+|---|---|---|
+| `data/ChiFraud/chifraud_fv.npz`（真实 $\bm{F}_v$，`embedding_kind=fv`） | `build_chifraud_fv.py --w-proj …` | 支撑 §6.2 speaker-ID 写回真实 $\bm{F}_v$ 数字 |
+| exp7 真实 $\bm{F}_v$ 重跑（GLO `glo_is_demo=False` + speaker-ID/ASV-EER） | `runner --exp 7 --paper` | 表 4 六行数字的最终替换源 |
+| `outputs/models/exp1_qad/repro_manifest.json`（sha256 + commit + F1≈0.923） | `cluster/reproduce_qad.py` | R1 可复现声明 |
+| exp15 消融结果（`text_only`/`audio_only`/`fused`/marginal delta） | `runner --exp 15 --paper` | R3；随后更新 Discussion 第 908 行 |
+
+**关键结论**：在以上数字落盘之前，论文正文**不能**写「真实拼接 $\bm{F}_v$ 已被端到端评估」（本次已回退第 855/857 行正是为此）；表 4 现有数字的诚实口径仍是「代理嵌入 + reference estimates」（第 849 行已如实标注）。
+
+---
+
+## 四、遗留不一致（非本轮 six must_fix，建议跟进）
+
+1. **line 265「empirically achieves WER ≥ 0.95」**：威胁模型句目前沿用 0.95。真实 $\bm{F}_v$ 的 WER 跑出后需对齐。诚实结论已定：**隐私来自时均（FBANK 半段）摧毁时间动态，而非投影不可逆** —— GLO 对 FBANK 半段的恢复 corr 收敛到 ~1.0（`fbank_identity_proj_fn` 恒等映射）。此句是唯一需要在 H100 后核对是否仍成立的威胁模型表述。
+
+2. **W_proj 训练来源**：`w_proj.npy` 无训练来源（fig2 用随机示意）。`build_chifraud_fv.py` 用固定 seed 随机正交 `W_proj` 作 fallback。若论文坚持「trained acoustic head」需补训练脚本；否则应将 W_proj 描述为「frozen/seeded projection」与 provenance 一致。
+
+3. **LDP sensitivity 死配置**：[config/experiments.yaml:77](config/experiments.yaml#L77) `privacy.sensitivity: 1.0` 与 [realeval/privacy.py](realeval/privacy.py#L291) `gaussian_ldp` 内部 `sensitivity = 2.0 * clip_bound`（=6.0）不一致 —— 该字段是死配置，`gaussian_ldp` 仅被单测调用，exp5 走未裁剪 `noise_sigma` 路径。修 S12（ε=1.5 措辞）时一并删除或激活该字段。
+
+4. **R4 讨论段第 908 行**：`Modality-contribution limitation` 现写「single-modality baselines are not reported … left to future work」，与已落地的 exp15 冲突。exp15 跑出数字后，该段应从「future work」改为「reported in Section X（引用 exp15 结果）」，并据此校准「acoustic branch is secondary contributor」的强度。
+
+---
+
+## 五、结论
+
+- **三线一致性已收敛到可投稿口径**：脚本层（R1–R3 代码）与论文设计层（R4–R6 文本）均已落地；本次审计修复了唯一一处由 A 路文本编辑引入的**过度声明**（proxy vs 真实 $\bm{F}_v$ 自我矛盾），使第 855/857 行与第 410 行诚实口径重新统一。
+- **「数字 ⏳」仍是投稿前的硬门槛**：表 4（speaker-ID/ASV-EER/GLO 真实 $\bm{F}_v$）、R1 sha256、R3 消融、Discussion 第 908 行 —— 均依赖 H100 重跑，本机无法验证，需在 `reports/2026-09-02_a_road_execution.md` §三 命令清单执行后回填。
+- **诚实红线保持不变**：在数字落盘前，论文不得宣称「真实拼接 $\bm{F}_v$ 已被端到端评估」；现有表 4 数字继续以「代理嵌入 + reference estimates」口径呈现（第 849 行）。

@@ -1,6 +1,6 @@
 # 全量包审计 —— 分类执行路线图
 
-> 来源：[2026-09-02_full_package_audit.md](2026-09-02_full_package_audit.md)
+> 来源：`2026-09-02_full_package_audit.md`（已归档至 [2026-09-02_history_archive.md](2026-09-02_history_archive.md)）
 > 目的：把审计的 30+ 项问题按「本地可修 / 需 H100 重跑 / 需论文表述决策」三类归类，并给出每类的执行顺序与依赖。
 > 分类日期：2026-09-02。
 
