@@ -50,7 +50,7 @@ pip install -r requirements.txt
 | CUDA | 12.x（论文级运行需要 H100 SXM5 80GB；实测 12.8） |
 | 磁盘 | ≥ 100 GB（模型权重 + 数据集） |
 
-**RunPod H100 实测环境**（2026-08-03，镜像 `runpod/pytorch:2.8.0`）：
+**RunPod H100 实测环境**（2026-08-03，镜像 `runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404`）：
 
 | 组件 | 版本 |
 |------|------|
@@ -66,7 +66,7 @@ pip install -r requirements.txt
 | scikit-learn | 1.9.0 |
 | BF16 / Flash Attn / torch.compile / NCCL | ✅ / ✅ / ✅ / ✅ |
 
-> **部署策略**：统一走 RunPod 基础镜像 `runpod/pytorch:2.8.0-py3.12-cuda12.8.0-devel-ubuntu22.04`（见 `template/runpod-template.json`）；`template/Dockerfile` + `docker-compose.yml` 的自建镜像已弃用（2026-08-14），仅作历史参考。
+> **部署策略**：统一走 RunPod 基础镜像 `runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404`（torch 2.8.0 + CUDA 12.8，见 `template/runpod-template.json`）；自建镜像 `template/Dockerfile` + `docker-compose.yml` 已于 2026-09-04 删除。
 
 ### 1.3 配置文件说明
 
@@ -110,7 +110,7 @@ print('GPU 显存检查: 需 ≥35GB 可用')
 "
 ```
 
-### 1.5 最新验证状态（2026-08-14 第三轮审计后）
+### 1.5 最新验证状态（2026-09-04）
 
 | 检查项 | 结果 | 说明 |
 |--------|------|------|
@@ -119,7 +119,7 @@ print('GPU 显存检查: 需 ≥35GB 可用')
 | `--validate-contract` | ⚠️ 预期 | `outputs/` 为空时 exit 2（exp1 NON_H100 + 13 missing），H100 实测后应 PASS |
 | `consistency_check` | ⚠️ 预期 P0 | 标出 CITED/DRIFT（实测与论文声称有差距，属设计行为） |
 | `--report` | ✅ | 生成 5 个交付物（summary.csv, tables.md, Table2.tex, fig_latency_benchmark.png/.pdf） |
-| 14 个实验 `run_paper` 路径 | ✅ | 全部存在且可导入 |
+| 15 个实验 `run_paper` 路径 | ✅ | 全部存在且可导入 |
 | `realeval` 核心模块 | ✅ | `real_backend`, `models`, `data`, `specdec`, `privacy`, `metrics`, `benchmark` 全部可用 |
 | 配置加载 | ✅ | `runpod_h100.yaml` 加载正常，profile=`runpod_1xH100_80GB` |
 
@@ -202,7 +202,7 @@ print('GPU 显存检查: 需 ≥35GB 可用')
 | 项                                  | 依据                                                     |
 | ----------------------------------- | -------------------------------------------------------- |
 | 图像脚本 import / 字段锚点          | `check_alignment.py` + `_extract` 全路径可解析       |
-| 脚本可导入性                        | 14/14 模块 import 成功                                   |
+| 脚本可导入性                        | 15/15 模块 import 成功                                   |
 | exp8 latency p50/p99                | 已改结构化`latency_detail`，消除 p99 误读 p50          |
 | 量化分支（fp16/nf4/int4/int8 区分） | `models.py` 已修（fp16 显式半精度、int4=FP4、nf4=NF4） |
 | exp2 多 seed 机制                   | 已实现（`reproducibility.exp*_seeds`，默认 5）         |
@@ -220,11 +220,11 @@ cd /workspace/H100_package_realeval && tar czf - outputs/results | base64   # �
 2. **H100 实测后更新 `experiments/consistency_check.py` 的 `PAPER_CLAIMS` 表**，把声称值替换为实测值，使其成为长期守门员。
 3. 更新 `reports/` 下的运行/审计报告，提交：
    ```bash
-   cd /d/Projects/H100_package_realeval
+   cd /c/Users/wang/Projects/H100_package_realeval
    git add reports/ experiments/consistency_check.py && git commit -m "results: 同步 RunPod H100 实测结果" && git push origin main
    ```
    注意：`outputs/` 整体在 `.gitignore` 中（结果 JSON 属生成物，不进 git）；结果文件本身通过 scp/同步脚本回收，无需 `git add outputs/...`。
-4. 回填论文 `v25_blind.tex` 前，逐项对照审计报告判定（P0 结论反转项先改结论再改数字）。
+4. 回填论文 `v29.tex`（权威基线）前，逐项对照审计报告判定（P0 结论反转项先改结论再改数字）。
 
 ---
 
@@ -233,14 +233,14 @@ cd /workspace/H100_package_realeval && tar czf - outputs/results | base64   # �
 在 H100 SXM5 上运行完整论文流水线：
 
 ```bash
-# 一键运行全部实验（自动归档旧结果）
+# 一键运行全部实验（默认保留旧结果；--clean 走归档清理）
 bash run_h100.sh
 
-# 等价命令
-python -m experiments.paper_pipeline --paper --config config/h100.yaml
+# 等价命令（单卡用 runpod_h100.yaml；8 卡 DDP 用 h100.yaml；--no-archive 与 run_h100.sh 默认保留一致）
+python -m experiments.paper_pipeline --paper --no-archive --config config/runpod_h100.yaml
 
 # 运行指定实验分组
-python -m experiments.runner --paper --exp 1,3,6 --config config/h100.yaml
+python -m experiments.runner --paper --exp 1,3,6 --config config/runpod_h100.yaml
 
 # 跳过运行前归档（调试用）
 python -m experiments.runner --paper --no-archive
@@ -307,7 +307,7 @@ python fig8_revision_ablations.py
 ### 数据流
 
 ```
-实验脚本（exp1–exp14）
+实验脚本（exp1–exp15）
     → outputs/results/expN_{ts}.json
     → outputs/results/all_experiments.json
         → docs/figure_scripts/paper_data.py（桥接层）
