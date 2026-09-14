@@ -129,3 +129,41 @@
 | 复核新增：inference-tensor 崩溃隐患 | ✅ 完成 | `real_backend` 两处 `F.mse_loss` 改手写 `(a−b)².mean`：exp2 mse/kl_mse 臂（inference-mode 的 `t_logits_head` 被 saved-for-backward，step 0 即崩）与 L_OVF（`t_var_calib` 同理，OVF 激活首步崩） |
 | 复核新增：P0-5 证据图溯源强制 | ✅ 完成 | `add_predictions` 强制工件存在 + sha256 校验（不符即 raise）；`validate()` 拒绝无文件溯源的 PASS；`claim_runner` 落盘 `{claim_id}_predictions.json` 并设空预测→UNSUPPORTED 门禁；测试重定向 + 两个负向用例 |
 
+---
+
+## 2026-09-14 修订落实情况复核
+
+> 复核范围：对上表「✅ 完成 / 已拍板」的 A/C 类项逐一在代码中核实（HEAD `b5a69c5`），并补查 A2 收尾项。结论：**A/C 类修订真实落地，均有代码证据；B 类 3 项未完成（环境依赖，待 H100）**。
+
+### A1 重跑前必修（核实通过）
+
+| 项 | 证据 |
+|---|---|
+| P0-4 exp12 键名 | 三方统一为 `QAD_MultiGuard_NVFP4`（exp12:72 + metrics/contract.py:151 + contract.md:222）。实际方向为「改契约侧为 NVFP4」（与 triage 原建议「改代码侧 INT4」相反），但已对齐，`--validate-contract` 不再恒失败 |
+| P0-5 假 PASS | `audit/evidence_graph.py:49` `content_hash` sha256 溯源强制 |
+| P1-5 curated 占位 + model_source | exp5:78-91 标注「前 517 条占位非人工过滤」；exp5:109 `model_source` |
+| P1-14 静默回退 | paper_data.py:105-141 `_from_result`，非 cited 缺失 `fallback=None` 显式报缺，5 处 stale 值清空 |
+| exp7 GLO steps | exp7:94 读 config `glo_attack_steps`（默认 150） |
+| exp8 真 p50 | exp8:92 `quantile_ms(times_ms, 50)` |
+| exp6 gamma/n_samples | exp6:30-31 读 config `sd.get("gamma", 5)` / `sd.get("n_samples", 20)` |
+
+### A2 收尾（核实通过）
+
+| 项 | 证据 |
+|---|---|
+| exp1 total_steps 回显 | real_backend.py:640-646 区分 concept `total_steps`（Fig4 x 轴对齐）与真实 `actual_total_steps`，注释如实说明 |
+| exp1 trajectory 单 seed | exp1:62 `trajectory_note` 诚实标注「single-seed (last of n_seeds)」 |
+| exp5 full_pool 10% / ChiFraud 顶替 | exp5:73「10% 测试切片」标注；exp5:110-113 `chifraud_proxy="balanced4k"` 显式盖章 |
+| exp15 文档同步 | contract.md:238 + v29.tex:908「exp15 已实现于公开代码库（text-only/audio-only/fused）」 |
+| alpha_ce 死配置 | 已删除（schema.py:45 / experiments.yaml:43 仅 `alpha_kl`） |
+| group_split 名不副实 | data.py:514 docstring 诚实标注「Groups by LABEL only… no template-family」 |
+| benchmark.csv / Table2.tex / summary.csv | `outputs/metrics/` 已不存在，toy 产物清理 |
+| 契约 kl_task 描述过时 | contract.md:75 已改为「独立训练的 loss 变体，非复制别名」 |
+| claim_engine paired 判断 | claim_engine.py:91-93 改 seed-based paired，旧长度启发式已移除 |
+
+### 复核结论
+
+- **A 类（本地可修）17 项 + C 类（决策）16 项全部落地/拍板**，代码证据充分。
+- **诚实性取向**：所有「名不副实/回显/占位/顶替」类项均以「如实标注真实情况」修法落地（LABEL-only、concept 参数 + actual_total_steps、占位标注、proxy 盖章），与审计基调一致。
+- **B 类 3 项未完成**（P0-1 产出真空 / P0-2 CLAIM 未验 / P0-3 原始 JSON 被删），卡在 H100 重跑——`outputs/results/` 仍空，exp1 最新 failed（显存 11.8GB<35GB）。下一步 `bash scripts/runpod_rerun.sh`。
+
