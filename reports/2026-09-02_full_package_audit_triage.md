@@ -167,3 +167,39 @@
 - **诚实性取向**：所有「名不副实/回显/占位/顶替」类项均以「如实标注真实情况」修法落地（LABEL-only、concept 参数 + actual_total_steps、占位标注、proxy 盖章），与审计基调一致。
 - **B 类 3 项未完成**（P0-1 产出真空 / P0-2 CLAIM 未验 / P0-3 原始 JSON 被删），卡在 H100 重跑——`outputs/results/` 仍空，exp1 最新 failed（显存 11.8GB<35GB）。下一步 `bash scripts/runpod_rerun.sh`。
 
+---
+
+## 2026-09-14 冗余脚本清理
+
+> 依据：脚本引用关系分析 + 审计历史结论。删除 A 类 4 个弃用脚本、清理 B 类 4 个孤立 `.pyc`、同步 D 类 3 处引用残留。C 类 `slurm_h100.sbatch` 保留。
+
+### A 类 —— 删除的弃用脚本
+
+| 脚本 | 弃用证据 |
+|---|---|
+| `cluster/apply_all_fixes.py` | docstring 自标注 `deprecated:: 2026-08-14`，内嵌旧版源码副本，修复已合并进源码树 |
+| `cluster/train_sft.py` | 产物 `outputs/sft_checkpoints/` 无实验加载；被 `train_lora_manual.py`（no HF Trainer）取代 |
+| `cluster/fix_training.py` | 专门修 `train_sft.py`；审计确认其正则会改坏 `train_sft.py`（P1-O7） |
+| `cluster/diagnose_training.py` | NaN 诊断，mirrors `train_sft.py`，一次性工具 |
+
+### B 类 —— 孤立缓存残留
+
+`cluster/__pycache__/` 下 4 个 `.pyc`（`gpu_dashboard` / `gpu_monitor_daemon` / `kanban` / `diagnose_v25_run`，源码已删）。
+
+### D 类 —— 同步的引用残留
+
+| 位置 | 改动 |
+|---|---|
+| `realeval/student_loader.py` | docstring 去 apply_all_fixes/train_sft 溯源；报错「Train one (train_sft.py)」→「train_lora_manual.py」 |
+| `config/experiments.yaml:120` | 注释「produced by train_sft.py (added by apply_all_fixes.py)」→「train_lora_manual.py」 |
+| `README.md` 结构图 | 删 `diagnose_training.py` / `fix_training.py` 行，补 `train_lora_manual.py` / `reproduce_qad.py` |
+
+### 清理后 cluster/ 剩余
+
+`launch.sh` · `manage_models.sh` · `reproduce_qad.py` · `setup_runpod.sh` · `slurm_h100.sbatch` · `train_lora_manual.py`
+
+### 保留说明
+
+- `cluster/slurm_h100.sbatch`：Slurm 调度备选，非当前 RunPod 主流程，保留。
+- `reports/2026-09-02_history_archive.md` 中历史审计对已删脚本的引用：归档事实，不改。
+

@@ -129,9 +129,8 @@ cd docs/figure_scripts && python generate_all.py    # 论文图像（只读脚�
 │   ├── launch.sh              #   统一启动脚本（ddp|h100|runpod 模式）
 │   ├── manage_models.sh       #   模型下载/管理
 │   ├── setup_runpod.sh        #   RunPod 环境初始化
-│   ├── diagnose_training.py   #   训练 NaN 根因诊断
-│   ├── fix_training.py        #   训练缺陷修复（collator + label masking）
-│   └── train_*.py             #   LoRA 训练脚本
+│   ├── train_lora_manual.py   #   LoRA SFT 训练（显式 loop，无 HF Trainer）
+│   └── reproduce_qad.py       #   NVFP4 QAD 复现 + sha256 manifest（R1）
 ├── scripts/                   # 辅助脚本
 │   ├── run_pipeline.sh        #   容器侧一键流水线（--train 可选）
 │   ├── export_to_gguf.py      #   LoRA → Q4_K_M GGUF 导出

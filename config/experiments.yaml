@@ -117,7 +117,7 @@ audio:
   mfcc_dim: 64
   whisper_proj_dim: 64
 
-# LoRA adapters produced by cluster/train_sft.py (added by apply_all_fixes.py).
+# LoRA adapters produced by cluster/train_lora_manual.py.
 # Paths are resolved via realeval/student_loader.py, which checks in order:
 #   1. config['students'][variant]
 #   2. REALEVAL_ADAPTER_ROOT environment variable (default /workspace/outputs/sft_checkpoints)

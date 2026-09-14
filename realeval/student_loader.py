@@ -1,8 +1,8 @@
 """student_loader.py — resolve a student_variant to a LoRA adapter and load it.
 
-Added by apply_all_fixes.py. Without this, cluster/train_sft.py writes an adapter to
-outputs/sft_checkpoints/ that no experiment ever loads, so every downstream experiment
-silently scores the untuned base model.
+Adapters are produced by cluster/train_lora_manual.py (written to
+REALEVAL_ADAPTER_ROOT). Without this loader, an adapter would sit unread and every
+downstream experiment would silently score the untuned base model.
 """
 from __future__ import annotations
 
@@ -101,7 +101,7 @@ def attach_adapter(model, variant: str = "base", config: dict | None = None,
         if variant not in ("base", None, ""):
             raise AssetsUnavailable(
                 f"student_variant='{variant}' requested but no LoRA adapter found under "
-                f"{ADAPTER_ROOT}. Train one (cluster/train_sft.py) or pass adapter_path.")
+                f"{ADAPTER_ROOT}. Train one (cluster/train_lora_manual.py) or pass adapter_path.")
         return model
 
     # QDQ-wrapped (nvfp4 QAT) models take no LoRA adapter: PEFT's dispatcher only
