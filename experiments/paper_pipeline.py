@@ -45,7 +45,7 @@ PAPER_GROUPS = {
     "05_latency":      ["exp8", "exp6"],
     "06_robustness":   ["exp5", "exp7"],
     "07_fusion":       ["exp13", "exp12"],
-    "08_ablations":    ["exp9", "exp10"],
+    "08_ablations":    ["exp9", "exp10", "exp15"],
     "09_edge":         ["exp14"],
 }
 

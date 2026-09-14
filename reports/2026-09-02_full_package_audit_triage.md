@@ -203,3 +203,30 @@
 - `cluster/slurm_h100.sbatch`：Slurm 调度备选，非当前 RunPod 主流程，保留。
 - `reports/2026-09-02_history_archive.md` 中历史审计对已删脚本的引用：归档事实，不改。
 
+---
+
+## 2026-09-14 全量审计（RunPod H100 就绪检查）
+
+> 目标：删除冗余脚本后，确保 `bash run_h100.sh` 全量运行无错误。方法：py_compile + 静态 import 链检查（本地无 GPU/无 torch，无法真实 import）。
+
+### 检查项（全部通过）
+
+| 检查项 | 结果 |
+|---|---|
+| 语法编译（101 个 .py） | ✅ 全部 COMPILE_OK |
+| 已删脚本 import 断链 | ✅ 无残留（train_sft/fix_training/diagnose_training/apply_all_fixes） |
+| 依赖声明 | ✅ requirements.txt 含 peft/accelerate/bitsandbytes/torchaudio |
+| 入口 import 链（paper_pipeline） | ✅ cli.parser / config / realeval.io.* / metrics.extraction / runner.registry / utils.logging 全存在 |
+| 关键符号 | ✅ load_config / validate_config / RESULTS / LOGS / ValidationError / collect / compare / quantile_ms |
+| 实验注册 + `--exp all` | ✅ registry 15 个（含 exp15），runner `--exp all` 返回 15 个 |
+| 15 个 exp 脚本 import | ✅ framework / common / registry / statistics 全存在 |
+| template/ 删除后残留 | ✅ 活跃代码无引用（仅 REPRODUCIBILITY 正确标注「已删除」） |
+
+### 发现并修复的 bug
+
+**`paper_pipeline.py` PAPER_GROUPS 遗漏 exp15**：registry 注册 15 实验、`runner --exp all` 跑 15 个，但 `paper_pipeline` 的 `PAPER_GROUPS` 仅 14 个（缺 exp15）→ `bash run_h100.sh` 全量运行跳过 exp15。已修复：`08_ablations` 加入 exp15，现覆盖 [1..15]，与 registry 一致。
+
+### 诚实声明
+
+本地无 GPU/无 torch，仅静态检查（py_compile + import 链），真实运行时错误（NaN / 显存 / 数据加载 / QDQ 数值）待 H100 验证（属 B 类）。
+
